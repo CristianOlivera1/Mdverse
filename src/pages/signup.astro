@@ -1,0 +1,63 @@
+---
+import AuthShell from '@/components/auth/AuthShell.astro';
+import EmailField from '@/components/auth/EmailField.astro';
+import OAuthButtons from '@/components/auth/OAuthButtons.astro';
+import PasswordField from '@/components/auth/PasswordField.astro';
+import Icon from '@/components/ui/Icon.astro';
+import { authNotice } from '@/lib/auth/messages';
+import { safeRedirectPath } from '@/lib/auth/redirect';
+import { DEFAULT_AUTHENTICATED_PATH } from '@/lib/auth/routes';
+import { isSupabaseConfigured, SUPABASE_SETUP_HINT } from '@/lib/supabase/env';
+
+const params = Astro.url.searchParams;
+const next = safeRedirectPath(params.get('next'), DEFAULT_AUTHENTICATED_PATH);
+const notice = authNotice({ error: params.get('error'), sent: params.get('sent') });
+const email = params.get('email') ?? '';
+const configured = isSupabaseConfigured();
+---
+
+<AuthShell
+  title="Create account · OpenMarkdown"
+  heading="Create your account"
+  subtitle="One account keeps your documents, collaborators and comments in sync. We confirm the address before the account is usable."
+  notice={notice}
+>
+  {!configured && (
+    <p class="rounded-lg border border-amber-500/40 bg-amber-500/10 px-3 py-2 text-xs leading-relaxed text-amber-200">
+      <Icon name="lucide:triangle-alert" size={14} class="inline -mt-0.5 mr-1" />
+      {SUPABASE_SETUP_HINT}
+    </p>
+  )}
+
+  <form method="POST" action="/auth/signup" class="space-y-3">
+    <input type="hidden" name="next" value={next} />
+    <EmailField value={email} />
+    <PasswordField id="password" autocomplete="new-password" label="Password" />
+    <PasswordField
+      id="password-confirm"
+      name="confirm_password"
+      autocomplete="new-password"
+      label="Confirm password"
+      matches="password"
+      hint={null}
+    />
+    <button
+      type="submit"
+      disabled={!configured}
+      class="w-full rounded-lg bg-white px-3 py-2 text-sm font-medium text-black hover:bg-neutral-200 disabled:opacity-50 disabled:hover:bg-white"
+    >
+      Create account
+    </button>
+  </form>
+
+  <div class="mt-6">
+    <OAuthButtons next={next} verb="Sign up" />
+  </div>
+
+  <p class="mt-8 text-center text-xs text-neutral-500">
+    Already have an account?{' '}
+    <a href={`/login?next=${encodeURIComponent(next)}`} class="text-neutral-200 hover:text-white">
+      Sign in
+    </a>
+  </p>
+</AuthShell>

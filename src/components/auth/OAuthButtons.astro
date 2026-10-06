@@ -1,0 +1,45 @@
+---
+/**
+ * OAuth buttons (Google, GitHub), built from the same provider allowlist the
+ * `/auth/oauth/:provider` route accepts — add a provider there and here.
+ */
+import Icon from '@/components/ui/Icon.astro';
+import type { IconName } from '@/lib/ui/iconNames';
+
+interface Props {
+  /** Destination carried through the round-trip and used after the callback. */
+  next: string;
+  /** `Sign in` / `Create account` — used for the accessible label. */
+  verb?: string;
+}
+
+const { next, verb = 'Continue' } = Astro.props;
+
+const PROVIDERS: { id: string; label: string; icon: IconName }[] = [
+  { id: 'google', label: 'Google', icon: 'simple-icons:google' },
+  { id: 'github', label: 'GitHub', icon: 'simple-icons:github' },
+];
+
+const hrefFor = (id: string) => `/auth/oauth/${id}?next=${encodeURIComponent(next)}`;
+---
+
+<div class="space-y-4">
+  <div class="flex items-center gap-3">
+    <span class="h-px flex-1 bg-neutral-800"></span>
+    <span class="text-[11px] uppercase tracking-wide text-neutral-600">or {verb} with</span>
+    <span class="h-px flex-1 bg-neutral-800"></span>
+  </div>
+
+  <div class="grid gap-2">
+    {PROVIDERS.map((provider) => (
+      <a
+        href={hrefFor(provider.id)}
+        rel="nofollow"
+        class="flex items-center justify-center gap-2.5 rounded-lg border border-neutral-800 px-3 py-2 text-sm text-neutral-200 hover:border-neutral-700 hover:bg-neutral-900"
+      >
+        <Icon name={provider.icon} size={16} />
+        {provider.label}
+      </a>
+    ))}
+  </div>
+</div>

@@ -1,0 +1,103 @@
+---
+/**
+ * Shared frame for the four account screens (sign in, sign up, forgot password,
+ * reset password): logo, heading, one notice slot, the form, and a footer with
+ * the links to the sibling screens.
+ *
+ * The bundled script handles the two bits of client behaviour the forms share —
+ * revealing a password and checking that confirmation matches — so every screen
+ * gets them without repeating markup.
+ */
+import Layout from '@/layouts/Layout.astro';
+import type { AuthNotice } from '@/lib/auth/messages';
+
+interface Props {
+  title: string;
+  heading: string;
+  subtitle?: string;
+  notice?: AuthNotice | null;
+}
+
+const { title, heading, subtitle, notice = null } = Astro.props;
+
+const NOTICE_TONES = {
+  error: 'border-red-500/40 bg-red-500/10 text-red-200',
+  success: 'border-emerald-500/40 bg-emerald-500/10 text-emerald-200',
+  info: 'border-sky-500/40 bg-sky-500/10 text-sky-200',
+} as const;
+---
+
+<Layout title={title} bodyClass="min-h-screen bg-black text-neutral-200 font-sans">
+  <Fragment slot="head">
+    <meta name="robots" content="noindex" />
+  </Fragment>
+
+  <main class="min-h-screen flex items-center justify-center px-4 py-10">
+    <div class="w-full max-w-sm">
+      <a href="/" class="flex items-center gap-2.5" aria-label="OpenMarkdown home">
+        <span class="w-6 h-6 rounded-md bg-white flex items-center justify-center">
+          <span class="text-black text-xs font-bold leading-none">M</span>
+        </span>
+        <span class="text-sm font-medium text-neutral-100">OpenMarkdown</span>
+      </a>
+
+      <h1 class="mt-8 text-xl font-semibold text-neutral-50">{heading}</h1>
+      {subtitle && <p class="mt-2 text-sm text-neutral-400">{subtitle}</p>}
+
+      {notice && (
+        <p
+          class:list={[
+            'mt-6 rounded-lg border px-3 py-2 text-xs leading-relaxed',
+            NOTICE_TONES[notice.tone],
+          ]}
+          role={notice.tone === 'error' ? 'alert' : 'status'}
+        >
+          {notice.message}
+        </p>
+      )}
+
+      <div class="mt-6">
+        <slot />
+      </div>
+
+      <div class="mt-6">
+        <slot name="footer" />
+      </div>
+    </div>
+  </main>
+
+  <script>
+    // Reveal / hide a password. The two icons live in the button and CSS shows
+    // the one matching `data-visible`, so nothing is rebuilt and nothing jumps.
+    for (const node of document.querySelectorAll('[data-password-toggle]')) {
+      if (!(node instanceof HTMLButtonElement)) continue;
+      const field = document.getElementById(node.dataset.passwordToggle ?? '');
+      if (!(field instanceof HTMLInputElement)) continue;
+
+      node.addEventListener('click', () => {
+        const reveal = field.type === 'password';
+        field.type = reveal ? 'text' : 'password';
+        node.dataset.visible = String(reveal);
+        node.setAttribute('aria-pressed', String(reveal));
+        field.focus();
+      });
+    }
+
+    // Keep the confirmation field honest: native validation reports the
+    // mismatch, so it works even if this script never runs.
+    for (const node of document.querySelectorAll('[data-password-confirm]')) {
+      if (!(node instanceof HTMLInputElement)) continue;
+      const source = document.getElementById(node.dataset.passwordConfirm ?? '');
+      if (!(source instanceof HTMLInputElement)) continue;
+
+      const sync = () => {
+        node.setCustomValidity(
+          node.value === source.value ? '' : 'The two passwords do not match.',
+        );
+      };
+
+      source.addEventListener('input', sync);
+      node.addEventListener('input', sync);
+    }
+  </script>
+</Layout>

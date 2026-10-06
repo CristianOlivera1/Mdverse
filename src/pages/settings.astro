@@ -2,15 +2,29 @@
 import Avatar from '@/components/ui/Avatar.astro';
 import Icon from '@/components/ui/Icon.astro';
 import AccountLayout from '@/layouts/AccountLayout.astro';
-import { toAccountSummary } from '@/lib/auth/account';
+import { describeProvider, toAccountSummary } from '@/lib/auth/account';
 import { profileNotice } from '@/lib/auth/messages';
 import { DISPLAY_NAME_MAX_LENGTH, USERNAME_MAX_LENGTH } from '@/lib/auth/profile';
+import type { IconName } from '@/lib/ui/iconNames';
 
 const account = toAccountSummary(Astro.locals.user, Astro.locals.profile);
 if (!account) return Astro.redirect('/login?next=/settings');
 
 const params = Astro.url.searchParams;
-const notice = profileNotice({ saved: params.get('saved'), error: params.get('error') });
+const notice = profileNotice({
+  saved: params.get('saved'),
+  updated: params.get('updated'),
+  error: params.get('error'),
+});
+
+// Brand marks where they exist, a neutral icon otherwise.
+const PROVIDER_ICONS: Record<string, IconName> = {
+  email: 'lucide:mail',
+  github: 'simple-icons:github',
+  google: 'simple-icons:google',
+};
+const providerIcon = (provider: string): IconName => PROVIDER_ICONS[provider] ?? 'lucide:mail';
+const providers = account.providers.length > 0 ? account.providers : ['email'];
 
 const NOTICE_TONES = {
   error: 'border-red-500/40 bg-red-500/10 text-red-200',
@@ -100,10 +114,46 @@ const NOTICE_TONES = {
 
   <section class="mt-10 border-t border-neutral-800 pt-6">
     <h2 class="text-xs font-medium text-neutral-300">Account</h2>
-    <dl class="mt-3 grid gap-3 text-xs sm:grid-cols-2">
+    <dl class="mt-3 grid gap-4 text-xs sm:grid-cols-2">
       <div>
         <dt class="text-neutral-500">Email</dt>
         <dd class="mt-0.5 break-all text-neutral-200">{account.email}</dd>
+        <dd class="mt-1">
+          {account.emailVerified ? (
+            <span class="inline-flex items-center gap-1.5 text-emerald-300">
+              <Icon name="lucide:mail-check" size={13} />
+              Verified
+            </span>
+          ) : (
+            <span class="inline-flex items-center gap-1.5 text-amber-300">
+              <Icon name="lucide:triangle-alert" size={13} />
+              Not confirmed yet
+            </span>
+          )}
+        </dd>
+      </div>
+      <div>
+        <dt class="text-neutral-500">Sign-in methods</dt>
+        <dd class="mt-1 flex flex-wrap gap-1.5">
+          {providers.map((provider) => (
+            <span class="inline-flex items-center gap-1.5 rounded-md border border-neutral-800 px-2 py-1 text-[11px] text-neutral-300">
+              <Icon name={providerIcon(provider)} size={12} />
+              {describeProvider(provider)}
+            </span>
+          ))}
+        </dd>
+      </div>
+      <div>
+        <dt class="text-neutral-500">Password</dt>
+        <dd class="mt-1">
+          <a
+            href="/reset-password"
+            class="inline-flex items-center gap-1.5 text-sky-300 hover:text-sky-200"
+          >
+            <Icon name="lucide:key-round" size={13} />
+            Change password
+          </a>
+        </dd>
       </div>
       <div>
         <dt class="text-neutral-500">User id</dt>
@@ -111,13 +161,26 @@ const NOTICE_TONES = {
       </div>
     </dl>
 
+    {!account.emailVerified && (
+      <form method="POST" action="/auth/resend" class="mt-4 flex items-center gap-2">
+        <input type="hidden" name="email" value={account.email} />
+        <button type="submit" class="hb">
+          <Icon name="lucide:mail" />
+          Send a new confirmation link
+        </button>
+        <span class="text-[11px] text-neutral-500">
+          Confirm the address to unlock sharing and invitations.
+        </span>
+      </form>
+    )}
+
     <form method="POST" action="/auth/signout" class="mt-5">
       <input type="hidden" name="next" value="/" />
       <button
         type="submit"
         class="inline-flex items-center gap-2 rounded-lg border border-neutral-800 px-3 py-2 text-xs text-neutral-300 hover:border-red-500/40 hover:text-red-300"
       >
-        <Icon name="log-out" size={14} />
+        <Icon name="lucide:log-out" size={14} />
         Sign out of this browser
       </button>
     </form>

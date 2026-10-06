@@ -1,13 +1,21 @@
 import { describe, expect, it } from 'vitest';
 
-import { toAccountSummary } from '../../src/lib/auth/account';
+import { describeProvider, toAccountSummary } from '../../src/lib/auth/account';
 import {
+  authFeedbackUrl,
   authNotice,
   isAuthErrorCode,
+  isAuthSentCode,
   loginFeedbackUrl,
+  passwordProblemErrorCode,
   profileFeedbackUrl,
   profileNotice,
 } from '../../src/lib/auth/messages';
+import {
+  PASSWORD_MAX_LENGTH,
+  PASSWORD_MIN_LENGTH,
+  checkPassword,
+} from '../../src/lib/auth/password';
 import {
   avatarToneIndex,
   displayNameFromEmail,
@@ -16,12 +24,14 @@ import {
   isLikelyEmail,
   isValidDisplayName,
   isValidUsername,
+  normalizeEmail,
   usernameFromEmail,
 } from '../../src/lib/auth/profile';
 import { currentPathWithSearch, safeRedirectPath } from '../../src/lib/auth/redirect';
 import { isAnonymousOnlyPath, isProtectedPath, loginPathFor } from '../../src/lib/auth/routes';
 import { buildAuthCallbackUrl, normalizeSupabaseConfig } from '../../src/lib/supabase/config';
 import { pickAuthCookieOptions } from '../../src/lib/supabase/cookies';
+import { isAlreadyRegistered, isEmailNotConfirmed } from '../../src/lib/supabase/errors';
 
 describe('safeRedirectPath', () => {
   it('keeps same-origin paths, including their query string', () => {
@@ -125,6 +135,12 @@ describe('validators', () => {
     expect(isLikelyEmail(null)).toBe(false);
   });
 
+  it('normalizes an address before it reaches Supabase', () => {
+    expect(normalizeEmail('  Ana.Perez@Mail.com ')).toBe('ana.perez@mail.com');
+    expect(normalizeEmail(null)).toBe('');
+    expect(normalizeEmail(42)).toBe('');
+  });
+
   it('validates usernames and display names', () => {
     expect(isValidUsername('ana_98')).toBe(true);
     expect(isValidUsername('ab')).toBe(false);
@@ -191,6 +207,8 @@ describe('toAccountSummary', () => {
       initials: 'AP',
       toneSeed: 'user-1',
       createdAt: '2026-10-07T12:00:00Z',
+      emailVerified: false,
+      providers: [],
     });
   });
 
@@ -204,6 +222,38 @@ describe('toAccountSummary', () => {
   it('returns null without a user', () => {
     expect(toAccountSummary(null, null)).toBeNull();
   });
+
+  it('reads the confirmation state and the linked providers', () => {
+    const summary = toAccountSummary(
+      {
+        ...user,
+        email_confirmed_at: '2026-10-06T12:05:00Z',
+        identities: [{ provider: 'github' }, { provider: 'email' }],
+        app_metadata: { provider: 'email', providers: ['email', 'github'] },
+      },
+      null,
+    );
+
+    expect(summary?.emailVerified).toBe(true);
+    expect(summary?.providers).toEqual(['email', 'github']);
+  });
+
+  it('falls back to app_metadata when identities are not loaded', () => {
+    const summary = toAccountSummary(
+      { ...user, app_metadata: { provider: 'google', providers: ['google'] } },
+      null,
+    );
+
+    expect(summary?.emailVerified).toBe(false);
+    expect(summary?.providers).toEqual(['google']);
+  });
+
+  it('labels known providers and passes unknown ones through', () => {
+    expect(describeProvider('email')).toBe('Email and password');
+    expect(describeProvider('github')).toBe('GitHub');
+    expect(describeProvider('google')).toBe('Google');
+    expect(describeProvider('saml')).toBe('saml');
+  });
 });
 
 describe('route access rules', () => {
@@ -216,10 +266,17 @@ describe('route access rules', () => {
     expect(isProtectedPath('/preview')).toBe(false);
   });
 
-  it('marks /login as anonymous only', () => {
+  it('protects the password screen reached from a recovery email', () => {
+    expect(isProtectedPath('/reset-password')).toBe(true);
+  });
+
+  it('marks the anonymous-only screens', () => {
     expect(isAnonymousOnlyPath('/login')).toBe(true);
     expect(isAnonymousOnlyPath('/login/help')).toBe(true);
+    expect(isAnonymousOnlyPath('/signup')).toBe(true);
+    expect(isAnonymousOnlyPath('/forgot-password')).toBe(true);
     expect(isAnonymousOnlyPath('/logout')).toBe(false);
+    expect(isAnonymousOnlyPath('/reset-password')).toBe(false);
   });
 
   it('carries the destination into the login URL', () => {
@@ -236,28 +293,105 @@ describe('auth notices', () => {
     expect(authNotice({ error: 'callback_failed' })?.tone).toBe('error');
     expect(authNotice({ error: 'callback_failed' })?.message).toContain('expired');
     expect(authNotice({ error: '<script>' })).toBeNull();
-    expect(authNotice({ sent: '1' })?.tone).toBe('success');
+    expect(authNotice({ error: 'invalid_credentials' })?.message).toContain('Wrong email');
+    expect(authNotice({ error: 'email_not_confirmed' })?.message).toContain('not confirmed');
+    expect(authNotice({ sent: 'confirm' })?.tone).toBe('success');
+    expect(authNotice({ sent: '1' })).toBeNull();
     expect(authNotice({})).toBeNull();
     expect(isAuthErrorCode('oauth')).toBe(true);
     expect(isAuthErrorCode('nope')).toBe(false);
+    expect(isAuthSentCode('reset')).toBe(true);
+    expect(isAuthSentCode('1')).toBe(false);
+  });
+
+  it('gives every password problem its own message', () => {
+    const problems = ['missing', 'too_short', 'too_long', 'too_weak', 'mismatch'] as const;
+    const codes = problems.map(passwordProblemErrorCode);
+
+    expect(new Set(codes).size).toBe(problems.length);
+    for (const code of codes) expect(authNotice({ error: code })?.tone).toBe('error');
   });
 
   it('builds feedback URLs without leaking the default destination', () => {
-    expect(loginFeedbackUrl({ sent: true, next: '/dashboard', email: 'a@b.com' })).toBe(
-      '/login?sent=1&email=a%40b.com',
+    expect(loginFeedbackUrl({ sent: 'confirm', next: '/dashboard', email: 'a@b.com' })).toBe(
+      '/login?sent=confirm&email=a%40b.com',
     );
     expect(loginFeedbackUrl({ error: 'invalid_email', next: '/settings' })).toBe(
       '/login?error=invalid_email&next=%2Fsettings',
     );
     expect(loginFeedbackUrl({ error: 'oauth' })).toBe('/login?error=oauth');
+    expect(authFeedbackUrl({ to: '/signup', error: 'signup_failed', next: '/dashboard' })).toBe(
+      '/signup?error=signup_failed',
+    );
+    expect(authFeedbackUrl({ to: '/forgot-password', sent: 'reset', email: 'a@b.com' })).toBe(
+      '/forgot-password?sent=reset&email=a%40b.com',
+    );
+    expect(authFeedbackUrl({ to: '/reset-password', error: 'update_failed' })).toBe(
+      '/reset-password?error=update_failed',
+    );
   });
 
-  it('reports profile save results', () => {
+  it('reports profile save results, including a changed password', () => {
     expect(profileNotice({ saved: '1' })?.tone).toBe('success');
+    expect(profileNotice({ updated: 'password' })?.message).toContain('Password updated');
+    expect(profileNotice({ updated: 'nope' })).toBeNull();
     expect(profileNotice({ error: 'username_taken' })?.message).toContain('already taken');
     expect(profileNotice({ error: 'other' })).toBeNull();
     expect(profileFeedbackUrl({ saved: true })).toBe('/settings?saved=1');
+    expect(profileFeedbackUrl({ passwordUpdated: true })).toBe('/settings?updated=password');
     expect(profileFeedbackUrl({ error: 'save_failed' })).toBe('/settings?error=save_failed');
+  });
+});
+
+describe('checkPassword', () => {
+  it('accepts a password that meets the policy', () => {
+    expect(checkPassword('markdown1')).toEqual({ ok: true, problem: null });
+    expect(checkPassword('markdown1', 'markdown1')).toEqual({ ok: true, problem: null });
+  });
+
+  it('reports the first problem, in the order the form is filled in', () => {
+    expect(checkPassword('')).toEqual({ ok: false, problem: 'missing' });
+    expect(checkPassword(null)).toEqual({ ok: false, problem: 'missing' });
+    expect(checkPassword('short1')).toEqual({ ok: false, problem: 'too_short' });
+    expect(checkPassword('a'.repeat(PASSWORD_MAX_LENGTH + 1))).toEqual({
+      ok: false,
+      problem: 'too_long',
+    });
+    expect(checkPassword('a'.repeat(20))).toEqual({ ok: false, problem: 'too_weak' });
+    expect(checkPassword('12345678')).toEqual({ ok: false, problem: 'too_weak' });
+  });
+
+  it('checks the confirmation only when one is provided', () => {
+    expect(checkPassword('markdown1', 'markdown2')).toEqual({ ok: false, problem: 'mismatch' });
+    expect(checkPassword('markdown1', undefined).ok).toBe(true);
+    expect(checkPassword('markdown1').ok).toBe(true);
+  });
+
+  it('keeps the bounds and the pattern in sync with the form attributes', () => {
+    expect(PASSWORD_MIN_LENGTH).toBe(8);
+    expect(PASSWORD_MAX_LENGTH).toBe(72);
+    expect(checkPassword(`a1${'b'.repeat(PASSWORD_MIN_LENGTH - 2)}`).ok).toBe(true);
+    expect(checkPassword(`a1${'b'.repeat(PASSWORD_MIN_LENGTH - 3)}`).ok).toBe(false);
+  });
+});
+
+describe('supabase auth error classification', () => {
+  const error = (code: string, message: string) => ({ code, message });
+
+  it('recognizes an unconfirmed address by code or by message', () => {
+    expect(isEmailNotConfirmed(error('email_not_confirmed', 'Email not confirmed'))).toBe(true);
+    expect(isEmailNotConfirmed(error('other', 'Email not confirmed'))).toBe(true);
+    expect(isEmailNotConfirmed(error('invalid_credentials', 'Invalid login credentials'))).toBe(
+      false,
+    );
+    expect(isEmailNotConfirmed(null)).toBe(false);
+  });
+
+  it('recognizes an address that already has an account', () => {
+    expect(isAlreadyRegistered(error('user_already_exists', 'User already registered'))).toBe(true);
+    expect(isAlreadyRegistered(error('other', 'User already registered'))).toBe(true);
+    expect(isAlreadyRegistered(error('weak_password', 'Password is too weak'))).toBe(false);
+    expect(isAlreadyRegistered(undefined)).toBe(false);
   });
 });
 
@@ -277,6 +411,14 @@ describe('normalizeSupabaseConfig', () => {
       normalizeSupabaseConfig({
         url: 'https://YOUR_PROJECT_REF.supabase.co',
         publishableKey: 'YOUR_PUBLISHABLE_KEY',
+      }),
+    ).toBeNull();
+    // Exactly what `.env.example` ships: copying the template must read as "not
+    // configured" instead of producing requests to a host that does not exist.
+    expect(
+      normalizeSupabaseConfig({
+        url: 'https://x.x.x.supabase.co',
+        publishableKey: 'x.x.x',
       }),
     ).toBeNull();
     expect(

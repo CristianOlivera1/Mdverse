@@ -1,12 +1,3 @@
-/**
- * Server-side session helpers.
- *
- * `loadSession` is called once per request from `src/middleware.ts`; pages then
- * read `Astro.locals` instead of talking to Supabase again. Reading the session
- * early is a requirement of `@supabase/ssr`: a token refresh has to complete
- * before the response is committed or the rotated cookies are lost.
- */
-
 import type { SupabaseClient, User } from '@supabase/supabase-js';
 
 import type { Database } from '../supabase/database.types';

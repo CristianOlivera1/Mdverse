@@ -38,6 +38,34 @@ comment on table public.profiles is
 comment on column public.profiles.username is
   'Unique handle, derived from the email at signup. Lowercase letters, digits and underscores.';
 
+-- Reconcile a database where this table was created by hand (the design DDL in
+-- the plan, block 6.2, has no check constraints). `create table if not exists`
+-- above cannot add them afterwards, so they are added here. Idempotent, so the
+-- file converges a hand-made schema and a fresh one.
+do $$
+declare
+  spec record;
+begin
+  for spec in
+    select * from (values
+      ('profiles_username_format', 'username ~ ''^[a-z0-9_]{3,30}$'''),
+      ('profiles_display_name_length', 'char_length(display_name) between 1 and 60')
+    ) as t(constraint_name, expression)
+  loop
+    if not exists (
+      select 1 from pg_constraint c
+       where c.conrelid = 'public.profiles'::regclass
+         and c.conname = spec.constraint_name
+    ) then
+      execute format(
+        'alter table public.profiles add constraint %I check (%s)',
+        spec.constraint_name, spec.expression
+      );
+    end if;
+  end loop;
+end
+$$;
+
 -- ---------------------------------------------------------------------------
 -- updated_at
 -- ---------------------------------------------------------------------------

@@ -1,14 +1,10 @@
 /**
- * Profile helpers: everything that turns an email/display name into the small
- * pieces of identity the UI shows. Pure functions so they can be unit-tested.
- *
  * Avatars are **initials only** — the product decision is to store no profile
  * pictures (see PLAN_VISOR_MARKDOWN_PRODUCCION.md, block 6.2). `avatarToneIndex`
  * derives a stable color slot from a seed so the same person always gets the same
  * badge without persisting anything.
  */
 
-/** Number of color slots exposed by `components/ui/Avatar.astro`. */
 export const AVATAR_TONE_COUNT = 6;
 
 /** Username bounds shared with the SQL trigger `private.handle_new_user`. */
@@ -27,10 +23,14 @@ export function isLikelyEmail(value: unknown): value is string {
 }
 
 /**
- * Up to `max` initials for a display name or email, e.g. `Ana Pérez` → `AP`,
- * `ana.perez@mail.com` → `AP`, `ana` → `A`. Falls back to `?` when there is
- * nothing usable, so the avatar never renders empty.
+ * Canonical form of an address before it reaches Supabase: trimmed and
+ * lowercased, so `Ana@Mail.com` and `ana@mail.com` are the same account (and the
+ * same value comes back in the feedback URL).
  */
+export function normalizeEmail(value: unknown): string {
+  return typeof value === 'string' ? value.trim().toLowerCase() : '';
+}
+
 export function initials(name: string | null | undefined, max = 2): string {
   const cleaned = (name ?? '')
     .trim()
@@ -49,7 +49,6 @@ export function initials(name: string | null | undefined, max = 2): string {
   return letters.toLocaleUpperCase() || '?';
 }
 
-/** `ana.perez+notes@mail.com` → `Ana Perez`. Used when no display name is available. */
 export function displayNameFromEmail(email: string | null | undefined): string {
   const local = localPartOf(email);
   const words = local
@@ -109,7 +108,6 @@ export function isValidDisplayName(value: unknown): value is string {
   );
 }
 
-/** Stable color slot in `0..AVATAR_TONE_COUNT-1` for a user id or name. */
 export function avatarToneIndex(
   seed: string | null | undefined,
   tones = AVATAR_TONE_COUNT,

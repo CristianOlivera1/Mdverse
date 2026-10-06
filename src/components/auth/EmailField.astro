@@ -1,0 +1,39 @@
+---
+/** Email field: the same markup and accessibility wiring on every auth screen. */
+import Icon from '@/components/ui/Icon.astro';
+
+interface Props {
+  id?: string;
+  /** Pre-filled from the query string after a failed attempt. */
+  value?: string;
+  label?: string;
+  autocomplete?: 'email' | 'username';
+}
+
+const { id = 'email', value = '', label = 'Email', autocomplete = 'email' } = Astro.props;
+---
+
+<div>
+  <label for={id} class="block text-xs font-medium text-neutral-400">
+    {label}
+  </label>
+  <div class="relative mt-1.5">
+    <Icon
+      name="lucide:mail"
+      size={15}
+      class="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-neutral-500"
+    />
+    <input
+      id={id}
+      name="email"
+      type="email"
+      required
+      autocomplete={autocomplete}
+      inputmode="email"
+      spellcheck="false"
+      placeholder="you@example.com"
+      value={value}
+      class="w-full rounded-lg border border-neutral-800 bg-neutral-950 pl-9 pr-3 py-2 text-sm text-neutral-100 placeholder:text-neutral-600 focus:border-neutral-600 focus:outline-none disabled:opacity-50"
+    />
+  </div>
+</div>

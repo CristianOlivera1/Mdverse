@@ -37,8 +37,9 @@ export const GET: APIRoute = async (context) => {
     provider,
     options: {
       redirectTo: authCallbackUrl(next),
-      // Do not merge accounts by email automatically; phase 4 revisits this.
-      queryParams: { prompt: 'select_account' },
+      // Only Google understands `prompt`; GitHub ignores unknown parameters but
+      // there is no reason to send it one. Accounts are never merged by email.
+      ...(provider === 'google' ? { queryParams: { prompt: 'select_account' } } : {}),
     },
   });
 
