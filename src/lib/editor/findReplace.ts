@@ -17,10 +17,7 @@ export function countMatches(value: string, regex: RegExp | null): number {
   return value.match(regex)?.length ?? 0;
 }
 
-/**
- * Replace every match.
- * A function replacement keeps `$&`-style sequences in the replacement literal.
- */
+/** A function replacement keeps `$&`-style sequences in the replacement literal. */
 export function replaceAllMatches(
   value: string,
   regex: RegExp | null,

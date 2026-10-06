@@ -11,26 +11,26 @@ import Icon from '../ui/Icon.astro';
     aria-expanded="false"
     title="Copy and export"
   >
-    <Icon name="download" />
+    <Icon name="lucide:download" />
     <span class="hidden lg:inline">Export</span>
-    <Icon name="chevron-down" size={12} class="opacity-60" />
+    <Icon name="lucide:chevron-down" size={12} class="opacity-60" />
   </button>
   <div class="pop" data-pop="export" hidden>
     <button type="button" class="mi" data-command="copy">
-      <Icon name="copy" />
+      <Icon name="lucide:copy" />
       Copy Markdown
     </button>
     <button type="button" class="mi" data-command="download">
-      <Icon name="file-text" />
+      <Icon name="lucide:file-text" />
       Download .md
     </button>
     <div class="pop-sep"></div>
     <button type="button" class="mi" data-command="export-html">
-      <Icon name="file-code" />
+      <Icon name="lucide:file-code" />
       Export to HTML
     </button>
     <button type="button" class="mi" data-command="export-pdf">
-      <Icon name="printer" />
+      <Icon name="lucide:printer" />
       Export to PDF
     </button>
   </div>

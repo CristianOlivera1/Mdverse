@@ -24,14 +24,12 @@ function op(
   return { from, to, insert, selStart, selEnd };
 }
 
-/** Apply `fn` to the selected lines and replace the whole block. */
 function onLines(state: TextState, fn: (lines: string[]) => string[]): EditOp {
   const [from, to] = lineRange(state);
   const out = fn(state.value.slice(from, to).split('\n')).join('\n');
   return op(from, to, out, from, from + out.length);
 }
 
-/** Remove a line prefix when every selected line has it, add it otherwise. */
 function toggleLinePrefix(
   state: TextState,
   test: RegExp,
@@ -45,7 +43,6 @@ function toggleLinePrefix(
   );
 }
 
-/** Insert a standalone block after the current line (or in place when it is empty). */
 export function insertBlock(
   state: TextState,
   text: string,
@@ -103,12 +100,10 @@ export function wrapInline(state: TextState, marker: string, placeholder = 'text
   const selected = value.slice(start, end);
   const length = marker.length;
 
-  // Marker already wraps the target from the outside.
   if (value.slice(start - length, start) === marker && value.slice(end, end + length) === marker) {
     return op(start - length, end + length, selected, start - length, end - length);
   }
 
-  // Marker is part of the selection itself.
   if (selected.length >= 2 * length && selected.startsWith(marker) && selected.endsWith(marker)) {
     return op(start, end, selected.slice(length, -length), start, end - 2 * length);
   }
@@ -123,7 +118,6 @@ export function insertLink(state: TextState): EditOp {
   return op(start, end, `[${text}](url)`, start + text.length + 3, start + text.length + 6);
 }
 
-/** Cycle the selected lines through H1 → H2 → H3 → none. */
 export function cycleHeading(state: TextState): EditOp {
   return onLines(state, (lines) =>
     lines.map((line) => {
@@ -163,7 +157,6 @@ export function toggleTaskList(state: TextState): EditOp {
   );
 }
 
-/** Toggle HTML comments around the selected lines. */
 export function toggleComment(state: TextState): EditOp {
   return onLines(state, (lines) => {
     const commented = lines.every((line) => !line.trim() || /^\s*<!-- .* -->\s*$/.test(line));
@@ -189,7 +182,6 @@ export function deleteLine(state: TextState): EditOp {
   return op(from, to, '', from);
 }
 
-/** Selection that covers the whole line(s) under the caret, including the newline. */
 export function selectLineRange(state: TextState): { start: number; end: number } {
   const { value, start } = state;
   return {

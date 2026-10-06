@@ -9,38 +9,38 @@ const GROUPS: readonly FormatGroup[] = [
   [
     'Text',
     [
-      ['bold', 'bold', 'Bold', 'Bold (Ctrl+B)'],
-      ['italic', 'italic', 'Italic', 'Italic (Ctrl+I)'],
-      ['strike', 'strikethrough', 'Strike', 'Strikethrough (Ctrl+Shift+X)'],
-      ['code', 'code', 'Code', 'Inline code (Ctrl+E)'],
-      ['link', 'link', 'Link', 'Link (Ctrl+K)'],
+      ['bold', 'lucide:bold', 'Bold', 'Bold (Ctrl+B)'],
+      ['italic', 'lucide:italic', 'Italic', 'Italic (Ctrl+I)'],
+      ['strike', 'lucide:strikethrough', 'Strike', 'Strikethrough (Ctrl+Shift+X)'],
+      ['code', 'lucide:code', 'Code', 'Inline code (Ctrl+E)'],
+      ['link', 'lucide:link', 'Link', 'Link (Ctrl+K)'],
     ],
   ],
   [
     'Blocks',
     [
-      ['heading', 'heading', 'Heading', 'Heading (cycles H1 → H3 → none)'],
-      ['quote', 'quote', 'Quote', 'Blockquote'],
-      ['ul', 'list', 'List', 'Bullet list'],
-      ['ol', 'list-ordered', 'Numbered', 'Numbered list'],
-      ['task', 'list-checks', 'Tasks', 'Task list'],
+      ['heading', 'lucide:heading', 'Heading', 'Heading (cycles H1 → H3 → none)'],
+      ['quote', 'lucide:quote', 'Quote', 'Blockquote'],
+      ['ul', 'lucide:list', 'List', 'Bullet list'],
+      ['ol', 'lucide:list-ordered', 'Numbered', 'Numbered list'],
+      ['task', 'lucide:list-checks', 'Tasks', 'Task list'],
     ],
   ],
   [
     'Insert',
     [
-      ['table', 'table', 'Table', 'Insert a table'],
-      ['fence', 'braces', 'Block', 'Code block'],
-      ['mermaid', 'workflow', 'Mermaid', 'Insert a Mermaid diagram'],
-      ['hr', 'minus', 'Rule', 'Horizontal rule'],
+      ['table', 'lucide:table', 'Table', 'Insert a table'],
+      ['fence', 'lucide:braces', 'Block', 'Code block'],
+      ['mermaid', 'lucide:workflow', 'Mermaid', 'Insert a Mermaid diagram'],
+      ['hr', 'lucide:minus', 'Rule', 'Horizontal rule'],
     ],
   ],
   [
     'Editing',
     [
-      ['undo', 'undo-2', 'Undo', 'Undo (Ctrl+Z)'],
-      ['redo', 'redo-2', 'Redo', 'Redo (Ctrl+Y)'],
-      ['find', 'search', 'Find', 'Find and replace (Ctrl+H)'],
+      ['undo', 'lucide:undo-2', 'Undo', 'Undo (Ctrl+Z)'],
+      ['redo', 'lucide:redo-2', 'Redo', 'Redo (Ctrl+Y)'],
+      ['find', 'lucide:search', 'Find', 'Find and replace (Ctrl+H)'],
     ],
   ],
 ];
@@ -55,9 +55,9 @@ const GROUPS: readonly FormatGroup[] = [
     aria-expanded="false"
     title="Markdown formatting"
   >
-    <Icon name="type" />
+    <Icon name="lucide:type" />
     Format
-    <Icon name="chevron-up" size={12} />
+    <Icon name="lucide:chevron-up" size={12} />
   </button>
   <div class="pop fm-pop" data-pop="format" data-r="format-pop" hidden>
     {GROUPS.map(([group, items]) => (

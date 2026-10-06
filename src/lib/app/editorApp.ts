@@ -4,17 +4,20 @@ import { downloadMarkdown, exportDocument } from '../editor/exportDocument';
 import { buildSearchRegex, countMatches, replaceAllMatches } from '../editor/findReplace';
 import { PREF_KEYS, readNumberPref, readPref, writePref } from '../editor/prefs';
 import { wordAt, type TextState } from '../editor/text';
+import { openCloudDocuments } from '../documents/cloudApi';
+import type { CloudSession } from '../documents/cloudApi';
 import { migrateLegacyDocuments } from '../documents/migrate';
 import {
   createDocument,
   loadActiveDocumentId,
   loadOpenDocuments,
+  nextUntitledTitle,
   normalizeTitle,
   saveActiveDocumentId,
   saveOpenDocuments,
   WELCOME_MARKDOWN,
 } from '../documents/store';
-import type { OpenDocument } from '../documents/types';
+import type { OpenDocument, SaveDocumentResult } from '../documents/types';
 import { HIGHLIGHT_THEME_CSS } from '../markdown/highlightTheme';
 import { renderDiagram } from '../markdown/mermaid';
 import { renderMarkdown } from '../markdown/render';
@@ -24,6 +27,11 @@ const MAX_ZOOM = 1.8;
 const MIN_SPLIT = 20;
 const MAX_SPLIT = 80;
 const MAX_OPEN_DOCUMENTS = 20;
+
+/** Quiet period before an autosave leaves for the server, per document. */
+const AUTOSAVE_DELAY = 1200;
+/** How long to wait before retrying a save that failed for a transient reason. */
+const RETRY_DELAY = 5000;
 
 type ScrollSource = 'code' | 'preview';
 
@@ -73,9 +81,21 @@ export function initEditorApp(): void {
   let renaming = false;
   let toastTimer: number | undefined;
 
-  const panes = new Map<string, Pane>();
+  /**
+   * Cloud mode: the tabs are rows in `public.documents` instead of entries in
+   * `localStorage`. It is decided once at boot by `openCloudDocuments()`, which
+   * answers `null` for anonymous visitors — so this page stays identical for
+   * everybody (and cacheable) and the decision is the request's.
+   */
+  let cloud: CloudSession | null = null;
+  /** Last revision confirmed by the server, per document. */
+  const revisions = new Map<string, number>();
+  const saveTimers = new Map<string, number>();
+  /** Documents whose version moved on elsewhere; autosave pauses for them. */
+  const conflicted = new Set<string>();
+  let booted = false;
 
-  /* ----------------------------- documents ----------------------------- */
+  const panes = new Map<string, Pane>();
 
   const documentById = (id: string): OpenDocument | undefined =>
     documents.find((doc) => doc.id === id);
@@ -89,25 +109,144 @@ export function initEditorApp(): void {
   }
 
   function persist(): void {
-    saveOpenDocuments(documents);
+    // In cloud mode the documents live in Postgres: caching them here would leave
+    // one account's text in the browser for the next visitor to read. The active
+    // tab stays a preference (it is just an id).
+    if (!cloud) saveOpenDocuments(documents);
     saveActiveDocumentId(activeId);
+  }
+
+  function queueCloudSave(doc: OpenDocument, immediate = false, keepalive = false): void {
+    if (!cloud || conflicted.has(doc.id)) return;
+
+    window.clearTimeout(saveTimers.get(doc.id));
+    saveTimers.delete(doc.id);
+
+    const run = (): void => {
+      void runCloudSave(doc, keepalive);
+    };
+
+    if (immediate) run();
+    else saveTimers.set(doc.id, window.setTimeout(run, AUTOSAVE_DELAY));
+  }
+
+  async function runCloudSave(doc: OpenDocument, keepalive = false): Promise<void> {
+    const revision = revisions.get(doc.id);
+    if (!cloud || revision === undefined) return;
+
+    showStatus('Saving…', 900);
+    const result = await cloud.save({
+      id: doc.id,
+      content: doc.content,
+      revision,
+      keepalive,
+    });
+    applySaveResult(doc, result);
+  }
+
+  function applySaveResult(doc: OpenDocument, result: SaveDocumentResult): void {
+    if (result.ok) {
+      revisions.set(doc.id, result.revision);
+      showStatus('Saved', 1200);
+      return;
+    }
+
+    if ('revision' in result) {
+      // The server moved on: adopt its revision and ask what to keep.
+      revisions.set(doc.id, result.revision);
+      conflicted.add(doc.id);
+      void resolveConflict(doc);
+      return;
+    }
+
+    switch (result.reason) {
+      case 'forbidden':
+        showStatus('Your role on this document is read-only', 4000);
+        return;
+      case 'missing':
+        showStatus('This document no longer exists', 4000);
+        return;
+      default:
+        showStatus('Could not save — retrying', 2500);
+        window.setTimeout(() => queueCloudSave(doc, true), RETRY_DELAY);
+    }
+  }
+
+  /**
+   * Two writers touched the same document. Nothing is discarded on its own: the
+   * user chooses between their text and the newer server version.
+   */
+  async function resolveConflict(doc: OpenDocument): Promise<void> {
+    if (!cloud) return;
+
+    const server = await cloud.fetch(doc.id);
+    if (!server) {
+      showStatus('This document no longer exists', 4000);
+      return;
+    }
+    revisions.set(doc.id, server.revision);
+
+    const keepMine = window.confirm(
+      `“${doc.title}” was changed somewhere else.\n\n` +
+        'OK: keep the text open here and save it over the other version.\n' +
+        'Cancel: load the newer version from the server (your local text is replaced).',
+    );
+
+    conflicted.delete(doc.id);
+
+    if (keepMine) {
+      queueCloudSave(doc, true);
+      return;
+    }
+
+    doc.title = server.title;
+    doc.content = server.content;
+    const pane = panes.get(doc.id);
+    if (pane) {
+      pane.textarea.value = server.content;
+      renderPane(pane);
+      if (doc.id === activeId) updateStatus();
+    }
+    renderTabs();
+    showStatus('Loaded the server version', 2000);
+  }
+
+  /** Rename keeps the content in the same request, so a pending edit is not lost. */
+  async function renameDocument(doc: OpenDocument, rawTitle: string): Promise<void> {
+    doc.title = normalizeTitle(rawTitle);
+
+    if (!cloud) {
+      persist();
+      return;
+    }
+
+    const revision = revisions.get(doc.id);
+    if (revision === undefined) return;
+
+    showStatus('Saving…', 900);
+    applySaveResult(
+      doc,
+      await cloud.save({ id: doc.id, content: doc.content, revision, title: doc.title }),
+    );
   }
 
   function currentPane(): Pane | undefined {
     return panes.get(activeId);
   }
 
-  function toast(message: string): void {
+  function showStatus(message: string, hold = 1400): void {
     const element = document.getElementById('status-message');
     if (!element) return;
     element.textContent = message;
     window.clearTimeout(toastTimer);
     toastTimer = window.setTimeout(() => {
       element.textContent = '';
-    }, 1400);
+    }, hold);
   }
 
-  /* ------------------------------ status ------------------------------- */
+  function toast(message: string): void {
+    showStatus(message);
+  }
 
   function updateStatus(): void {
     const pane = currentPane();
@@ -127,8 +266,6 @@ export function initEditorApp(): void {
       `${value ? value.split('\n').length : 0} lines · ` +
       `${trimmed ? trimmed.split(/\s+/).length : 0} words · ${value.length} characters`;
   }
-
-  /* --------------------------- editing core ---------------------------- */
 
   const stateOf = (textarea: HTMLTextAreaElement): TextState => ({
     value: textarea.value,
@@ -161,8 +298,6 @@ export function initEditorApp(): void {
     applyEdit(pane.textarea, compute(stateOf(pane.textarea)));
   }
 
-  /* ------------------------------ rendering ---------------------------- */
-
   function renderPane(pane: Pane): void {
     const doc = documentById(pane.docId);
     if (!doc) return;
@@ -177,6 +312,7 @@ export function initEditorApp(): void {
         if (!doc) return;
         doc.content = pane.textarea.value;
         persist();
+        queueCloudSave(doc);
         renderPane(pane);
         if (pane.docId === activeId) updateStatus();
       },
@@ -191,12 +327,11 @@ export function initEditorApp(): void {
     doc.content = pane.textarea.value;
   }
 
-  function flushAll(): void {
+  function flushAll(keepalive = false): void {
     panes.forEach(flushPane);
     persist();
+    if (cloud) documents.forEach((doc) => queueCloudSave(doc, true, keepalive));
   }
-
-  /* --------------------------- scroll syncing -------------------------- */
 
   const scrollRatio = (element: HTMLElement): number => {
     const max = element.scrollHeight - element.clientHeight;
@@ -231,8 +366,6 @@ export function initEditorApp(): void {
       { passive: true },
     );
   }
-
-  /* ------------------------------ find bar ----------------------------- */
 
   function updateFindCount(pane: Pane): void {
     const regex = buildSearchRegex({
@@ -282,8 +415,6 @@ export function initEditorApp(): void {
     updateFindCount(pane);
     toast('Replaced');
   }
-
-  /* -------------------------------- tabs ------------------------------- */
 
   function buildTitle(doc: OpenDocument): HTMLElement {
     const title = document.createElement('span');
@@ -362,8 +493,7 @@ export function initEditorApp(): void {
       finished = true;
       renaming = false;
       if (save) {
-        doc.title = normalizeTitle(input.value);
-        persist();
+        void renameDocument(doc, input.value);
       }
       input.replaceWith(buildTitle(doc));
       renderTabs();
@@ -416,11 +546,31 @@ export function initEditorApp(): void {
     updateStatus();
   }
 
-  function addDocument(): void {
+  async function addDocument(): Promise<void> {
+    if (!booted) return;
     if (documents.length >= MAX_OPEN_DOCUMENTS) {
       toast('Tab limit reached');
       return;
     }
+
+    if (cloud) {
+      try {
+        const created = await cloud.create(nextUntitledTitle(documents));
+        revisions.set(created.id, created.revision);
+        const doc: OpenDocument = {
+          id: created.id,
+          title: created.title,
+          content: created.content,
+        };
+        documents.push(doc);
+        mountPane(doc);
+        activate(doc.id);
+      } catch {
+        toast('Could not create the document');
+      }
+      return;
+    }
+
     const doc = createDocument(documents);
     documents.push(doc);
     mountPane(doc);
@@ -434,18 +584,32 @@ export function initEditorApp(): void {
     }
     const doc = documentById(id);
     if (!doc) return;
-    if (!window.confirm(`Close “${doc.title}”? Its content is deleted from this browser.`)) return;
+
+    const question = cloud
+      ? `Delete “${doc.title}”? It disappears for everyone who can see it, history included.`
+      : `Close “${doc.title}”? Its content is deleted from this browser.`;
+    if (!window.confirm(question)) return;
 
     const closing = panes.get(id);
     if (closing) flushPane(closing);
     closing?.root.remove();
     panes.delete(id);
+    window.clearTimeout(saveTimers.get(id));
+    saveTimers.delete(id);
+    conflicted.delete(id);
     documents = documents.filter((item) => item.id !== id);
     if (activeId === id) activeId = documents[0].id;
+
+    if (cloud) {
+      const session = cloud;
+      revisions.delete(id);
+      void session.remove(id).then((removed) => {
+        if (!removed) toast(`Could not delete “${doc.title}” — it is still online`);
+      });
+    }
+
     activate(activeId);
   }
-
-  /* ------------------------------ commands ----------------------------- */
 
   function paneFor(source: HTMLElement | null): Pane | undefined {
     const root = source?.closest<HTMLElement>('[data-pane]');
@@ -624,7 +788,7 @@ export function initEditorApp(): void {
         setPanel('preview');
         return;
       case 'new-document':
-        addDocument();
+        void addDocument();
         return;
       case 'toggle-case':
         if (pane) {
@@ -643,8 +807,6 @@ export function initEditorApp(): void {
         return;
     }
   }
-
-  /* -------------------------- popovers and menus ----------------------- */
 
   const allPanels = (): HTMLElement[] => [...document.querySelectorAll<HTMLElement>('[data-pop]')];
 
@@ -681,8 +843,6 @@ export function initEditorApp(): void {
     trigger.classList.add('on');
     trigger.setAttribute('aria-expanded', 'true');
   }
-
-  /* ------------------------------ pane wiring -------------------------- */
 
   function mountPane(doc: OpenDocument): Pane {
     const fragment = paneTemplate.content.cloneNode(true) as DocumentFragment;
@@ -833,7 +993,7 @@ export function initEditorApp(): void {
             break;
           }
           case 't':
-            addDocument();
+            void addDocument();
             handled = true;
             break;
           case 'w':
@@ -884,8 +1044,6 @@ export function initEditorApp(): void {
     if (handled) event.preventDefault();
   }
 
-  /* ---------------------------- global events -------------------------- */
-
   document.addEventListener('click', (event) => {
     const target = event.target as HTMLElement;
 
@@ -933,19 +1091,65 @@ export function initEditorApp(): void {
   });
 
   window.addEventListener('resize', () => closeMenus());
-  window.addEventListener('pagehide', flushAll);
+  window.addEventListener('pagehide', () => flushAll(true));
   document.addEventListener('visibilitychange', () => {
-    if (document.hidden) flushAll();
+    if (document.hidden) flushAll(true);
   });
 
-  /* -------------------------------- boot ------------------------------- */
+  function mountAll(preferred?: string | null): void {
+    documents.forEach(mountPane);
+    const remembered = documentById(loadActiveDocumentId() ?? '');
+    const target = documentById(preferred ?? '') ?? remembered ?? documents[0];
+    activate(target.id);
+  }
 
-  bootDocuments();
-  documents.forEach(mountPane);
-  const stored = loadActiveDocumentId();
-  activate(documentById(stored ?? '') ? (stored as string) : documents[0].id);
+  /**
+   * Signed in → the tabs come from the server; anonymous (or unreachable) → the
+   * local `localStorage` editor, exactly as before phase 3.
+   */
+  async function boot(): Promise<void> {
+    const requested = new URLSearchParams(window.location.search).get('doc');
+    const session = await openCloudDocuments();
+
+    if (!session) {
+      bootDocuments();
+      booted = true;
+      mountAll(requested);
+      return;
+    }
+
+    cloud = session;
+    for (const entry of session.documents) revisions.set(entry.id, entry.revision);
+    documents = session.documents.map((entry) => ({
+      id: entry.id,
+      title: entry.title,
+      content: entry.content,
+    }));
+
+    // A brand new account opens the same welcome document the local editor
+    // starts with, so the screen is never empty.
+    if (documents.length === 0) {
+      try {
+        const created = await session.create(nextUntitledTitle([]), WELCOME_MARKDOWN);
+        revisions.set(created.id, created.revision);
+        documents = [{ id: created.id, title: created.title, content: created.content }];
+      } catch {
+        // The account answered once and then failed: keep the user typing, but
+        // locally and without pretending it will be saved.
+        cloud = null;
+        documents = [createDocument([], WELCOME_MARKDOWN)];
+        toast('Could not reach your documents — this session stays in the browser');
+      }
+    }
+
+    booted = true;
+    mountAll(requested);
+  }
+
   setSplit(readNumberPref(PREF_KEYS.split, 50));
   setZoom(readNumberPref(PREF_KEYS.zoom, 1));
   toggleSyncUi();
   setPanel(document.body.dataset.panel === 'preview' ? 'preview' : 'code');
+  showStatus('Loading your documents…', 4000);
+  void boot();
 }

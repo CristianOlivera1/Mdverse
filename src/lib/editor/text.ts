@@ -1,4 +1,3 @@
-/** A text buffer plus the current selection offsets. */
 export interface TextState {
   readonly value: string;
   readonly start: number;

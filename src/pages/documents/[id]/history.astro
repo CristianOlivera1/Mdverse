@@ -1,0 +1,126 @@
+---
+/**
+ * `GET /documents/:id/history` — what the document used to say.
+ *
+ * Restoring posts to `/documents/:id/restore` and copies the snapshot into the
+ * document as a *new* revision, so nothing in the history is rewritten and a
+ * restore can itself be undone.
+ *
+ * Snapshots are written by `public.snapshot_document_version` at most once every
+ * ten minutes and only when the text changed — see the note in the migration.
+ */
+
+import Icon from '@/components/ui/Icon.astro';
+import AccountLayout from '@/layouts/AccountLayout.astro';
+import { canEditDocument, describeAccess } from '@/lib/documents/access';
+import { describeSize, firstLine, formatTimestamp } from '@/lib/documents/format';
+import { isDocumentId } from '@/lib/documents/ids';
+import { documentNotice } from '@/lib/documents/messages';
+import { getDocument, listVersions } from '@/lib/documents/repository';
+
+export const prerender = false;
+
+const { user, supabase } = Astro.locals;
+const id = Astro.params.id ?? '';
+
+if (!user || !supabase) return Astro.redirect('/login?next=/dashboard');
+if (!isDocumentId(id)) return Astro.redirect('/dashboard?error=not_found');
+
+const document = await getDocument(supabase, user.id, id);
+if (!document) return Astro.redirect('/dashboard?error=not_found');
+
+const versions = await listVersions(supabase, id, 50);
+const params = Astro.url.searchParams;
+const notice = documentNotice({
+  error: params.get('error'),
+  restored: params.get('restored'),
+});
+const editable = canEditDocument(document.role);
+const PREVIEW_LENGTH = 1200;
+---
+
+<AccountLayout
+  title={document.title}
+  description={`Version history · ${describeAccess(document.role)} · revision ${document.revision}`}
+  current="dashboard"
+>
+  {notice && (
+    <p
+      class:list={[
+        'mb-6 rounded-lg border px-3 py-2 text-xs',
+        notice.tone === 'error'
+          ? 'border-red-900 bg-red-950/40 text-red-300'
+          : 'border-emerald-900 bg-emerald-950/30 text-emerald-300',
+      ]}
+    >
+      {notice.message}
+    </p>
+  )}
+
+  <div class="mb-6 flex flex-wrap items-center gap-2">
+    <a href={`/?doc=${encodeURIComponent(document.id)}`} class="hb on">
+      <Icon name="lucide:pencil-line" />
+      Open in the editor
+    </a>
+    <a href="/dashboard" class="hb">
+      <Icon name="lucide:arrow-left" />
+      All documents
+    </a>
+  </div>
+
+  <p class="mb-4 text-[11px] leading-relaxed text-neutral-500">
+    A snapshot is kept at most once every ten minutes of editing, so the most recent minutes are not
+    individually recoverable. Restoring an earlier version saves it as a new revision on top.
+  </p>
+
+  {versions.length === 0 ? (
+    <section class="rounded-xl border border-dashed border-neutral-800 p-6 text-center">
+      <Icon name="lucide:history" size={20} class="mx-auto text-neutral-600" />
+      <h2 class="mt-3 text-sm font-medium text-neutral-200">No earlier versions yet</h2>
+      <p class="mx-auto mt-1 max-w-md text-xs leading-relaxed text-neutral-500">
+        Keep writing and the next snapshot will show up here.
+      </p>
+    </section>
+  ) : (
+    <ol class="space-y-3">
+      {versions.map((version) => (
+        <li class="rounded-xl border border-neutral-800 bg-neutral-950/60 p-4">
+          <div class="flex flex-wrap items-baseline justify-between gap-2">
+            <div class="min-w-0">
+              <p class="text-sm text-neutral-100 truncate">{version.title}</p>
+              <p class="mt-0.5 text-[11px] text-neutral-500">
+                Replaced revision {version.revision} · {formatTimestamp(version.created_at)} ·{' '}
+                {describeSize(version.content)}
+              </p>
+            </div>
+
+            {editable && (
+              <form method="POST" action={`/documents/${encodeURIComponent(document.id)}/restore`}>
+                <input type="hidden" name="version" value={String(version.id)} />
+                <input type="hidden" name="revision" value={String(document.revision)} />
+                <button type="submit" class="hb">
+                  <Icon name="lucide:rotate-ccw" />
+                  Restore
+                </button>
+              </form>
+            )}
+          </div>
+
+          {firstLine(version.content) && (
+            <p class="mt-2 text-xs text-neutral-400 truncate">{firstLine(version.content)}</p>
+          )}
+
+          <details class="mt-3">
+            <summary class="cursor-pointer text-[11px] text-sky-300 hover:text-sky-200">
+              Show text
+            </summary>
+            <pre class="mt-2 max-h-64 overflow-auto rounded-lg bg-black/60 p-3 text-[11px] leading-relaxed text-neutral-400 whitespace-pre-wrap">{version.content.slice(
+                  0,
+                  PREVIEW_LENGTH,
+                )}{version.content.length > PREVIEW_LENGTH ? '\n…' : ''}</pre>
+          </details>
+        </li>
+      ))}
+    </ol>
+  )}
+</AccountLayout>

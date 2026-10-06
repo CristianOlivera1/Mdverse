@@ -2,31 +2,277 @@
 import Avatar from '@/components/ui/Avatar.astro';
 import Icon from '@/components/ui/Icon.astro';
 import AccountLayout from '@/layouts/AccountLayout.astro';
-import { toAccountSummary } from '@/lib/auth/account';
+import { describeProvider, toAccountSummary } from '@/lib/auth/account';
 import { formatMemberSince } from '@/lib/auth/profile';
+import { describeAccess } from '@/lib/documents/access';
+import { describeSize, firstLine, formatTimestamp } from '@/lib/documents/format';
+import { documentNotice } from '@/lib/documents/messages';
+import { listDocuments, MAX_LISTED_DOCUMENTS } from '@/lib/documents/repository';
 
-const account = toAccountSummary(Astro.locals.user, Astro.locals.profile);
-if (!account) return Astro.redirect('/login?next=/dashboard');
+export const prerender = false;
 
-const provider = String(Astro.locals.user?.app_metadata.provider ?? 'email');
+const { user, supabase } = Astro.locals;
+const account = toAccountSummary(user, Astro.locals.profile);
+if (!account || !user || !supabase) return Astro.redirect('/login?next=/dashboard');
+
+const documents = await listDocuments(supabase, user.id);
+const params = Astro.url.searchParams;
+const notice = documentNotice({
+  error: params.get('error'),
+  created: params.get('created'),
+  renamed: params.get('renamed'),
+  deleted: params.get('deleted'),
+  imported: params.get('imported'),
+});
+
+const owned = documents.filter((document) => document.role === 'owner');
+const shared = documents.filter((document) => document.role !== 'owner');
+
+const providers = (account.providers.length > 0 ? account.providers : ['email'])
+  .map(describeProvider)
+  .join(', ');
+const editorUrl = (id: string): string => `/?doc=${encodeURIComponent(id)}`;
 ---
 
 <AccountLayout
   title="Your documents"
-  description="Documents move to Postgres in phase 3. Until then the editor keeps working offline in this browser."
+  description="Every tab you keep in the editor is stored in Postgres, owned by your account and protected by row level security."
   current="dashboard"
 >
-  <section class="rounded-xl border border-neutral-800 bg-neutral-950/60 p-4 sm:p-5">
+  {notice && (
+    <p
+      class:list={[
+        'mb-6 rounded-lg border px-3 py-2 text-xs',
+        notice.tone === 'error'
+          ? 'border-red-900 bg-red-950/40 text-red-300'
+          : 'border-emerald-900 bg-emerald-950/30 text-emerald-300',
+      ]}
+    >
+      {notice.message}
+    </p>
+  )}
+
+  <section class="rounded-xl border border-neutral-800 bg-neutral-950/60 p-4">
+    <form method="POST" action="/documents" class="flex flex-wrap items-center gap-2">
+      <input
+        type="text"
+        name="title"
+        maxlength="120"
+        placeholder="Untitled"
+        aria-label="Title of the new document"
+        class="min-w-0 flex-1 rounded-lg border border-neutral-800 bg-black px-3 py-2 text-sm text-neutral-100 placeholder:text-neutral-600 focus:border-neutral-600 focus:outline-none"
+      />
+      <button type="submit" class="hb on">
+        <Icon name="lucide:file-plus" />
+        New document
+      </button>
+    </form>
+
+    <div class="mt-3 flex flex-wrap items-center gap-2 border-t border-neutral-900 pt-3">
+      <button type="button" class="hb" id="import-local-drafts" hidden>
+        <Icon name="lucide:upload" />
+        <span id="import-local-drafts-label">Import browser drafts</span>
+      </button>
+      <p class="text-[11px] leading-relaxed text-neutral-500">
+        Drafts you wrote in this browser before signing in stay here until you import them.
+      </p>
+    </div>
+  </section>
+
+  {documents.length === 0 ? (
+    <section class="mt-6 rounded-xl border border-dashed border-neutral-800 p-6 text-center">
+      <Icon name="lucide:file-text" size={20} class="mx-auto text-neutral-600" />
+      <h2 class="mt-3 text-sm font-medium text-neutral-200">No documents yet</h2>
+      <p class="mx-auto mt-1 max-w-md text-xs leading-relaxed text-neutral-500">
+        Create one above, or open the editor: it starts with a welcome document you can edit right
+        away.
+      </p>
+      <a href="/" class="mt-4 inline-flex text-xs text-sky-300 hover:text-sky-200">
+        Open the editor →
+      </a>
+    </section>
+  ) : (
+    <>
+      <section class="mt-6">
+        <h2 class="flex items-center gap-2 text-xs font-medium text-neutral-400">
+          <Icon name="lucide:file-text" size={14} />
+          Yours
+          <span class="text-neutral-600">({owned.length})</span>
+        </h2>
+
+        {owned.length === 0 ? (
+          <p class="mt-3 text-xs text-neutral-500">Nothing of your own yet.</p>
+        ) : (
+          <ul class="mt-3 space-y-2">
+            {owned.map((document) => (
+              <li class="rounded-xl border border-neutral-800 bg-neutral-950/60 p-3">
+                <div class="flex flex-wrap items-start justify-between gap-3">
+                  <div class="min-w-0">
+                    <a
+                      href={editorUrl(document.id)}
+                      class="text-sm font-medium text-neutral-50 hover:text-white"
+                    >
+                      {document.title}
+                    </a>
+                    <p class="mt-0.5 flex flex-wrap items-center gap-x-2 text-[11px] text-neutral-500">
+                      <span class="inline-flex items-center gap-1">
+                        <Icon name="lucide:clock" size={11} />
+                        {formatTimestamp(document.updatedAt)}
+                      </span>
+                      <span>·</span>
+                      <span>revision {document.revision}</span>
+                      <span>·</span>
+                      <span>{describeSize(document.content)}</span>
+                    </p>
+                    {firstLine(document.content) && (
+                      <p class="mt-1 truncate text-xs text-neutral-400">
+                        {firstLine(document.content)}
+                      </p>
+                    )}
+                  </div>
+
+                  <div class="flex shrink-0 items-center gap-1">
+                    <a href={editorUrl(document.id)} class="hb">
+                      <Icon name="lucide:pencil-line" />
+                      Edit
+                    </a>
+                    <a
+                      href={`/documents/${encodeURIComponent(document.id)}/history`}
+                      class="hb"
+                      title="Version history"
+                    >
+                      <Icon name="lucide:history" />
+                      History
+                    </a>
+                    <form
+                      method="POST"
+                      action={`/documents/${encodeURIComponent(document.id)}/delete`}
+                    >
+                      <button
+                        type="submit"
+                        class="hb danger"
+                        title="Delete this document"
+                        aria-label={`Delete ${document.title}`}
+                      >
+                        <Icon name="lucide:trash" />
+                      </button>
+                    </form>
+                  </div>
+                </div>
+
+                <details class="mt-2">
+                  <summary class="cursor-pointer text-[11px] text-neutral-500 hover:text-neutral-300">
+                    Rename
+                  </summary>
+                  <form
+                    method="POST"
+                    action={`/documents/${encodeURIComponent(document.id)}/rename`}
+                    class="mt-2 flex flex-wrap items-center gap-2"
+                  >
+                    <input type="hidden" name="revision" value={String(document.revision)} />
+                    <input
+                      type="text"
+                      name="title"
+                      value={document.title}
+                      maxlength="120"
+                      aria-label="New title"
+                      class="min-w-0 flex-1 rounded-lg border border-neutral-800 bg-black px-3 py-1.5 text-xs text-neutral-100 focus:border-neutral-600 focus:outline-none"
+                    />
+                    <button type="submit" class="hb">
+                      Save name
+                    </button>
+                  </form>
+                  <p class="mt-1 text-[10px] text-neutral-600">
+                    Renaming keeps the public link (/d/{document.slug}) working.
+                  </p>
+                </details>
+              </li>
+            ))}
+          </ul>
+        )}
+      </section>
+
+      {shared.length > 0 && (
+        <section class="mt-8">
+          <h2 class="flex items-center gap-2 text-xs font-medium text-neutral-400">
+            <Icon name="lucide:users" size={14} />
+            Shared with you
+            <span class="text-neutral-600">({shared.length})</span>
+          </h2>
+          <ul class="mt-3 space-y-2">
+            {shared.map((document) => (
+              <li class="rounded-xl border border-neutral-800 bg-neutral-950/60 p-3">
+                <div class="flex flex-wrap items-start justify-between gap-3">
+                  <div class="min-w-0">
+                    <a
+                      href={editorUrl(document.id)}
+                      class="text-sm font-medium text-neutral-50 hover:text-white"
+                    >
+                      {document.title}
+                    </a>
+                    <p class="mt-0.5 flex flex-wrap items-center gap-x-2 text-[11px] text-neutral-500">
+                      <span>{describeAccess(document.role)}</span>
+                      <span>·</span>
+                      <span class="inline-flex items-center gap-1">
+                        <Icon name="lucide:clock" size={11} />
+                        {formatTimestamp(document.updatedAt)}
+                      </span>
+                      <span>·</span>
+                      <span>{describeSize(document.content)}</span>
+                    </p>
+                  </div>
+                  <div class="flex shrink-0 items-center gap-1">
+                    <a href={editorUrl(document.id)} class="hb">
+                      <Icon name="lucide:pencil-line" />
+                      Open
+                    </a>
+                    <a
+                      href={`/documents/${encodeURIComponent(document.id)}/history`}
+                      class="hb"
+                      title="Version history"
+                    >
+                      <Icon name="lucide:history" />
+                    </a>
+                  </div>
+                </div>
+              </li>
+            ))}
+          </ul>
+        </section>
+      )}
+
+      {documents.length >= MAX_LISTED_DOCUMENTS && (
+        <p class="mt-6 text-[11px] text-amber-400/80">
+          Showing the {MAX_LISTED_DOCUMENTS} most recently edited documents.
+        </p>
+      )}
+    </>
+  )}
+
+  <section class="mt-8 rounded-xl border border-neutral-800 p-4">
     <div class="flex items-center gap-4">
       <Avatar name={account.displayName} seed={account.toneSeed} size="lg" />
       <div class="min-w-0">
-        <p class="text-base font-medium text-neutral-50 truncate">{account.displayName}</p>
-        <p class="text-xs text-neutral-500 truncate">@{account.username}</p>
-        <p class="text-xs text-neutral-500 truncate">{account.email}</p>
+        <p class="truncate text-base font-medium text-neutral-50">{account.displayName}</p>
+        <p class="truncate text-xs text-neutral-500">@{account.username}</p>
+        <p class="truncate text-xs text-neutral-500">{account.email}</p>
+      </div>
+      <div class="ml-auto flex flex-wrap gap-2">
+        <a href="/settings" class="hb">
+          <Icon name="lucide:settings" />
+          Edit profile
+        </a>
+        <form method="POST" action="/auth/signout">
+          <input type="hidden" name="next" value="/" />
+          <button type="submit" class="hb danger">
+            <Icon name="lucide:log-out" />
+            Sign out
+          </button>
+        </form>
       </div>
     </div>
 
-    <dl class="mt-5 grid gap-3 sm:grid-cols-2 text-xs">
+    <dl class="mt-5 grid gap-3 text-xs sm:grid-cols-2">
       <div>
         <dt class="text-neutral-500">Member since</dt>
         <dd class="mt-0.5 text-neutral-200">
@@ -34,58 +280,59 @@ const provider = String(Astro.locals.user?.app_metadata.provider ?? 'email');
         </dd>
       </div>
       <div>
-        <dt class="text-neutral-500">Signed in with</dt>
-        <dd class="mt-0.5 text-neutral-200">{provider}</dd>
+        <dt class="text-neutral-500">Sign-in methods</dt>
+        <dd class="mt-0.5 text-neutral-200">{providers}</dd>
       </div>
     </dl>
-
-    <div class="mt-5 flex flex-wrap gap-2">
-      <a href="/settings" class="hb on">
-        <Icon name="settings" />
-        Edit profile
-      </a>
-      <a href="/" class="hb">
-        <Icon name="file-code" />
-        Open the editor
-      </a>
-      <form method="POST" action="/auth/signout">
-        <input type="hidden" name="next" value="/" />
-        <button type="submit" class="hb danger">
-          <Icon name="log-out" />
-          Sign out
-        </button>
-      </form>
-    </div>
-  </section>
-
-  <section class="mt-6 rounded-xl border border-dashed border-neutral-800 p-6 text-center">
-    <Icon name="file-text" size={20} class="mx-auto text-neutral-600" />
-    <h2 class="mt-3 text-sm font-medium text-neutral-200">No documents yet</h2>
-    <p class="mx-auto mt-1 max-w-md text-xs leading-relaxed text-neutral-500">
-      Phase 3 adds documents, folders and sharing: every tab in the editor becomes a row in
-      <code class="text-neutral-400">public.documents</code>, protected by row level security. Your
-      local drafts will be imported the first time you sign in.
-    </p>
-    <a href="/" class="mt-4 inline-flex text-xs text-sky-300 hover:text-sky-200">
-      Keep writing in the editor →
-    </a>
   </section>
 
   <section class="mt-6 grid gap-3 sm:grid-cols-2">
     <div class="rounded-xl border border-neutral-800 p-4">
-      <Icon name="shield-check" size={16} class="text-neutral-500" />
-      <h2 class="mt-2 text-xs font-medium text-neutral-200">Session</h2>
+      <Icon name="lucide:shield-check" size={16} class="text-neutral-500" />
+      <h2 class="mt-2 text-xs font-medium text-neutral-200">Protected by row level security</h2>
       <p class="mt-1 text-xs leading-relaxed text-neutral-500">
-        Your session lives in httpOnly cookies refreshed on every request, so a reload keeps you
-        signed in and the browser never stores a token in JavaScript.
+        Postgres decides who may read or write each row. The browser talks to the API with the
+        session cookie; there is no service key anywhere near it.
       </p>
     </div>
     <div class="rounded-xl border border-neutral-800 p-4">
-      <Icon name="key-round" size={16} class="text-neutral-500" />
-      <h2 class="mt-2 text-xs font-medium text-neutral-200">No pictures, on purpose</h2>
+      <Icon name="lucide:history" size={16} class="text-neutral-500" />
+      <h2 class="mt-2 text-xs font-medium text-neutral-200">Edits are versioned</h2>
       <p class="mt-1 text-xs leading-relaxed text-neutral-500">
-        Accounts are represented by initials, so nothing has to be uploaded or moderated.
+        A snapshot of the replaced text is kept at most every ten minutes, and restoring one writes
+        a new revision instead of rewriting the past.
       </p>
     </div>
   </section>
 </AccountLayout>
+
+<script>
+  import { countLocalDrafts, importLocalDrafts } from '@/lib/documents/importDrafts';
+
+  const button = document.getElementById('import-local-drafts');
+  const label = document.getElementById('import-local-drafts-label');
+
+  if (button instanceof HTMLButtonElement && label) {
+    const drafts = countLocalDrafts(localStorage);
+    if (drafts > 0) {
+      label.textContent =
+        drafts === 1 ? 'Import 1 browser draft' : `Import ${drafts} browser drafts`;
+      button.hidden = false;
+    }
+
+    button.addEventListener('click', () => {
+      button.disabled = true;
+      label.textContent = 'Importing…';
+
+      void importLocalDrafts(localStorage).then((summary) => {
+        if (!summary) {
+          window.location.assign('/dashboard?error=import_failed');
+          return;
+        }
+        window.location.assign(
+          summary.created > 0 ? `/dashboard?imported=${summary.created}` : '/dashboard',
+        );
+      });
+    });
+  }
+</script>

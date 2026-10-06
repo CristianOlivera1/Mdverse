@@ -7,9 +7,17 @@ import Icon from '../ui/Icon.astro';
   class="hidden lg:flex flex-col w-72 shrink-0 border-r border-neutral-800 bg-[#050505]"
 >
   <div class="flex items-center justify-between h-11 px-2.5 border-b border-neutral-800 shrink-0 gap-2">
-    <span class="text-xs font-medium text-neutral-300 pl-1">Index</span>
+    <div class="max-sm:hidden flex items-center shrink-0">
+      <img
+        src="/logo-calligraphy.svg"
+        alt="OpenMarkdown logo"
+        class="h-6 w-auto"
+        width="136"
+        height="33"
+      />
+    </div>
     <button type="button" class="hb" id="toc-close" title="Hide index" aria-label="Hide index">
-      <Icon name="panel-left-close" />
+      <Icon name="lucide:panel-left-close" />
     </button>
   </div>
   <nav class="toc flex-1 overflow-y-auto py-2" id="toc-nav"></nav>

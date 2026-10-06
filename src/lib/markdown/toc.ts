@@ -27,7 +27,6 @@ export function collectHeadings(root: ParentNode, selector = 'h1, h2, h3, h4'): 
   }));
 }
 
-/** Table-of-contents markup, indented by heading level. */
 export function buildTocHtml(headings: TocHeading[]): string {
   if (!headings.length) {
     return '<p class="px-3 py-2 text-xs text-neutral-600">This document has no headings.</p>';

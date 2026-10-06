@@ -1,10 +1,11 @@
 import { PREF_KEYS, readJsonPref, readPref, writePref } from '../editor/prefs';
+import { isDocumentId } from '../documents/ids';
+import { isCloudDocument } from '../documents/types';
 import type { OpenDocument } from '../documents/types';
 import { renderDiagram } from '../markdown/mermaid';
 import { renderMarkdown } from '../markdown/render';
 import { buildTocHtml, collectHeadings } from '../markdown/toc';
 
-/** Standalone preview page (`/preview?doc=<id>`) with a live index. */
 export function initPreviewApp(): void {
   const rootElement = document.getElementById('preview-root');
   const contentElement = document.getElementById('preview-content');
@@ -33,11 +34,34 @@ export function initPreviewApp(): void {
   const readDocuments = (): OpenDocument[] =>
     readJsonPref<OpenDocument[]>(PREF_KEYS.openDocuments, []);
 
-  const activeDocument = (): OpenDocument | undefined => {
+  /**
+   * A tab the editor keeps locally is in `localStorage`; a tab of a signed-in
+   * account is a row in Postgres, so the popout asks the API for it. The popout
+   * shows that server snapshot — live syncing arrives with phase 4's realtime
+   * channel.
+   */
+  async function loadDocument(): Promise<OpenDocument | undefined> {
     const list = readDocuments();
-    if (!list.length) return undefined;
-    return (requestedId ? list.find((doc) => doc.id === requestedId) : undefined) ?? list[0];
-  };
+    const local = requestedId ? list.find((doc) => doc.id === requestedId) : list[0];
+    if (local) return local;
+    if (!requestedId || !isDocumentId(requestedId)) return undefined;
+
+    try {
+      const response = await fetch(`/api/documents/${encodeURIComponent(requestedId)}`, {
+        headers: { Accept: 'application/json' },
+        credentials: 'same-origin',
+      });
+      if (!response.ok) return undefined;
+
+      const payload: unknown = await response.json();
+      const found = (payload as { document?: unknown }).document;
+      return isCloudDocument(found)
+        ? { id: found.id, title: found.title, content: found.content }
+        : undefined;
+    } catch {
+      return undefined;
+    }
+  }
 
   document.documentElement.style.setProperty('--z', readPref(PREF_KEYS.zoom) ?? '1');
   root.dataset.toc = readPref(PREF_KEYS.toc) || 'open';
@@ -79,24 +103,24 @@ export function initPreviewApp(): void {
     mark();
   }
 
-  function render(): void {
-    const doc = activeDocument();
+  async function render(): Promise<void> {
+    const doc = await loadDocument();
     if (!doc) {
       content.innerHTML = '<p class="text-neutral-500">No document is available.</p>';
       if (status) status.textContent = 'No document';
       return;
     }
-    void renderMarkdown(content, doc.content, { renderDiagram }).then((applied) => {
-      if (!applied) return;
-      buildToc();
-      document.title = `${doc.title} · Mdverse`;
-      if (status) status.textContent = `Synced · ${new Date().toLocaleTimeString('en-US')}`;
-    });
+
+    const applied = await renderMarkdown(content, doc.content, { renderDiagram });
+    if (!applied) return;
+    buildToc();
+    document.title = `${doc.title} · Mdverse`;
+    if (status) status.textContent = `Synced · ${new Date().toLocaleTimeString('en-US')}`;
   }
 
   function scheduleRender(): void {
     window.clearTimeout(renderTimer);
-    renderTimer = window.setTimeout(render, 120);
+    renderTimer = window.setTimeout(() => void render(), 120);
   }
 
   navs.forEach((nav) =>
@@ -151,5 +175,5 @@ export function initPreviewApp(): void {
     if (event.key === PREF_KEYS.openDocuments || event.key === null) scheduleRender();
   });
 
-  render();
+  void render();
 }

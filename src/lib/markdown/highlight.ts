@@ -88,7 +88,6 @@ export function isSupported(language: string): boolean {
 const cache = new Map<string, string>();
 const CACHE_LIMIT = 200;
 
-/** Highlight a snippet, or return `null` when the language is not supported. */
 export function highlightCode(code: string, language: string): string | null {
   ensureRegistered();
   const resolved = resolveLanguage(language);
