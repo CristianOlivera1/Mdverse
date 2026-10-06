@@ -32,3 +32,5 @@ supabase/.branches/
 
 # jetbrains setting folder
 .idea/
+
+PLAN_VISOR_MARKDOWN_PRODUCCION.md

@@ -52,7 +52,7 @@ Este plan lo lleva a producción **sin perder ni una funcionalidad actual** y a�
 | Contenido en `localStorage` (por navegador) | Documentos en Postgres con dueño y permisos |
 | 2 editores fijos (`a`/`b`), sin nombre | **N documentos/pestañas**, cada uno con **nombre propio** renombrable |
 | Sincronización entre pestañas vía evento `storage` | Colaboración multiusuario en tiempo real (Realtime) |
-| Sin usuarios | Auth (email/OTP + OAuth) con sesión SSR por cookies |
+| Sin usuarios | Auth **email + contraseña con verificación por correo** y OAuth **GitHub/Google**, con sesión SSR por cookies |
 | Sin compartir | **Enlace público** o **invitación por correo** con rol **editor/lector** |
 | Export HTML/PDF en cliente | Export server-side (HTML/PDF/DOCX) opcional |
 | Tailwind + libs por CDN | Build con Vite/Tailwind, bundle tree-shaken y cacheado |
@@ -592,7 +592,15 @@ create policy "documents_update_owner_or_editor"
   );
 ```
 
-> Las políticas completas de las 6 tablas se documentarán como parte de la Fase 3 (diseño por tabla, con pruebas de RLS en `tests/db/`).
+> Las políticas completas de las 6 tablas viven ahora en el código, no en este documento: `supabase/migrations/20261006130000_documents.sql` (una sección por tabla) y la verificación ejecutable en `tests/db/rls.mjs` (`pnpm db:rls`).
+>
+> **Corrección obligatoria al ejemplo de arriba.** El `exists (select 1 from public.document_collaborators …)` dentro de la política de `documents` es **recursivo**: las políticas de `document_collaborators` vuelven a consultar `documents`, y Postgres aborta con *infinite recursion detected in policy*. La solución aplicada es la que permite el propio checklist del Bloque 6: funciones `SECURITY DEFINER` **fuera** del esquema expuesto (`private.can_read_document`, `private.can_edit_document`, `private.can_manage_document`, `private.document_role`), con el `uid` como **parámetro** —nunca leído de la sesión—, `search_path = ''`, `EXECUTE` revocado de `public` y concedido solo a `authenticated`. Las políticas quedan de una línea y el plan de consulta deja de depender de RLS anidado.
+>
+> **Segunda trampa, medida en el proyecto real.** Que los *helpers* no recursen no basta: cualquier subconsulta sobre `documents` **dentro de una política de `documents`** vuelve a entrar en la política y Postgres la rechaza con el mismo `42P17`. Ocurrió con el `WITH CHECK` que fija `owner_id` (`owner_id = (select owner_id from public.documents d where d.id = documents.id)`), y como un error de política aborta la sentencia entera, **todo** `UPDATE` falló: autosave, renombrado, downgrade de rol y la publicación de un documento. Se corrigió leyendo el valor almacenado a través de otro helper `SECURITY DEFINER` (`private.document_owner(uuid)`), no del esquema expuesto.
+>
+> **Lección para el Bloque 15:** los 7 fallos no aparecieron leyendo el SQL, sino ejecutando `pnpm db:rls`. Una política solo está probada cuando una identidad real intenta lo que la política debería impedir.
+>
+> **Este DDL es documentación de diseño, no un script para pegar.** Aplicarlo a mano crea tablas con RLS activo y **sin políticas**, que es un estado cerrado en falso: el dueño no puede leer ni su propia fila y la app parece rota por motivos invisibles en el dashboard. La única fuente de verdad ejecutable son los archivos de `supabase/migrations/`, que además reconcilian un esquema creado a mano (`add column if not exists`, constraints guardadas, corrección del idioma del índice de búsqueda).
 
 ### 6.5 Triggers y funciones
 
@@ -615,7 +623,20 @@ create policy "documents_update_owner_or_editor"
 ## Bloque 7 — Autenticación y sesiones
 
 - **Librería:** `@supabase/ssr` + `@supabase/supabase-js` (versiones fijadas y lockfile commiteado).
-- **Métodos:** email con OTP/magic link (por defecto) y OAuth (Google, GitHub). Opcional: contraseña.
+- **Métodos (decisión del cliente, 2026-10-06):** **email + contraseña** con **verificación por correo** obligatoria, más OAuth **GitHub** y **Google**. El magic link queda descartado.
+
+| Pantalla | Ruta | Ruta servidor |
+|---|---|---|
+| Iniciar sesión | `/login` | `POST /auth/signin` |
+| Crear cuenta | `/signup` | `POST /auth/signup` → correo de confirmación |
+| Reenviar confirmación | `/login?error=email_not_confirmed` | `POST /auth/resend` |
+| Recuperar contraseña | `/forgot-password` | `POST /auth/password/forgot` |
+| Elegir contraseña nueva (protegida) | `/reset-password` | `POST /auth/password/update` |
+| OAuth / retorno | `/auth/oauth/:provider`, `/auth/callback` | `GET` (PKCE `?code=` y `?token_hash=&type=`) |
+
+- **Política de contraseñas:** mínimo 8 caracteres con letra y número (`src/lib/auth/password.ts`), espejo de *Authentication → Settings → Minimum password length*; 72 caracteres máximo porque bcrypt trunca ahí.
+- **Anti-enumeración:** ni `/auth/resend` ni `/auth/password/forgot` revelan si el correo existe, y un fallo de acceso siempre responde `invalid_credentials` (salvo dirección sin confirmar, que ofrece reenviar el enlace).
+- **Mensajes de validación nativos:** los del navegador (`pattern`, `minlength`) salen en el idioma del navegador del usuario; los textos propios del producto están en inglés (Bloque 1.4).
 - **Sesión SSR:** cookies gestionadas en `src/middleware.ts` con `createServerClient`; el middleware refresca tokens y protege `/dashboard`, `/editor/*`, `/settings`.
 - **Cliente:** `createBrowserClient` solo con clave publicable (nunca `service_role`).
 - **Autorización:** decisiones basadas en `app_metadata` y RLS, nunca en `user_metadata`.
@@ -721,15 +742,17 @@ SENTRY_DSN=                           # observabilidad (Fase 6)
 
 | # | Tarea | Dónde | Notas |
 |---|---|---|---|
-| 1 | Crear proyecto | Dashboard → New project | Región **cercana** al público (p. ej. `sa-east-1` São Paulo si el público es Perú). Guardar contraseña de DB. |
-| 2 | Obtener API keys | Settings → API | Copiar URL, **publishable key**; guardar la **secret key** solo en servidor. |
-| 3 | Definir URL del sitio | Authentication → URL Configuration | `Site URL` = dominio productivo; `Redirect URLs` = `http://localhost:4321/auth/callback`, `https://tu-dominio/auth/callback`. |
-| 4 | Activar proveedores | Authentication → Providers | Email (OTP o password) y OAuth (Google/GitHub con Client ID/Secret). |
-| 5 | SMTP propio | Authentication → SMTP | Recomendado en producción (entrega fiable de magic links). |
-| 6 | Aplicar migraciones | CLI: `supabase link` + `supabase db push` | O pegar el SQL en el SQL Editor si no usas CLI. |
-| 7 | Exponer tablas a la Data API | Integrations → Data API settings | Si recién creadas no aparecen: `GRANT` explícito a `authenticated` **con RLS activado** (ver skill `supabase`). |
-| 8 | Activar Realtime | Database → Replication | Añadir `documents`, `document_collaborators`, `comments` a la publicación `supabase_realtime`. |
-| 9 | Crear bucket de Storage | Storage → New bucket | `doc-images` (privado) + políticas (INSERT/SELECT/UPDATE). |
+| 1 | Crear proyecto | Dashboard → New project | Región **cercana** al público (p. ej. `sa-east-1` São Paulo si el público es Perú). Guardar contraseña de DB. ✅|
+| 2 | Obtener API keys | Settings → API | Copiar URL, **publishable key**; guardar la **secret key** solo en servidor. ✅|
+| 3 | Definir URL del sitio | Authentication → URL Configuration | `Site URL` = dominio productivo; `Redirect URLs` = `http://localhost:4321/auth/callback`, `https://tu-dominio/auth/callback`. **Pendiente de añadir** (el middleware usa esta URL para el enlace de confirmación y el retorno OAuth).✅ |
+| 4 | Activar proveedores | Authentication → Providers | Email (con **“Confirm email” activado**) y OAuth (Google/GitHub con Client ID/Secret). ✅ Verificado 2026-10-06: `mailer_autoconfirm=false`, proveedores `email`, `github` y `google` activos. |
+| 4b | Política de contraseñas | Authentication → Settings | Longitud mínima **8** (debe coincidir con `PASSWORD_MIN_LENGTH`). ✅|
+| 4c | Plantillas de correo | Authentication → Email Templates | “Confirm signup” y “Reset password” apuntan a `{{ .SiteURL }}/auth/callback` (así el enlace pasa por el intercambio PKCE). ✅|
+| 5 | SMTP propio | Authentication → SMTP | Recomendado en producción (entrega fiable de magic links). ✅|
+| 6 | Aplicar migraciones | CLI: `supabase link` + `supabase db push` | O pegar los archivos de `supabase/migrations/` en el SQL Editor, **en orden de nombre**. Ambos son idempotentes y reconciliadores: reaplicarlos es la forma prevista de actualizar un esquema ya creado a mano. ✅ `profiles` aplicada (2026-10-06). ◐ `20261006130000_documents.sql`: falta **reaplicar** por la corrección de recursión en `documents_update_editor` (ver 6.4); sin eso todo `UPDATE` sobre `documents` falla.✅ |
+| 7 | Exponer tablas a la Data API | Integrations → Data API settings | Si recién creadas no aparecen: `GRANT` explícito a `authenticated` **con RLS activado** (ver skill `supabase`).✅ |
+| 8 | Activar Realtime | Database → Replication | Añadir `documents`, `document_collaborators`, `comments` a la publicación `supabase_realtime`.✅ |
+| 9 | Crear bucket de Storage | Storage → New bucket | `doc-images` (privado) + políticas (INSERT/SELECT/UPDATE).✅ |
 | 10 | Revisar advisors | CLI `supabase db advisors` o Dashboard → Advisors | Corregir warnings de RLS/permisos antes de producción. |
 | 11 | Backups | Settings → Database → Backups | Definir política (PITR según plan) y probar restauración. |
 | 12 | Presupuesto/alarmas | Settings → Billing | Alerta de uso para evitar sorpresas con Realtime/egress. |
@@ -770,7 +793,7 @@ supabase db advisors              # revisar antes de commitear
 | `nanostores` (+ `@nanostores/persistent`) | Estado de editor/sesión/colaboración. |
 | `zod` | Validación en Actions/endpoints. |
 | `idb-keyval` (o `dexie`) | Persistencia local robusta. |
-| `lucide-static` o SVG inline | Iconos sin CDN de Iconify. |
+| `astro-icon` + `@iconify-json/lucide` (+ `@iconify-json/simple-icons`) | **Iconos con Iconify** desde npm: SVG inline en build, sin CDN y sin JS de cliente. La lista de iconos vive en `src/lib/ui/iconNames.ts` y alimenta `icon({ include })`, obligatorio con `output: 'server'` (si no, se empaqueta el set completo: ~1 938 iconos). |
 | `tailwindcss` + `@tailwindcss/vite` | Tailwind v4 en build. |
 | `@astrojs/sitemap` (opcional) | SEO de documentos públicos. |
 
@@ -790,7 +813,7 @@ supabase db advisors              # revisar antes de commitear
 ### 11.3 Tooling
 
 - **TS strict** + `paths` (`@/*` → `src/*`) y tipos generados de la DB.
-- **Scripts** en `package.json`: `dev`, `build`, `preview`, `check` (`astro check`), `test`, `test:e2e`, `lint`, `format`, `db:types`.
+- **Scripts** en `package.json`: `dev`, `build`, `preview`, `astro`, `sync`, `check` (`astro check`), `test`, `test:watch`, `test:db` (integración contra el proyecto real), `lint`, `lint:fix`, `format`, `format:check`, `db:start`, `db:stop`, `db:reset`, `db:push`, `db:advisors`, `db:rls` (RLS contra el proyecto real), `db:types`.
 - **CI** (`.github/workflows/ci.yml`): typecheck → lint → unit → e2e → build → Lighthouse. Node 22.
 - **Pre-commit** (opcional): husky + lint-staged.
 
@@ -822,7 +845,7 @@ supabase db advisors              # revisar antes de commitear
 | `src/components/ui`, `src/components/app` | `Icon`, `AppHeader`, `DocumentTabs`, `ExportMenu`, `ViewMenu`, `ClearMenu`, `EditorPane`, `FindReplaceBar`, `FormatToolbar`, `StatusBar`, `TocPanel` |
 | `src/pages` | `/` (editor) y `/preview?doc=<id>` (vista con índice, sincronizada entre pestañas por el evento `storage`) |
 
-- Iconos con **`@lucide/astro`** (compilados a SVG en build, sin JS de cliente) y **`@tailwindcss/typography`** para el `prose`.
+- Iconos con **Iconify** vía `astro-icon` + colecciones npm (compilados a SVG en build, sin CDN ni JS de cliente) — sustituyó a `@lucide/astro` en la Fase 2 por decisión del cliente. **`@tailwindcss/typography`** aporta el `prose`.
 
 **Bugs del original corregidos durante el port (documentados en el código):**
 
@@ -832,16 +855,84 @@ supabase db advisors              # revisar antes de commitear
 
 **Desviaciones conscientes:** `EditorPane` agrupa los antiguos `CodePane`/`PreviewPane`/`Splitter` en un solo componente; `IndexedDB` y `nanostores` se posponen a la Fase 3.
 
-### Fase 2 — Infra Supabase (1–2 días)
+### Fase 2 — Infra Supabase y autenticación (1–2 días) ✅ *completada en este repo*
 - Proyecto Supabase, `.env`, `@supabase/ssr`, middleware, login/logout, perfil, tipos generados.
-- **Entregable:** login funcional y sesión persistente.
+- **Métodos de acceso (decisión del cliente):** **email + contraseña con verificación por correo** + OAuth **GitHub** y **Google** (ver Bloque 7).
+- **Entregable cumplido:** acceso real, sesión persistente en cookies, pantallas de cuenta y degradación limpia sin Supabase.
 
-### Fase 3 — Documentos y persistencia real (3–5 días)
-- Esquema del Bloque 6 + RLS + pruebas de RLS.
-- Dashboard, crear/renombrar/eliminar, abrir en editor, autosave con `revision`, historial y restauración.
-- **Editores ilimitados con nombre propio** (multi-pestaña) persistidos en `documents.title`.
-- Migración de borradores locales al iniciar sesión.
-- **Entregable:** documentos en Postgres con dueño, seguros por RLS.
+**Implementación real (rutas):**
+
+| Módulo | Contenido |
+|---|---|
+| `src/lib/supabase/*` | `env` (astra:env), `config` (normalización + URL de callback), `client` (navegador), `server` (cliente por request), `cookies`, `errors` (clasificación de errores de Auth), `types`, `database.types` |
+| `src/lib/auth/*` | `session` (`getSession` → `getUser` → perfil), `profile` (correo/nombre/usuario/iniciales), `password` (política), `account` (view-model + métodos de acceso), `messages` (catálogo de avisos), `routes` (rutas protegidas), `redirect` (saneado de `next`) |
+| `src/middleware.ts` | Refresco de cookies, `locals.supabase/user/profile`, guardas de ruta y `Cache-Control: private` en respuestas con sesión |
+| `src/components/auth/*` | `AuthShell` (marco común + script de mostrar contraseña y comprobar la confirmación), `EmailField`, `PasswordField`, `OAuthButtons` |
+| `src/pages/{login,signup,forgot-password,reset-password}.astro` | Las cuatro pantallas de acceso |
+| `src/pages/auth/*` | `signin`, `signup`, `resend`, `password/forgot`, `password/update`, `oauth/[provider]`, `callback` (PKCE y OTP) |
+| `src/pages/{dashboard,settings}.astro`, `settings/profile.ts` | Área de cuenta: perfil, estado de verificación, métodos de acceso y cambio de contraseña |
+| `supabase/migrations/20261006120000_profiles.sql` | `public.profiles` + RLS + trigger `private.handle_new_user` |
+
+**Decisiones de seguridad:** las respuestas con sesión nunca se cachean; la secret key no llega al navegador; los errores de Supabase se mapean a códigos (nunca se reenvía el mensaje del proveedor); `next` se sanea antes de cualquier redirección; ninguna respuesta revela si un correo tiene cuenta.
+
+**Verificado contra el proyecto real (2026-10-06):** `/auth/v1/settings` → `mailer_autoconfirm=false` (confirmación por correo activa) y proveedores `email`, `github`, `google` habilitados; el inicio de sesión con credenciales falsas devuelve `invalid_credentials` y la pantalla lo muestra; `/auth/oauth/{google,github}` responde 302 a `…/auth/v1/authorize` con `redirect_to` apuntando a `/auth/callback?next=…`; las guardas de ruta redirigen con `next` preservado.
+
+**Suite:** 108 tests en 8 archivos (`pnpm test`), `astro check` sin errores ni warnings (5 hints de `execCommand`/`print`), `astro build` en verde.
+
+**Pendiente manual (Bloque 10):** aplicar la migración `profiles` (`pnpm db:push` o SQL Editor) y registrar las *Redirect URLs* en Supabase. Hasta entonces el perfil se deriva del correo y `/settings` no persiste.
+
+### Fase 3 — Documentos y persistencia real (3–5 días) ✅ *código completo; reaplicar la migración de documentos*
+- ✅ **Esquema del Bloque 6 + RLS**, en `supabase/migrations/20261006130000_documents.sql`: seis tablas, enums, índices, triggers (`updated_at`, `bump_document_revision`, `snapshot_document_version`, `set_document_slug`) y las funciones de autorización en `private`. Ver decisiones y correcciones en 6.4.
+- ✅ **Pruebas de RLS** (31 escenarios), en `tests/db/rls.mjs` (`pnpm db:rls`) y **de integración** (9 escenarios), en `tests/integration/documents.test.ts` (`pnpm test:db`). Solo el proyecto real puede probar una política o un trigger.
+- ✅ Dashboard (crear/renombrar/eliminar/abrir), autosave con `revision` y resolución de conflictos, historial con restauración.
+- ✅ **Editores ilimitados con nombre propio** (multi-pestaña) persistidos en `documents.title`: en sesión, cada pestaña del editor es una fila.
+- ✅ Migración de borradores locales (`mdviewer:*` y las pestañas previas) desde el dashboard.
+- **Entregable:** documentos en Postgres con dueño, seguros por RLS, editables y versionados.
+
+**Implementación real:**
+
+| Módulo | Contenido |
+|---|---|
+| `src/lib/documents/repository.ts` | Capa de datos del servidor: `listDocuments`, `getDocument`, `createDocument`, `saveDocument`/`renameDocument` (con `revision`), `deleteDocument`, `listVersions`, `getVersion`, `restoreVersion`, `importDrafts`, `slugForTitle`. Siempre con el cliente del usuario; nunca con la secret key. |
+| `src/lib/documents/cloudApi.ts` | Cliente de navegador: `openCloudDocuments()` (sonda que devuelve `null` si no hay sesión) y `CloudSession` (`create`/`save`/`fetch`/`remove`), con `keepalive` en el descargue final. |
+| `src/lib/documents/access.ts`, `ids.ts` | Reglas de acceso (`owner`/`admin`/`editor`/`reader`) y validación de uuid, puras y testeables. |
+| `src/lib/documents/drafts.ts`, `importDrafts.ts` | Lectura y límites de los borradores locales + importación sin duplicados (borra las copias locales al terminar). |
+| `src/lib/documents/messages.ts`, `format.ts` | Catálogo de avisos por código y formateo determinista (UTC, tamaños, primera línea). |
+| `src/lib/api/http.ts` | Respuestas JSON `private, no-store`, lectura de cuerpo y `apiSession` (401 si no hay sesión verificada). |
+| `src/pages/api/documents/*` | `GET/POST` de la colección, `GET/PATCH/DELETE` de un documento (409 `conflict` con la revisión actual) y `POST .../import`. |
+| `src/pages/documents/*` | Formularios de acción: crear (`POST /documents` → abre el editor), renombrar, eliminar, restaurar (303 en todos; el error viaja como código, nunca como texto de la base). |
+| `src/pages/documents/[id]/history.astro` | Historial en server-side: revisión, autor, tamaño, texto y restaurar (solo si el rol puede escribir). |
+| `src/pages/dashboard.astro` | Documentos propios y compartidos, con crear, renombrar, borrar, historial e importación de borradores. |
+| `src/lib/app/editorApp.ts` | Modo nube: carga las pestañas del servidor, autosave con `revision` (debounce 1,2 s), conflicto preguntado al usuario, y descenso a modo local si no hay sesión o el proyecto no responde. |
+| `src/lib/app/previewApp.ts` | El popout resuelve por API un `?doc=<uuid>` que no esté en `localStorage`. |
+| `src/lib/supabase/{database.types,types}.ts` | Tipos de las seis tablas y de los enums, a mano hasta que se pueda ejecutar `pnpm db:types`. |
+
+**Decisiones de la capa de aplicación:**
+
+| Tema | Decisión |
+|---|---|
+| Modo nube | `GET /api/documents` responde 401 a un visitante anónimo: la sonda decide el modo. Así `/` es idéntico para todos (cacheable) y ninguna decisión de sesión vive en el HTML. |
+| Sin sesión no hay degradación silenciosa | Si el proyecto deja de responder, el editor vuelve a `localStorage` y lo **dice**; nunca finge guardar en Postgres. |
+| Conflicto | No se descarta texto nunca: se pregunta «conservar lo mío» o «cargar la versión del servidor», con la revisión nueva ya adoptada. |
+| Renombrar | Una sola petición con `revision` + título + contenido: cambiar el nombre no pierde una edición pendiente, y el `slug` no se toca. |
+| Borrar | `.delete().select('id')`: 0 filas significa «RLS lo filtró», y se distingue de «ya no existe» leyendo lo que ese mismo usuario puede ver. |
+| Errores | Códigos cortos (`stale`, `forbidden`, `not_found`, …) en la URL y en el JSON; el detalle de Postgres se queda en el log del servidor. |
+
+**Estado medido en el proyecto real (2026-10-06):** `pnpm db:rls` → **23/31**; los 8 fallos son todos el `42P17` de `documents_update_editor` (el archivo ya lleva la corrección, pendiente de reaplicar). `pnpm test:db` → **3/9** por la misma causa (crear, listar, leer y aislar pasan; guardar, conflicto, historial y restaurar no pueden pasar mientras el `UPDATE` esté bloqueado). Los dos conjuntos deben quedar en **31/31** y **9/9** tras reaplicar el archivo. Ya verificado en la ruta HTTP real: iniciar sesión, `/dashboard`, `POST /documents` (fila creada con `slug` derivado del título) y `/documents/:id/history` funcionan; el `PATCH` de autosave devuelve `500 save_failed` mientras la política rota siga aplicada.
+
+**Lo que encontró la reconciliación (esquema creado a mano a partir del DDL del Bloque 6):** faltaban las políticas, `documents.slug` no tenía trigger (todo insert fallaba con `23502`), `document_versions` no tenía `title`, `document_collaborators` no tenía `updated_at` y el índice de búsqueda estaba configurado en `spanish`. Las migraciones del repo reconcilian todo eso de forma idempotente: **pegar los dos archivos de `supabase/migrations/` en orden y ejecutar `pnpm db:rls`**.
+
+**Hallazgos de diseño que las migraciones resuelven (y que el DDL del plan no preveía):**
+
+| Tema | Decisión |
+|---|---|
+| Recursión de políticas | Helpers `SECURITY DEFINER` en `private` con el `uid` por parámetro (ver 6.4). |
+| Concurrencia | `update … eq('revision', n)` + trigger que incrementa; el escritor obsoleto actualiza 0 filas y se le ofrece recargar. |
+| Historial | Snapshot del estado reemplazado, **como máximo cada 10 minutos** y solo si cambió el texto: el autosave cada pocos segundos haría la historia inmanejable. Los últimos minutos no son recuperables uno a uno (decisión consciente). |
+| `owner_id` inmutable | `WITH CHECK` compara contra el valor almacenado: sin eso un colaborador `editor` podría reasignarse la propiedad del documento. |
+| `slug` estable | Se asigna al crear y **no cambia al renombrar**: los enlaces públicos no deben romperse. Regla espejo de `slugifyHeading` (`src/lib/markdown/slug.ts`) con sufijos `-1`, `-2`… ante colisión. |
+| Invitaciones | Segundo trigger en `auth.users` (`private.handle_new_user_invitations`) que convierte las invitaciones pendientes en colaboradores al registrarse; el trigger de perfiles sigue siendo responsabilidad de su migración. |
+| Búsqueda | Columna generada `to_tsvector('english', …)`; el idioma se corrige en la reconciliación si el esquema se creó con otro. |
 
 ### Fase 4 — Colaboración Nivel 1 (3–5 días)
 - Realtime: presencia, cambios en vivo, cursores, estado de conexión, reconexión, offline queue.
@@ -922,7 +1013,8 @@ supabase db advisors              # revisar antes de commitear
 | Unit | Vitest | `slug`, `patch`, `commands`, `findReplace`, `shortcuts`, `renderer`, `sanitize`, `permissions`. |
 | Componente | Vitest + DOM | Render de nuevos módulos sin regresión visual lógica. |
 | E2E | Playwright | Escribir → guardar → recargar → exportar → abrir preview con índice; login; compartir. |
-| DB/RLS | SQL/pgTAP (o `supabase test`) | Un usuario no puede leer/editar documentos ajenos; colaborador sin rol editor no puede escribir. |
+| DB/RLS | `tests/db/rls.mjs` (`pnpm db:rls`) | 31 escenarios contra el proyecto real con tres cuentas desechables: aislamiento entre usuarios, roles, concurrencia optimista, snapshots, invitaciones (incluido el alta posterior y el rol concedido), borrado y lectura anónima de documentos públicos. Es el único nivel que puede probar una política: la aplica Postgres, no el código. |
+| Integración | Vitest + proyecto real (`pnpm test:db`) | `tests/integration/documents.test.ts`: 9 escenarios sobre la capa de datos (`create/list/save/conflict/rename/history/restore/forbidden/delete`) con sesiones reales, sin keys de servicio en el camino de la app. |
 | Paridad | Checklist del Bloque 2.1 | Cada funcionalidad actual probada antes y después de cada fase. |
 | Performance | Lighthouse CI | LCP, size de bundle y regresiones. |
 
@@ -985,6 +1077,7 @@ supabase db advisors              # revisar antes de commitear
 **Criterios globales de "producción" (fin del roadmap):**
 
 - [ ] Un usuario crea una cuenta, escribe, cierra el navegador y recupera su documento.
+- [ ] Un usuario se registra con correo y contraseña, confirma la dirección, entra también con **GitHub/Google** y puede recuperar su contraseña desde el enlace de correo.
 - [ ] Dos usuarios editan el mismo documento y ven cambios/presencia en vivo.
 - [ ] Un documento puede compartirse por enlace con rol y caducidad y quedar público y indexable (si aplica).
 - [ ] El historial permite restaurar una versión anterior.
@@ -1012,9 +1105,9 @@ supabase db advisors              # revisar antes de commitear
 
 ## Anexo B — Checklist de arranque en 1 página
 
-**Tú (manual, Supabase):** crear proyecto → copiar URL + publishable + secret → configurar Site/Redirect URLs → activar email + OAuth → SMTP → migraciones (`supabase link`/`db push`) → Data API grants → activar Realtime → bucket `doc-images` → `db advisors` → backups/alarmas → variables en el host.
+**Tú (manual, Supabase):** crear proyecto ✅ → copiar URL + publishable + secret ✅ → activar email (**Confirm email**) + OAuth **GitHub/Google** ✅ → **pendiente:** Site/Redirect URLs, migraciones (`supabase link`/`db push`), SMTP propio, Data API grants, activar Realtime, bucket `doc-images`, `db advisors`, backups/alarmas, variables en el host.
 
-**Yo (código, por fases):** Fase 0 fundaciones → Fase 1 componentización con paridad → Fase 2 auth SSR → Fase 3 documentos + RLS → Fase 4 colaboración Nivel 1 → Fase 5 público/comentarios/export → Fase 6 hardening → Fase 7 backlog.
+**Yo (código, por fases):** Fase 0 fundaciones ✅ → Fase 1 componentización con paridad ✅ → Fase 2 auth con contraseña + verificación por correo + OAuth ✅ → Fase 3 documentos + RLS ✅ (código completo; reaplicar `20261006130000_documents.sql` por la corrección de recursión) → Fase 4 colaboración Nivel 1 → Fase 5 público/comentarios/export → Fase 6 hardening → Fase 7 backlog.
 
 **Nunca:** `service_role` en el cliente · `auth.role()` en políticas · `user_metadata` para autorización · tablas sin RLS · versiones sin fijar · secretos en el repo.
 

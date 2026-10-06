@@ -25,10 +25,42 @@ Then copy `.env.example` to `.env` and fill in `PUBLIC_SUPABASE_URL` and
 pnpm db:push        # supabase db push  → applies migrations/ to the linked project
 pnpm db:advisors    # supabase db advisors → RLS/permission warnings
 pnpm db:types       # regenerates src/lib/supabase/database.types.ts
+pnpm db:rls         # tests/db/rls.mjs → verifies the policies against the live project
 ```
 
 No CLI? Paste the contents of `migrations/*.sql` into Dashboard → SQL Editor, in
-file order, and regenerate the types locally afterwards.
+file order (a file per query, oldest timestamp first), and regenerate the types
+locally afterwards.
+
+## Rule: migrations are the only source of truth
+
+Do **not** paste the design DDL from the plan: it documents the shape of the
+schema, not the security that goes with it. Pasting it creates tables with row
+level security enabled but **no policies**, which fails closed — the owner cannot
+read even their own rows — and the application looks broken for reasons that are
+invisible in the dashboard.
+
+Every migration is written to be re-runnable and to reconcile a hand-made schema
+(`create table if not exists`, `add column if not exists`, guarded constraints),
+so applying the files on top of a database built by hand fixes it in place.
+
+## Verifying security
+
+`pnpm db:rls` creates two throwaway accounts (confirmed, never emailed), acts as
+owners, collaborators and anonymous visitors through the Data API — the same path
+a browser takes — and deletes them afterwards. It needs no database password and
+no CLI: only the three keys already in `.env`.
+
+```
+pnpm db:rls
+
+schema
+  PASS  required tables exist (6)
+accounts (signup triggers)
+  PASS  profile row created for rls-check-… -1
+…
+22/22 checks passed
+```
 
 ## Local stack (Docker)
 
