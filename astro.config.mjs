@@ -2,6 +2,9 @@
 import { defineConfig, envField } from 'astro/config';
 import cloudflare from '@astrojs/cloudflare';
 import tailwindcss from '@tailwindcss/vite';
+import icon from 'astro-icon';
+
+import { ICONIFY_ICONS } from './src/lib/ui/iconNames';
 
 // https://astro.build/config
 export default defineConfig({
@@ -14,6 +17,20 @@ export default defineConfig({
 
   // Deployment target: Cloudflare Pages/Workers.
   adapter: cloudflare(),
+
+  integrations: [
+    // Icons: Iconify collections installed as npm packages, inlined as SVG at
+    // build time (no CDN, no client JS). The `include` filter is required with
+    // `output: 'server'` — without it every icon of every installed set would be
+    // bundled into the server output. The list lives in one place:
+    // `src/lib/ui/iconNames.ts`.
+    icon({
+      include: {
+        lucide: [...ICONIFY_ICONS.lucide],
+        'simple-icons': [...ICONIFY_ICONS['simple-icons']],
+      },
+    }),
+  ],
 
   // Tailwind CSS v4 is compiled at build time (the CDN is intentionally not used).
   vite: {

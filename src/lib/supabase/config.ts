@@ -23,6 +23,9 @@ const PLACEHOLDERS = [
   'TU_CLAVE',
   'TU_PROJECT_REF',
   'xxx',
+  // The template ships `https://x.x.x.supabase.co` / `x.x.x`: copying it should
+  // show the "Supabase is not configured" notice, not fail with a network error.
+  'x.x.x',
 ];
 
 function isUsableValue(value: string): boolean {

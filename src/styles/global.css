@@ -438,6 +438,20 @@ button.mi.danger:hover svg {
   border-color: #3b82f6;
 }
 
+/* --------------------------- Password fields ------------------------- */
+/* One icon per state: the reveal button swaps them without rebuilding the DOM. */
+[data-password-toggle] .pw-hide {
+  display: none;
+}
+
+[data-password-toggle][data-visible='true'] .pw-show {
+  display: none;
+}
+
+[data-password-toggle][data-visible='true'] .pw-hide {
+  display: inline;
+}
+
 /* ---------------------------- Scrollbars ---------------------------- */
 ::-webkit-scrollbar {
   width: 10px;
