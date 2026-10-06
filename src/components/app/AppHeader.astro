@@ -9,21 +9,18 @@ import ViewMenu from './ViewMenu.astro';
 
 <header class="flex items-center justify-between h-12 px-3 border-b border-neutral-800 shrink-0 gap-2 sm:gap-3">
   <div class="flex items-center gap-2 sm:gap-3 min-w-0">
-    <div class="max-sm:hidden flex items-center gap-2.5 shrink-0">
-      <div class="w-5 h-5 rounded-[5px] bg-white flex items-center justify-center shrink-0">
-        <span class="text-black text-[11px] font-bold leading-none">M</span>
-      </div>
-      <span class="hidden lg:inline text-sm font-medium text-neutral-100">Markdown Viewer</span>
+    <div class="max-sm:hidden flex items-center shrink-0">
+      <img src="/logo-calligraphy.svg" alt="OpenMarkdown logo" class="h-6 w-auto" width="136" height="33" />
     </div>
     <span class="sep max-sm:hidden"></span>
     <DocumentTabs />
     <div class="seg m-tabs" role="group" aria-label="Visible panel">
       <button type="button" class="hb" data-command="panel-code" title="Code">
-        <Icon name="code-xml" />
+        <Icon name="lucide:code-xml" />
         <span class="hidden sm:inline">Code</span>
       </button>
       <button type="button" class="hb" data-command="panel-preview" title="Preview">
-        <Icon name="eye" />
+        <Icon name="lucide:eye" />
         <span class="hidden sm:inline">Preview</span>
       </button>
     </div>
@@ -37,7 +34,7 @@ import ViewMenu from './ViewMenu.astro';
       title="Open the preview in another tab (with index)"
       aria-label="Open preview in another tab"
     >
-      <Icon name="external-link" />
+      <Icon name="lucide:external-link" />
       <span class="hidden lg:inline">Preview</span>
     </button>
     <ExportMenu />
