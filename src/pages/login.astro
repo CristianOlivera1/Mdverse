@@ -1,0 +1,133 @@
+---
+import Icon from '@/components/ui/Icon.astro';
+import Layout from '@/layouts/Layout.astro';
+import { authNotice } from '@/lib/auth/messages';
+import { safeRedirectPath } from '@/lib/auth/redirect';
+import { DEFAULT_AUTHENTICATED_PATH } from '@/lib/auth/routes';
+import { SUPABASE_SETUP_HINT, isSupabaseConfigured } from '@/lib/supabase/env';
+
+const params = Astro.url.searchParams;
+const next = safeRedirectPath(params.get('next'), DEFAULT_AUTHENTICATED_PATH);
+const notice = authNotice({ error: params.get('error'), sent: params.get('sent') });
+const email = params.get('email') ?? '';
+const configured = isSupabaseConfigured();
+
+const NOTICE_TONES = {
+  error: 'border-red-500/40 bg-red-500/10 text-red-200',
+  success: 'border-emerald-500/40 bg-emerald-500/10 text-emerald-200',
+  info: 'border-sky-500/40 bg-sky-500/10 text-sky-200',
+} as const;
+
+const OAUTH_PROVIDERS = [
+  { id: 'github', label: 'Continue with GitHub' },
+  { id: 'google', label: 'Continue with Google' },
+] as const;
+
+const oauthHref = (id: string) => `/auth/oauth/${id}?next=${encodeURIComponent(next)}`;
+---
+
+<Layout title="Sign in · OpenMarkdown" bodyClass="min-h-screen bg-black text-neutral-200 font-sans">
+  <Fragment slot="head">
+    <meta name="robots" content="noindex" />
+  </Fragment>
+
+  <main class="min-h-screen flex items-center justify-center px-4 py-10">
+    <div class="w-full max-w-sm">
+      <div class="flex items-center gap-2.5">
+        <span class="w-6 h-6 rounded-md bg-white flex items-center justify-center">
+          <span class="text-black text-xs font-bold leading-none">M</span>
+        </span>
+        <span class="text-sm font-medium text-neutral-100">OpenMarkdown</span>
+      </div>
+
+      <h1 class="mt-8 text-xl font-semibold text-neutral-50">Sign in to sync your documents</h1>
+      <p class="mt-2 text-sm text-neutral-400">
+        Your drafts live in this browser until you sign in. Afterwards they follow you across
+        devices.
+      </p>
+
+      {notice && (
+        <p
+          class:list={[
+            'mt-6 rounded-lg border px-3 py-2 text-xs leading-relaxed',
+            NOTICE_TONES[notice.tone],
+          ]}
+          role={notice.tone === 'error' ? 'alert' : 'status'}
+        >
+          {notice.message}
+        </p>
+      )}
+
+      {!configured && (
+        <p class="mt-6 rounded-lg border border-amber-500/40 bg-amber-500/10 px-3 py-2 text-xs leading-relaxed text-amber-200">
+          <Icon name="triangle-alert" size={14} class="inline -mt-0.5 mr-1" />
+          {SUPABASE_SETUP_HINT}
+        </p>
+      )}
+
+      <form method="POST" action="/auth/signin" class="mt-6 space-y-3">
+        <input type="hidden" name="next" value={next} />
+        <div>
+          <label for="email" class="block text-xs font-medium text-neutral-400">
+            Email
+          </label>
+          <div class="relative mt-1.5">
+            <Icon
+              name="mail"
+              size={15}
+              class="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-neutral-500"
+            />
+            <input
+              id="email"
+              name="email"
+              type="email"
+              required
+              autocomplete="email"
+              inputmode="email"
+              placeholder="you@example.com"
+              value={email}
+              class="w-full rounded-lg border border-neutral-800 bg-neutral-950 pl-9 pr-3 py-2 text-sm text-neutral-100 placeholder:text-neutral-600 focus:border-neutral-600 focus:outline-none disabled:opacity-50"
+            />
+          </div>
+        </div>
+
+        <button
+          type="submit"
+          disabled={!configured}
+          class="w-full rounded-lg bg-white px-3 py-2 text-sm font-medium text-black hover:bg-neutral-200 disabled:opacity-50 disabled:hover:bg-white"
+        >
+          Email me a sign-in link
+        </button>
+        <p class="text-[11px] leading-relaxed text-neutral-500">
+          No password needed — we email a one-time link that signs you in.
+        </p>
+      </form>
+
+      <div class="mt-6 flex items-center gap-3">
+        <span class="h-px flex-1 bg-neutral-800"></span>
+        <span class="text-[11px] uppercase tracking-wide text-neutral-600">or</span>
+        <span class="h-px flex-1 bg-neutral-800"></span>
+      </div>
+
+      <div class="mt-4 grid gap-2">
+        {OAUTH_PROVIDERS.map((provider) => (
+          <a
+            href={oauthHref(provider.id)}
+            class="flex items-center justify-center gap-2 rounded-lg border border-neutral-800 px-3 py-2 text-sm text-neutral-200 hover:border-neutral-700 hover:bg-neutral-900"
+          >
+            <Icon name="log-in" size={15} />
+            {provider.label}
+          </a>
+        ))}
+      </div>
+
+      <p class="mt-8 text-center text-xs text-neutral-500">
+        <a href="/" class="text-neutral-300 hover:text-white">
+          Continue without an account
+        </a>
+        <span class="mx-1.5 text-neutral-700">·</span>
+        <span>Your drafts stay in this browser.</span>
+      </p>
+    </div>
+  </main>
+</Layout>

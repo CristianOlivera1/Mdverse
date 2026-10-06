@@ -1,0 +1,116 @@
+---
+import ArrowUpDown from '@lucide/astro/icons/arrow-up-down';
+import Bold from '@lucide/astro/icons/bold';
+import Braces from '@lucide/astro/icons/braces';
+import CaseSensitive from '@lucide/astro/icons/case-sensitive';
+import Check from '@lucide/astro/icons/check';
+import ChevronDown from '@lucide/astro/icons/chevron-down';
+import ChevronUp from '@lucide/astro/icons/chevron-up';
+import CircleCheck from '@lucide/astro/icons/circle-check';
+import Code from '@lucide/astro/icons/code';
+import CodeXml from '@lucide/astro/icons/code-xml';
+import Copy from '@lucide/astro/icons/copy';
+import Download from '@lucide/astro/icons/download';
+import Eraser from '@lucide/astro/icons/eraser';
+import ExternalLink from '@lucide/astro/icons/external-link';
+import Eye from '@lucide/astro/icons/eye';
+import FileCode from '@lucide/astro/icons/file-code';
+import FileText from '@lucide/astro/icons/file-text';
+import Heading from '@lucide/astro/icons/heading';
+import Italic from '@lucide/astro/icons/italic';
+import KeyRound from '@lucide/astro/icons/key-round';
+import LayoutDashboard from '@lucide/astro/icons/layout-dashboard';
+import Link from '@lucide/astro/icons/link';
+import List from '@lucide/astro/icons/list';
+import ListChecks from '@lucide/astro/icons/list-checks';
+import ListOrdered from '@lucide/astro/icons/list-ordered';
+import ListTree from '@lucide/astro/icons/list-tree';
+import LogIn from '@lucide/astro/icons/log-in';
+import LogOut from '@lucide/astro/icons/log-out';
+import Mail from '@lucide/astro/icons/mail';
+import Minus from '@lucide/astro/icons/minus';
+import PanelLeftClose from '@lucide/astro/icons/panel-left-close';
+import Plus from '@lucide/astro/icons/plus';
+import Printer from '@lucide/astro/icons/printer';
+import Quote from '@lucide/astro/icons/quote';
+import Redo2 from '@lucide/astro/icons/redo-2';
+import Search from '@lucide/astro/icons/search';
+import Settings from '@lucide/astro/icons/settings';
+import ShieldCheck from '@lucide/astro/icons/shield-check';
+import SlidersHorizontal from '@lucide/astro/icons/sliders-horizontal';
+import Strikethrough from '@lucide/astro/icons/strikethrough';
+import Table from '@lucide/astro/icons/table';
+import Trash from '@lucide/astro/icons/trash';
+import TriangleAlert from '@lucide/astro/icons/triangle-alert';
+import Type from '@lucide/astro/icons/type';
+import Undo2 from '@lucide/astro/icons/undo-2';
+import User from '@lucide/astro/icons/user';
+import Workflow from '@lucide/astro/icons/workflow';
+import X from '@lucide/astro/icons/x';
+import ZoomIn from '@lucide/astro/icons/zoom-in';
+
+import type { IconName } from '../../lib/ui/iconNames';
+
+const ICONS = {
+  'arrow-up-down': ArrowUpDown,
+  bold: Bold,
+  braces: Braces,
+  'case-sensitive': CaseSensitive,
+  check: Check,
+  'chevron-down': ChevronDown,
+  'chevron-up': ChevronUp,
+  'circle-check': CircleCheck,
+  code: Code,
+  'code-xml': CodeXml,
+  copy: Copy,
+  download: Download,
+  eraser: Eraser,
+  'external-link': ExternalLink,
+  eye: Eye,
+  'file-code': FileCode,
+  'file-text': FileText,
+  heading: Heading,
+  italic: Italic,
+  'key-round': KeyRound,
+  'layout-dashboard': LayoutDashboard,
+  link: Link,
+  list: List,
+  'list-checks': ListChecks,
+  'list-ordered': ListOrdered,
+  'list-tree': ListTree,
+  'log-in': LogIn,
+  'log-out': LogOut,
+  mail: Mail,
+  minus: Minus,
+  'panel-left-close': PanelLeftClose,
+  plus: Plus,
+  printer: Printer,
+  quote: Quote,
+  'redo-2': Redo2,
+  search: Search,
+  settings: Settings,
+  'shield-check': ShieldCheck,
+  'sliders-horizontal': SlidersHorizontal,
+  strikethrough: Strikethrough,
+  table: Table,
+  trash: Trash,
+  'triangle-alert': TriangleAlert,
+  type: Type,
+  'undo-2': Undo2,
+  user: User,
+  workflow: Workflow,
+  x: X,
+  'zoom-in': ZoomIn,
+} satisfies Record<IconName, unknown>;
+
+interface Props {
+  name: IconName;
+  size?: number;
+  class?: string;
+}
+
+const { name, size = 16, class: className } = Astro.props;
+const Component = ICONS[name];
+---
+
+<Component size={size} class={className} />

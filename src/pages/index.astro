@@ -1,0 +1,28 @@
+---
+import AppHeader from '../components/app/AppHeader.astro';
+import EditorPane from '../components/app/EditorPane.astro';
+import StatusBar from '../components/app/StatusBar.astro';
+import Layout from '../layouts/Layout.astro';
+---
+
+<Layout
+  title="Mdverse"
+  bodyClass="h-screen w-screen bg-black text-neutral-200 font-sans overflow-hidden"
+  dataPanel="code"
+>
+  <div id="app" class="h-full flex flex-col">
+    <AppHeader />
+    <main id="editor-panes" class="flex flex-col flex-1 min-h-0"></main>
+    <StatusBar />
+  </div>
+
+  <template id="editor-pane-template">
+    <EditorPane />
+  </template>
+</Layout>
+
+<script>
+  import { initEditorApp } from '../lib/app/editorApp';
+
+  initEditorApp();
+</script>

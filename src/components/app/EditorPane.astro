@@ -1,0 +1,27 @@
+---
+import FindReplaceBar from './FindReplaceBar.astro';
+import FormatToolbar from './FormatToolbar.astro';
+---
+
+<section data-pane class="editor flex flex-1 min-h-0">
+  <div class="code-pane relative min-w-0 min-h-0">
+    <textarea
+      data-r="textarea"
+      spellcheck="false"
+      placeholder="# Type or paste your Markdown here…"
+      class="ed-ta w-full h-full resize-none bg-black text-neutral-200 font-mono leading-relaxed p-4 pb-16 outline-none placeholder-neutral-700"
+    ></textarea>
+    <FindReplaceBar />
+    <FormatToolbar />
+  </div>
+  <div
+    data-r="splitter"
+    class="rz hidden md:block w-1 shrink-0 bg-neutral-900 hover:bg-blue-500/60 active:bg-blue-500 transition-colors cursor-col-resize touch-none"
+    role="separator"
+    aria-orientation="vertical"
+  ></div>
+  <div
+    data-r="preview"
+    class="pv-pane min-w-0 min-h-0 overflow-y-auto p-5 sm:p-6 prose prose-invert prose-sm max-w-none bg-[#030303]"
+  ></div>
+</section>

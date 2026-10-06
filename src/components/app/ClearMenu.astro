@@ -1,0 +1,27 @@
+---
+import Icon from '../ui/Icon.astro';
+---
+
+<div>
+  <button
+    type="button"
+    class="hb danger"
+    data-menu="clear"
+    aria-haspopup="true"
+    aria-expanded="false"
+    title="Clear"
+    aria-label="Clear"
+  >
+    <Icon name="trash" />
+  </button>
+  <div class="pop" data-pop="clear" hidden>
+    <button type="button" class="mi danger" data-command="clear-active">
+      <Icon name="eraser" />
+      Clear active document
+    </button>
+    <button type="button" class="mi danger" data-command="clear-all">
+      <Icon name="trash" />
+      Clear all documents
+    </button>
+  </div>
+</div>

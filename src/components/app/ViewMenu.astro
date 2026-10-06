@@ -1,0 +1,69 @@
+---
+import Icon from '../ui/Icon.astro';
+---
+
+<div>
+  <button
+    type="button"
+    class="hb"
+    data-menu="view"
+    aria-haspopup="true"
+    aria-expanded="false"
+    title="View settings"
+  >
+    <Icon name="sliders-horizontal" />
+  </button>
+  <div class="pop" data-pop="view" hidden>
+    <button
+      type="button"
+      class="mi"
+      data-command="toggle-sync"
+      data-keep
+      title="Sync scroll between code and preview"
+    >
+      <Icon name="arrow-up-down" />
+      Synced scroll<span class="sw"></span>
+    </button>
+    <div class="mi">
+      <Icon name="zoom-in" />
+      Text size
+      <span class="ml-auto flex items-center gap-0.5">
+        <button
+          type="button"
+          class="hb"
+          data-command="zoom-out"
+          data-keep
+          title="Decrease font size"
+          aria-label="Decrease font size"
+        >
+          <Icon name="minus" />
+        </button>
+        <button
+          type="button"
+          class="hb tabular-nums min-w-[46px]"
+          data-command="zoom-reset"
+          data-keep
+          id="zoom-value"
+          title="Reset zoom"
+        >
+          100%
+        </button>
+        <button
+          type="button"
+          class="hb"
+          data-command="zoom-in"
+          data-keep
+          title="Increase font size"
+          aria-label="Increase font size"
+        >
+          <Icon name="plus" />
+        </button>
+      </span>
+    </div>
+    <div class="pop-sep sm:hidden"></div>
+    <button type="button" class="mi sm:hidden" data-command="popout">
+      <Icon name="external-link" />
+      Open preview in a tab
+    </button>
+  </div>
+</div>

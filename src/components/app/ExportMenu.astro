@@ -1,0 +1,37 @@
+---
+import Icon from '../ui/Icon.astro';
+---
+
+<div>
+  <button
+    type="button"
+    class="hb"
+    data-menu="export"
+    aria-haspopup="true"
+    aria-expanded="false"
+    title="Copy and export"
+  >
+    <Icon name="download" />
+    <span class="hidden lg:inline">Export</span>
+    <Icon name="chevron-down" size={12} class="opacity-60" />
+  </button>
+  <div class="pop" data-pop="export" hidden>
+    <button type="button" class="mi" data-command="copy">
+      <Icon name="copy" />
+      Copy Markdown
+    </button>
+    <button type="button" class="mi" data-command="download">
+      <Icon name="file-text" />
+      Download .md
+    </button>
+    <div class="pop-sep"></div>
+    <button type="button" class="mi" data-command="export-html">
+      <Icon name="file-code" />
+      Export to HTML
+    </button>
+    <button type="button" class="mi" data-command="export-pdf">
+      <Icon name="printer" />
+      Export to PDF
+    </button>
+  </div>
+</div>

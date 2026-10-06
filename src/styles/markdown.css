@@ -1,0 +1,81 @@
+/* Rendered Markdown (`prose`) and diagram styles, ported from the static viewer. */
+.prose :where(code):not(pre code) {
+  background: #1a1a1a;
+  padding: 0.15em 0.4em;
+  border-radius: 4px;
+  font-weight: 400;
+}
+
+.prose :where(code):not(pre code)::before,
+.prose :where(code):not(pre code)::after {
+  content: none;
+}
+
+.prose pre {
+  background: #0a0a0a !important;
+  border: 1px solid #1f1f1f;
+}
+
+.prose a {
+  color: #3b9eff;
+  text-decoration: none;
+}
+
+.prose a:hover {
+  text-decoration: underline;
+}
+
+.prose blockquote {
+  border-left-color: #333;
+  color: #a3a3a3;
+  font-style: normal;
+}
+
+.prose hr {
+  border-color: #1f1f1f;
+}
+
+.prose ::marker {
+  color: #666;
+}
+
+.prose th,
+.prose td {
+  padding: 0.55em 0.8em;
+}
+
+.prose thead th {
+  color: #ededed;
+}
+
+.prose :is(h1, h2, h3, h4, h5, h6) {
+  scroll-margin-top: 1rem;
+}
+
+.mermaid-box {
+  margin: 1.25em 0;
+  padding: 16px;
+  border: 1px solid #1f1f1f;
+  border-radius: 10px;
+  background: #050505;
+  overflow-x: auto;
+  text-align: center;
+}
+
+.mermaid-box svg {
+  display: inline-block;
+  height: auto;
+}
+
+.mermaid-err {
+  text-align: left;
+  color: #f87171;
+  font-size: 12px;
+}
+
+.mermaid-err pre {
+  margin: 8px 0 0;
+  white-space: pre-wrap;
+  color: #a3a3a3;
+  font-size: 11px;
+}

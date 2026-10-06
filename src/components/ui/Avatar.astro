@@ -1,0 +1,46 @@
+---
+import { avatarToneIndex, initials } from '@/lib/auth/profile';
+
+interface Props {
+  /** Display name (or email) to derive the initials from. */
+  name?: string | null;
+  /** Stable color seed — normally the user id, so colors never shuffle. */
+  seed?: string | null;
+  size?: 'sm' | 'md' | 'lg';
+  class?: string;
+}
+
+const { name, seed, size = 'md', class: className = '' } = Astro.props;
+
+/** No profile pictures in this product: initials on a deterministic color. */
+const TONES = [
+  'bg-sky-500/15 text-sky-300 ring-sky-500/30',
+  'bg-emerald-500/15 text-emerald-300 ring-emerald-500/30',
+  'bg-amber-500/15 text-amber-300 ring-amber-500/30',
+  'bg-violet-500/15 text-violet-300 ring-violet-500/30',
+  'bg-rose-500/15 text-rose-300 ring-rose-500/30',
+  'bg-cyan-500/15 text-cyan-300 ring-cyan-500/30',
+];
+
+const SIZES = {
+  sm: 'h-6 w-6 text-[10px]',
+  md: 'h-8 w-8 text-xs',
+  lg: 'h-14 w-14 text-lg',
+} as const;
+
+const label = (name ?? '').trim();
+const tone = TONES[avatarToneIndex(seed ?? label, TONES.length)];
+---
+
+<span
+  class:list={[
+    'inline-flex items-center justify-center rounded-full ring-1 font-semibold shrink-0 select-none',
+    SIZES[size],
+    tone,
+    className,
+  ]}
+  title={label || undefined}
+  aria-hidden="true"
+>
+  {initials(label)}
+</span>

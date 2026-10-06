@@ -1,0 +1,29 @@
+---
+import Icon from '../ui/Icon.astro';
+---
+
+<div class="fr" data-r="findbar" hidden>
+  <input data-r="find-input" placeholder="Find" aria-label="Find" />
+  <input data-r="replace-input" placeholder="Replace with" aria-label="Replace with" />
+  <button
+    type="button"
+    class="hb"
+    data-command="toggle-case"
+    title="Match case"
+    aria-label="Match case"
+  >
+    <Icon name="case-sensitive" />
+  </button>
+  <span data-r="find-count" class="text-neutral-500"></span>
+  <button
+    type="button"
+    class="hb !bg-blue-600 !text-white"
+    data-command="replace-all"
+    title="Replace all (Enter)"
+  >
+    Replace all
+  </button>
+  <button type="button" class="hb" data-command="find-close" title="Close (Esc)" aria-label="Close">
+    <Icon name="x" />
+  </button>
+</div>

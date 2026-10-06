@@ -1,0 +1,46 @@
+---
+import TocPanel from '../components/app/TocPanel.astro';
+import Icon from '../components/ui/Icon.astro';
+import Layout from '../layouts/Layout.astro';
+---
+
+<Layout title="Preview · Mdverse" bodyClass="h-full bg-black text-neutral-200">
+  <div id="preview-root" class="flex h-full" data-toc="open">
+    <TocPanel />
+    <div id="preview-scroll" class="flex-1 min-w-0 h-full overflow-y-auto relative">
+      <button type="button" class="hb" id="toc-open" title="Show index">
+        <Icon name="list-tree" />
+        Index
+      </button>
+      <div class="fixed top-3 right-4 z-10 flex items-center gap-2 text-[11px] text-neutral-500 bg-black/80 border border-neutral-800 rounded-full px-3 py-1">
+        <span class="w-1.5 h-1.5 rounded-full bg-emerald-500"></span>
+        <span id="preview-status">Loading…</span>
+      </div>
+      <article
+        id="preview-content"
+        class="prose prose-invert max-w-3xl mx-auto px-6 py-14"
+        style="font-size:calc(1rem*var(--z))"
+      ></article>
+    </div>
+    <button
+      type="button"
+      id="toc-fab"
+      class="lg:hidden fixed bottom-4 right-4 z-20 hb !h-10 !px-4 bg-neutral-900 border border-neutral-700 !text-neutral-100 shadow-xl rounded-full"
+    >
+      <Icon name="list-tree" />
+      Index
+    </button>
+    <div
+      id="toc-float"
+      class="hidden fixed bottom-16 right-4 z-20 w-[min(20rem,calc(100vw-2rem))] rounded-xl border border-neutral-700 bg-neutral-950 shadow-2xl"
+    >
+      <nav class="toc max-h-[60vh] overflow-y-auto py-2"></nav>
+    </div>
+  </div>
+</Layout>
+
+<script>
+  import { initPreviewApp } from '../lib/app/previewApp';
+
+  initPreviewApp();
+</script>

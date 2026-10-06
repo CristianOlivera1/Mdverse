@@ -1,0 +1,1794 @@
+<!doctype html>
+<html lang="es">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Visor de Markdown</title>
+
+    <script src="https://cdn.tailwindcss.com?plugins=typography"></script>
+    <script>
+      tailwind.config = {
+        theme: {
+          extend: {
+            fontFamily: {
+              sans: ['Inter', 'ui-sans-serif', 'system-ui', 'sans-serif'],
+              mono: ['"JetBrains Mono"', 'ui-monospace', 'SFMono-Regular', 'monospace'],
+            },
+          },
+        },
+      };
+    </script>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap"
+      rel="stylesheet"
+    />
+    <script src="https://cdn.jsdelivr.net/npm/marked@12.0.2/marked.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/dompurify@3.1.6/dist/purify.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js"></script>
+    <script src="https://code.iconify.design/iconify-icon/2.1.0/iconify-icon.min.js"></script>
+
+    <style>
+      :root {
+        --split: 50%;
+        --z: 1;
+      }
+      html,
+      body {
+        height: 100%;
+      }
+      body {
+        -webkit-font-smoothing: antialiased;
+      }
+      textarea {
+        caret-color: #ededed;
+      }
+      .ed-ta {
+        font-size: calc(13px * var(--z));
+      }
+      .pv-pane.prose-sm {
+        font-size: calc(0.875rem * var(--z));
+      }
+
+      /* Iconos (Iconify) */
+      iconify-icon {
+        display: inline-block;
+        width: 1em;
+        height: 1em;
+        flex-shrink: 0;
+      }
+
+      /* Botones del header */
+      .hb {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        gap: 6px;
+        min-width: 30px;
+        height: 30px;
+        padding: 0 8px;
+        border-radius: 8px;
+        font-size: 12.5px;
+        color: #9a9a9a;
+        white-space: nowrap;
+        transition:
+          color 0.15s,
+          background 0.15s;
+        flex-shrink: 0;
+      }
+      .hb iconify-icon {
+        font-size: 16px;
+      }
+      .hb .chev {
+        font-size: 12px;
+        margin-left: -2px;
+        opacity: 0.6;
+      }
+      .hb:hover {
+        color: #fff;
+        background: #171717;
+      }
+      .hb.on {
+        color: #fff;
+        background: #262626;
+      }
+      .hb:focus-visible,
+      .mi:focus-visible,
+      .ft:focus-visible,
+      .fm-btn:focus-visible {
+        outline: 1px solid #3b82f6;
+        outline-offset: -1px;
+      }
+      .seg {
+        display: flex;
+        gap: 2px;
+        padding: 2px;
+        border: 1px solid #1f1f1f;
+        border-radius: 10px;
+        flex-shrink: 0;
+      }
+      .seg .hb {
+        height: 26px;
+        min-width: 28px;
+        border-radius: 7px;
+      }
+      .seg[hidden] {
+        display: none;
+      }
+      .sep {
+        width: 1px;
+        height: 18px;
+        background: #1f1f1f;
+        margin: 0 4px;
+        flex-shrink: 0;
+      }
+      .no-sb {
+        scrollbar-width: none;
+      }
+      .no-sb::-webkit-scrollbar {
+        display: none;
+      }
+      .hb.danger:hover {
+        color: #f87171;
+      }
+
+      /* Popovers y menús (header + formato del editor) */
+      .pop {
+        position: fixed;
+        z-index: 50;
+        min-width: 240px;
+        max-width: calc(100vw - 16px);
+        padding: 6px;
+        background: #0b0b0b;
+        border: 1px solid #2a2a2a;
+        border-radius: 12px;
+        box-shadow: 0 18px 50px #000c;
+      }
+      .pop[hidden] {
+        display: none;
+      }
+      .pop:not([hidden]) {
+        animation: pop-in 0.12s ease-out;
+      }
+      @keyframes pop-in {
+        from {
+          opacity: 0;
+          transform: translateY(-4px);
+        }
+      }
+      @media (prefers-reduced-motion: reduce) {
+        .pop:not([hidden]) {
+          animation: none;
+        }
+      }
+      .pop-label {
+        padding: 6px 8px 4px;
+        font-size: 11px;
+        font-weight: 500;
+        color: #6b6b6b;
+      }
+      .pop-sep {
+        height: 1px;
+        margin: 6px 4px;
+        background: #1c1c1c;
+      }
+      .mi {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        width: 100%;
+        min-height: 34px;
+        padding: 6px 10px;
+        border-radius: 8px;
+        font-size: 13px;
+        color: #c9c9c9;
+        text-align: left;
+        transition:
+          background 0.12s,
+          color 0.12s;
+      }
+      .mi iconify-icon {
+        font-size: 16px;
+        color: #777;
+      }
+      button.mi:hover {
+        background: #171717;
+        color: #fff;
+      }
+      button.mi:hover iconify-icon {
+        color: #bbb;
+      }
+      button.mi.danger:hover,
+      button.mi.danger:hover iconify-icon {
+        color: #f87171;
+      }
+      .sw {
+        position: relative;
+        width: 28px;
+        height: 16px;
+        margin-left: auto;
+        border-radius: 999px;
+        background: #2a2a2a;
+        transition: background 0.15s;
+        flex-shrink: 0;
+      }
+      .sw::after {
+        content: '';
+        position: absolute;
+        top: 2px;
+        left: 2px;
+        width: 12px;
+        height: 12px;
+        border-radius: 50%;
+        background: #8a8a8a;
+        transition:
+          left 0.15s,
+          background 0.15s;
+      }
+      .mi.on .sw {
+        background: #2563eb;
+      }
+      .mi.on .sw::after {
+        left: 14px;
+        background: #fff;
+      }
+
+      /* Formato Markdown (popup dentro del editor) */
+      .fm {
+        position: absolute;
+        right: 16px;
+        bottom: 12px;
+        z-index: 10;
+      }
+      .fm-btn {
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        height: 30px;
+        padding: 0 10px 0 9px;
+        border-radius: 999px;
+        font-size: 12px;
+        color: #a3a3a3;
+        background: #0a0a0af0;
+        border: 1px solid #262626;
+        box-shadow: 0 4px 14px #0008;
+        transition:
+          color 0.15s,
+          border-color 0.15s,
+          background 0.15s;
+      }
+      .fm-btn iconify-icon {
+        font-size: 15px;
+      }
+      .fm-btn:hover,
+      .fm-btn.on {
+        color: #fff;
+        border-color: #3a3a3a;
+        background: #141414;
+      }
+      .fm-pop {
+        width: 312px;
+      }
+      .fgrid {
+        display: grid;
+        grid-template-columns: repeat(5, 1fr);
+        gap: 2px;
+      }
+      .ft {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        gap: 5px;
+        height: 54px;
+        border-radius: 8px;
+        font-size: 11px;
+        color: #a8a8a8;
+        transition:
+          background 0.12s,
+          color 0.12s;
+      }
+      .ft iconify-icon {
+        font-size: 18px;
+      }
+      .ft:hover {
+        background: #1a1a1a;
+        color: #fff;
+      }
+
+      /* Editores */
+      @media (min-width: 768px) {
+        .code-pane {
+          flex: 0 0 var(--split);
+        }
+        .pv-pane {
+          flex: 1 1 0%;
+        }
+        .m-tabs {
+          display: none !important;
+        }
+      }
+      @media (max-width: 767px) {
+        .code-pane,
+        .pv-pane {
+          flex: 1 1 0%;
+        }
+        .rz {
+          display: none;
+        }
+        body[data-m='code'] .pv-pane,
+        body[data-m='preview'] .code-pane {
+          display: none;
+        }
+      }
+
+      /* Buscar / reemplazar */
+      .fr {
+        position: absolute;
+        top: 8px;
+        right: 14px;
+        z-index: 10;
+        display: flex;
+        flex-wrap: wrap;
+        align-items: center;
+        gap: 6px;
+        max-width: calc(100% - 20px);
+        background: #0f0f0f;
+        border: 1px solid #333;
+        border-radius: 10px;
+        padding: 6px;
+        box-shadow: 0 10px 30px #000a;
+        font-size: 12px;
+      }
+      .fr[hidden] {
+        display: none;
+      }
+      .fr input {
+        width: 130px;
+        background: #000;
+        border: 1px solid #262626;
+        border-radius: 6px;
+        padding: 4px 8px;
+        color: #ededed;
+        outline: none;
+        font-size: 12px;
+      }
+      .fr input:focus {
+        border-color: #3b82f6;
+      }
+
+      ::-webkit-scrollbar {
+        width: 10px;
+        height: 10px;
+      }
+      ::-webkit-scrollbar-track {
+        background: transparent;
+      }
+      ::-webkit-scrollbar-thumb {
+        background: #262626;
+        border-radius: 8px;
+        border: 2px solid #000;
+      }
+      ::-webkit-scrollbar-thumb:hover {
+        background: #333;
+      }
+
+      /* Markdown renderizado */
+      .prose :where(code):not(pre code) {
+        background: #1a1a1a;
+        padding: 0.15em 0.4em;
+        border-radius: 4px;
+        font-weight: 400;
+      }
+      .prose :where(code):not(pre code)::before,
+      .prose :where(code):not(pre code)::after {
+        content: none;
+      }
+      .prose pre {
+        background: #0a0a0a !important;
+        border: 1px solid #1f1f1f;
+      }
+      .prose a {
+        color: #3b9eff;
+        text-decoration: none;
+      }
+      .prose a:hover {
+        text-decoration: underline;
+      }
+      .prose blockquote {
+        border-left-color: #333;
+        color: #a3a3a3;
+        font-style: normal;
+      }
+      .prose hr {
+        border-color: #1f1f1f;
+      }
+      .prose ::marker {
+        color: #666;
+      }
+      .prose th,
+      .prose td {
+        padding: 0.55em 0.8em;
+      }
+      .prose thead th {
+        color: #ededed;
+      }
+      .prose :is(h1, h2, h3, h4, h5, h6) {
+        scroll-margin-top: 1rem;
+      }
+      .mermaid-box {
+        margin: 1.25em 0;
+        padding: 16px;
+        border: 1px solid #1f1f1f;
+        border-radius: 10px;
+        background: #050505;
+        overflow-x: auto;
+        text-align: center;
+      }
+      .mermaid-box svg {
+        display: inline-block;
+        height: auto;
+      }
+      .mermaid-err {
+        text-align: left;
+        color: #f87171;
+        font-size: 12px;
+      }
+      .mermaid-err pre {
+        margin: 8px 0 0;
+        white-space: pre-wrap;
+        color: #a3a3a3;
+        font-size: 11px;
+      }
+
+      /* Índice (pestaña de vista previa) */
+      .toc a {
+        display: block;
+        padding: 4px 12px;
+        font-size: 13px;
+        color: #8a8a8a;
+        border-left: 2px solid transparent;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+        text-decoration: none;
+      }
+      .toc a:hover {
+        color: #fff;
+      }
+      .toc a.on {
+        color: #fff;
+        border-left-color: #3b82f6;
+        background: #0f0f0f;
+      }
+      #toc-open {
+        display: none;
+        position: fixed;
+        top: 12px;
+        left: 12px;
+        z-index: 10;
+        background: #0a0a0a;
+        border: 1px solid #262626;
+      }
+      @media (min-width: 1024px) {
+        #pv[data-toc='closed'] #toc-side {
+          display: none;
+        }
+        #pv[data-toc='closed'] #toc-open {
+          display: inline-flex;
+        }
+      }
+    </style>
+  </head>
+
+  <body data-m="code" class="h-screen w-screen bg-black text-neutral-200 font-sans overflow-hidden">
+    <!-- ===== MODO EDITOR ===== -->
+    <div id="app" class="h-full flex flex-col">
+      <header
+        class="flex items-center justify-between h-12 px-3 border-b border-neutral-800 shrink-0 gap-2 sm:gap-3"
+      >
+        <div class="flex items-center gap-2 sm:gap-3 min-w-0">
+          <div class="max-sm:hidden flex items-center gap-2.5 shrink-0">
+            <div class="w-5 h-5 rounded-[5px] bg-white flex items-center justify-center shrink-0">
+              <span class="text-black text-[11px] font-bold leading-none">M</span>
+            </div>
+            <span class="hidden lg:inline text-sm font-medium text-neutral-100"
+              >Visor de Markdown</span
+            >
+          </div>
+          <span class="sep max-sm:hidden"></span>
+          <div class="seg" id="seg-act" role="tablist" aria-label="Editores">
+            <button
+              type="button"
+              class="hb"
+              role="tab"
+              data-act="a"
+              title="Editor 1"
+              aria-label="Editor 1"
+            >
+              <iconify-icon icon="lucide:file-text"></iconify-icon
+              ><span><span class="max-sm:hidden">Editor </span>1</span>
+            </button>
+            <button
+              type="button"
+              class="hb"
+              role="tab"
+              data-act="b"
+              title="Editor 2"
+              aria-label="Editor 2"
+            >
+              <iconify-icon icon="lucide:file-text"></iconify-icon
+              ><span><span class="max-sm:hidden">Editor </span>2</span>
+            </button>
+          </div>
+          <div class="seg m-tabs" role="group" aria-label="Panel visible">
+            <button type="button" class="hb" data-m="code" title="Código">
+              <iconify-icon icon="lucide:code-xml"></iconify-icon
+              ><span class="hidden sm:inline">Código</span>
+            </button>
+            <button type="button" class="hb" data-m="preview" title="Vista previa">
+              <iconify-icon icon="lucide:eye"></iconify-icon
+              ><span class="hidden sm:inline">Vista</span>
+            </button>
+          </div>
+        </div>
+
+        <div class="flex items-center gap-1 shrink-0">
+          <button
+            type="button"
+            class="hb max-sm:hidden"
+            data-a="popout"
+            title="Abrir vista previa en otra pestaña (con índice)"
+            aria-label="Abrir vista previa en otra pestaña"
+          >
+            <iconify-icon icon="lucide:external-link"></iconify-icon
+            ><span class="hidden lg:inline">Vista previa</span>
+          </button>
+
+          <div>
+            <button
+              type="button"
+              class="hb"
+              data-menu="export"
+              aria-haspopup="true"
+              aria-expanded="false"
+              title="Copiar y exportar"
+              aria-label="Copiar y exportar"
+            >
+              <iconify-icon icon="lucide:download"></iconify-icon
+              ><span class="hidden lg:inline">Exportar</span
+              ><iconify-icon icon="lucide:chevron-down" class="chev"></iconify-icon>
+            </button>
+            <div class="pop" data-pop="export" hidden>
+              <button type="button" class="mi" data-a="copy">
+                <iconify-icon icon="lucide:copy"></iconify-icon>Copiar Markdown
+              </button>
+              <button type="button" class="mi" data-a="download">
+                <iconify-icon icon="lucide:file-text"></iconify-icon>Descargar .md
+              </button>
+              <div class="pop-sep"></div>
+              <button type="button" class="mi" data-a="html">
+                <iconify-icon icon="lucide:file-code"></iconify-icon>Exportar a HTML
+              </button>
+              <button type="button" class="mi" data-a="pdf">
+                <iconify-icon icon="lucide:printer"></iconify-icon>Exportar a PDF
+              </button>
+            </div>
+          </div>
+
+          <div>
+            <button
+              type="button"
+              class="hb"
+              data-menu="view"
+              aria-haspopup="true"
+              aria-expanded="false"
+              title="Ajustes de vista"
+              aria-label="Ajustes de vista"
+            >
+              <iconify-icon icon="lucide:sliders-horizontal"></iconify-icon>
+            </button>
+            <div class="pop" data-pop="view" hidden>
+              <button
+                type="button"
+                class="mi"
+                data-a="sync"
+                data-keep
+                title="Sincronizar scroll código ↔ vista previa"
+              >
+                <iconify-icon icon="lucide:arrow-up-down"></iconify-icon>Scroll sincronizado<span
+                  class="sw"
+                ></span>
+              </button>
+              <div class="mi">
+                <iconify-icon icon="lucide:zoom-in"></iconify-icon>Tamaño de texto
+                <span class="ml-auto flex items-center gap-0.5">
+                  <button
+                    type="button"
+                    class="hb"
+                    data-a="zout"
+                    data-keep
+                    title="Reducir tamaño de fuente"
+                    aria-label="Reducir tamaño de fuente"
+                  >
+                    <iconify-icon icon="lucide:minus"></iconify-icon>
+                  </button>
+                  <button
+                    type="button"
+                    class="hb tabular-nums min-w-[46px]"
+                    data-a="zreset"
+                    data-keep
+                    id="zv"
+                    title="Restablecer zoom"
+                  >
+                    100%
+                  </button>
+                  <button
+                    type="button"
+                    class="hb"
+                    data-a="zin"
+                    data-keep
+                    title="Aumentar tamaño de fuente"
+                    aria-label="Aumentar tamaño de fuente"
+                  >
+                    <iconify-icon icon="lucide:plus"></iconify-icon>
+                  </button>
+                </span>
+              </div>
+              <div class="pop-sep sm:hidden"></div>
+              <button type="button" class="mi sm:hidden" data-a="popout">
+                <iconify-icon icon="lucide:external-link"></iconify-icon>Abrir vista previa en
+                pestaña
+              </button>
+            </div>
+          </div>
+
+          <span class="sep"></span>
+
+          <div>
+            <button
+              type="button"
+              class="hb danger"
+              data-menu="clear"
+              aria-haspopup="true"
+              aria-expanded="false"
+              title="Limpiar"
+              aria-label="Limpiar"
+            >
+              <iconify-icon icon="lucide:trash-2"></iconify-icon>
+            </button>
+            <div class="pop" data-pop="clear" hidden>
+              <button type="button" class="mi danger" data-a="clear">
+                <iconify-icon icon="lucide:eraser"></iconify-icon>Limpiar editor activo
+              </button>
+              <button type="button" class="mi danger" data-a="clearall">
+                <iconify-icon icon="lucide:trash-2"></iconify-icon>Limpiar todos los editores
+              </button>
+            </div>
+          </div>
+        </div>
+      </header>
+      <main id="editors" class="flex flex-col flex-1 min-h-0"></main>
+      <footer
+        class="h-6 shrink-0 border-t border-neutral-800 px-3 flex items-center justify-between text-[11px] text-neutral-600 tabular-nums gap-3"
+      >
+        <span id="st-pos" class="truncate"></span><span id="st-msg" class="text-blue-400"></span
+        ><span id="st-info" class="truncate hidden sm:inline"></span>
+      </footer>
+    </div>
+
+    <!-- ===== MODO VISTA PREVIA EN PESTAÑA APARTE ===== -->
+    <div id="pv" class="hidden h-full">
+      <aside
+        id="toc-side"
+        class="hidden lg:flex flex-col w-72 shrink-0 border-r border-neutral-800 bg-[#050505]"
+      >
+        <div
+          class="flex items-center justify-between h-11 px-2.5 border-b border-neutral-800 shrink-0 gap-2"
+        >
+          <span class="text-xs font-medium text-neutral-300 pl-1">Índice</span>
+          <button
+            type="button"
+            class="hb"
+            id="toc-close"
+            title="Ocultar índice"
+            aria-label="Ocultar índice"
+          >
+            <iconify-icon icon="lucide:panel-left-close"></iconify-icon>
+          </button>
+        </div>
+        <nav class="toc flex-1 overflow-y-auto py-2"></nav>
+      </aside>
+      <div id="pv-sc" class="flex-1 min-w-0 h-full overflow-y-auto relative">
+        <button type="button" class="hb" id="toc-open" title="Mostrar índice">
+          <iconify-icon icon="lucide:list-tree"></iconify-icon>Índice
+        </button>
+        <div
+          class="fixed top-3 right-4 z-10 flex items-center gap-2 text-[11px] text-neutral-500 bg-black/80 border border-neutral-800 rounded-full px-3 py-1"
+        >
+          <span class="w-1.5 h-1.5 rounded-full bg-emerald-500"></span
+          ><span id="pv-status">Sincronizado</span>
+        </div>
+        <article
+          id="pv-content"
+          class="prose prose-invert max-w-3xl mx-auto px-6 py-14"
+          style="font-size: calc(1rem * var(--z))"
+        ></article>
+      </div>
+      <button
+        type="button"
+        id="toc-fab"
+        class="lg:hidden fixed bottom-4 right-4 z-20 hb !h-10 !px-4 bg-neutral-900 border border-neutral-700 !text-neutral-100 shadow-xl rounded-full"
+      >
+        <iconify-icon icon="lucide:list-tree"></iconify-icon>Índice
+      </button>
+      <div
+        id="toc-float"
+        class="hidden fixed bottom-16 right-4 z-20 w-[min(20rem,calc(100vw-2rem))] rounded-xl border border-neutral-700 bg-neutral-950 shadow-2xl"
+      >
+        <nav class="toc max-h-[60vh] overflow-y-auto py-2"></nav>
+      </div>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/mermaid@11.4.1/dist/mermaid.min.js"></script>
+    <script>
+      const $ = (s, r = document) => r.querySelector(s);
+      const $$ = (s, r = document) => [...r.querySelectorAll(s)];
+      const store = {
+        get: (k) => {
+          try {
+            return localStorage.getItem(k);
+          } catch {
+            return null;
+          }
+        },
+        set: (k, v) => {
+          try {
+            localStorage.setItem(k, v);
+          } catch {}
+        },
+      };
+      const num = (k, d) => {
+        const n = parseFloat(store.get(k));
+        return isNaN(n) ? d : n;
+      };
+      const tog = (btns, pred) => btns.forEach((b) => b.classList.toggle('on', !!pred(b)));
+      const escH = (s) =>
+        s.replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]);
+
+      const DEFAULTS = {
+        a: [
+          '# Bienvenido a tu visor de Markdown',
+          '',
+          'Escribe a la izquierda y mira la vista previa **en tiempo real** a la derecha.',
+          '',
+          '## Atajos (estilo VS Code)',
+          '',
+          '| Atajo | Acción |',
+          '|---|---|',
+          '| `Ctrl+B` / `Ctrl+I` / `Ctrl+E` | Negrita / cursiva / código |',
+          '| `Ctrl+K` | Enlace |',
+          '| `Ctrl+Z` / `Ctrl+Y` | Deshacer / rehacer |',
+          '| `Ctrl+Shift+L` | Seleccionar todas las coincidencias y reemplazar |',
+          '| `Ctrl+H` | Buscar y reemplazar |',
+          '| `Alt+↑/↓` · `Shift+Alt+↑/↓` | Mover · duplicar línea |',
+          '| `Ctrl+Shift+K` · `Ctrl+L` | Eliminar · seleccionar línea |',
+          '| `Ctrl+Enter` · `Ctrl+Shift+Enter` | Nueva línea debajo · encima |',
+          '| `Ctrl+/` · `Tab` / `Shift+Tab` | Comentar · indentar / quitar |',
+          '',
+          '## Código y diagramas',
+          '',
+          '```js',
+          'const saludo = (n) => `Hola, ${n}`; // resaltado de sintaxis',
+          '```',
+          '',
+          '```mermaid',
+          'flowchart LR',
+          '    A["Escribes Markdown"] --> B{"¿Tiene diagramas?"}',
+          '    B -- Sí --> C["Se dibujan con Mermaid"]',
+          '    B -- No --> D["Se muestra como texto"]',
+          '```',
+          '',
+        ].join('\n'),
+        b: '',
+      };
+
+      /* ---------- CSS compartido (resaltado + exportación) ---------- */
+      const HL_CSS =
+        '.hljs{color:#e5e5e5}.hljs-comment,.hljs-quote{color:#6b7280;font-style:italic}.hljs-keyword,.hljs-selector-tag,.hljs-literal,.hljs-doctag{color:#c792ea}.hljs-string,.hljs-regexp,.hljs-addition{color:#a5d6a7}.hljs-number,.hljs-symbol,.hljs-bullet{color:#f78c6c}.hljs-title,.hljs-section{color:#82aaff}.hljs-built_in,.hljs-type,.hljs-title.class_{color:#ffcb6b}.hljs-attr,.hljs-attribute,.hljs-variable,.hljs-template-variable,.hljs-property{color:#89ddff}.hljs-name,.hljs-tag,.hljs-selector-id,.hljs-selector-class,.hljs-deletion{color:#f07178}.hljs-meta{color:#7f8ea3}.hljs-emphasis{font-style:italic}.hljs-strong{font-weight:700}';
+      document.head.insertAdjacentHTML('beforeend', '<style>' + HL_CSS + '</style>');
+      const EXPORT_CSS =
+        '*{box-sizing:border-box;print-color-adjust:exact;-webkit-print-color-adjust:exact}body{margin:0;background:#fff;color:#1f2328;font:16px/1.65 Inter,system-ui,-apple-system,"Segoe UI",sans-serif}article{max-width:820px;margin:0 auto;padding:40px 24px}h1,h2,h3,h4{line-height:1.25;margin:1.6em 0 .6em}h1{font-size:2em}h1,h2{border-bottom:1px solid #d8dee4;padding-bottom:.3em}h2{font-size:1.5em}a{color:#0969da}code{font-family:"JetBrains Mono",ui-monospace,Menlo,monospace;font-size:.88em}:not(pre)>code{background:#eff1f3;padding:.15em .4em;border-radius:4px}pre{background:#0a0a0a;color:#e5e5e5;padding:14px 16px;border-radius:8px;overflow:auto}table{border-collapse:collapse;margin:1em 0;width:100%}th,td{border:1px solid #d0d7de;padding:6px 12px;text-align:left}th{background:#f6f8fa}blockquote{margin:1em 0;padding:0 1em;color:#59636e;border-left:4px solid #d0d7de}hr{border:0;border-top:1px solid #d8dee4}img{max-width:100%}.mermaid-box{margin:1.2em 0;padding:16px;background:#050505;border-radius:10px;text-align:center;overflow:auto;break-inside:avoid}.mermaid-box svg{max-width:100%;height:auto}.mermaid-err{color:#f87171;text-align:left;font-size:12px}@page{margin:16mm}@media print{pre,table,tr,blockquote{break-inside:avoid}h1,h2,h3,h4{break-after:avoid}}' +
+        HL_CSS;
+
+      /* ---------- Render: Markdown + highlight + Mermaid ---------- */
+      if (window.mermaid) {
+        mermaid.initialize({
+          startOnLoad: false,
+          securityLevel: 'strict',
+          theme: 'base',
+          suppressErrorRendering: true,
+          themeVariables: {
+            fontFamily: 'Inter, ui-sans-serif, system-ui, sans-serif',
+            background: '#000',
+            primaryColor: '#171717',
+            primaryTextColor: '#ededed',
+            primaryBorderColor: '#525252',
+            secondaryColor: '#1f1f1f',
+            tertiaryColor: '#0a0a0a',
+            lineColor: '#a3a3a3',
+            textColor: '#ededed',
+            mainBkg: '#171717',
+            nodeBorder: '#525252',
+            clusterBkg: '#0a0a0a',
+            clusterBorder: '#333',
+            edgeLabelBackground: '#0a0a0a',
+            titleColor: '#ededed',
+            taskBkgColor: '#2563eb',
+            taskTextColor: '#fff',
+            gridColor: '#262626',
+            sectionBkgColor: '#0f0f0f',
+            altSectionBkgColor: '#050505',
+          },
+        });
+      }
+      const EMPTY =
+        '<p class="text-neutral-600 text-sm not-prose">Aún no hay contenido para mostrar.</p>';
+      const svgCache = new Map(),
+        hlCache = new Map();
+      let mmCount = 0;
+
+      async function renderMermaid(src) {
+        if (!window.mermaid) throw new Error('No se pudo cargar Mermaid (revisa tu conexión).');
+        if (svgCache.has(src)) return svgCache.get(src);
+        const id = 'mmd-' + ++mmCount;
+        try {
+          const { svg } = await mermaid.render(id, src);
+          if (svgCache.size > 100) svgCache.clear();
+          svgCache.set(src, svg);
+          return svg;
+        } catch (e) {
+          document.getElementById(id)?.remove();
+          document.getElementById('d' + id)?.remove();
+          throw e;
+        }
+      }
+
+      // Mismos ids que GitHub, para que funcionen los enlaces del índice (#1-usuarios-...)
+      const slug = (t) =>
+        t
+          .trim()
+          .toLowerCase()
+          .replace(/[^\p{L}\p{M}\p{N}\s_-]/gu, '')
+          .replace(/\s/g, '-');
+
+      // Actualiza solo lo que cambió (prefijo/sufijo iguales se conservan): sin parpadeo, sin perder scroll ni SVGs ya dibujados
+      function patch(el, tmp) {
+        const A = [...el.childNodes],
+          B = [...tmp.childNodes],
+          m = Math.min(A.length, B.length);
+        let s = 0,
+          ea = A.length,
+          eb = B.length;
+        while (s < m && A[s].isEqualNode(B[s])) s++;
+        while (ea > s && eb > s && A[ea - 1].isEqualNode(B[eb - 1])) {
+          ea--;
+          eb--;
+        }
+        const anchor = A[ea] || null;
+        for (let i = s; i < ea; i++) A[i].remove();
+        for (let i = s; i < eb; i++) el.insertBefore(B[i], anchor);
+      }
+
+      async function renderInto(el, md) {
+        const tok = (el._tok = (el._tok || 0) + 1);
+        const tmp = document.createElement('div');
+        if (!md.trim()) tmp.innerHTML = EMPTY;
+        else {
+          tmp.innerHTML = DOMPurify.sanitize(marked.parse(md));
+          const used = {};
+          $$('h1,h2,h3,h4,h5,h6', tmp).forEach((h) => {
+            const s = slug(h.textContent);
+            h.id = used[s] === undefined ? s : `${s}-${++used[s]}`;
+            used[s] = used[s] ?? 0;
+          });
+          $$('a[href]', tmp).forEach((a) => {
+            if (!a.getAttribute('href').startsWith('#')) {
+              a.target = '_blank';
+              a.rel = 'noopener noreferrer';
+            }
+          });
+
+          if (window.hljs) {
+            for (const code of $$('pre > code[class*="language-"]', tmp)) {
+              const lang = (code.className.match(/language-([\w+-]+)/) || [])[1];
+              if (!lang || lang === 'mermaid' || !hljs.getLanguage(lang)) continue;
+              const key = lang + '\0' + code.textContent;
+              let h = hlCache.get(key);
+              if (h === undefined) {
+                h = hljs.highlight(code.textContent, {
+                  language: lang,
+                  ignoreIllegals: true,
+                }).value;
+                if (hlCache.size > 200) hlCache.clear();
+                hlCache.set(key, h);
+              }
+              code.innerHTML = h;
+              code.classList.add('hljs');
+            }
+          }
+          for (const code of $$('pre > code.language-mermaid', tmp)) {
+            const box = document.createElement('div');
+            box.className = 'mermaid-box not-prose';
+            try {
+              box.innerHTML = await renderMermaid(code.textContent);
+            } catch (e) {
+              box.classList.add('mermaid-err');
+              box.innerHTML = '<strong>Error en el diagrama Mermaid</strong><pre></pre>';
+              $('pre', box).textContent = String(e.message || e).slice(0, 400);
+            }
+            if (tok !== el._tok) return false;
+            code.parentElement.replaceWith(box);
+          }
+        }
+        if (tok !== el._tok) return false;
+        patch(el, tmp);
+        return true;
+      }
+
+      // Enlaces internos (#...) desplazan dentro del propio panel
+      document.addEventListener('click', (e) => {
+        const a = e.target.closest('a[href^="#"]'),
+          scope = a && a.closest('.prose');
+        if (!scope) return;
+        e.preventDefault();
+        const id = decodeURIComponent(a.getAttribute('href').slice(1));
+        const t = $$('[id]', scope).find((n) => n.id === id);
+        if (t) t.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      });
+
+      /* ---------- Zoom ---------- */
+      function setZoom(z) {
+        z = Math.min(1.8, Math.max(0.7, Math.round(z * 10) / 10));
+        document.documentElement.style.setProperty('--z', z);
+        store.set('mdviewer:zoom', String(z));
+        const l = $('#zv');
+        if (l) l.textContent = Math.round(z * 100) + '%';
+        return z;
+      }
+
+      /* ---------- Exportar HTML / PDF ---------- */
+      async function exportDoc(kind, md, id) {
+        if (!md.trim()) return;
+        const w = kind === 'pdf' ? window.open('', '_blank') : null;
+        if (kind === 'pdf' && !w)
+          return alert(
+            'El navegador bloqueó la ventana. Permite las ventanas emergentes para exportar a PDF.',
+          );
+        const box = document.createElement('div');
+        await renderInto(box, md);
+        const title = ($('h1,h2', box)?.textContent || `documento-${id}`).trim();
+        const html = `<!doctype html><html lang="es"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>${escH(title)}</title><style>${EXPORT_CSS}</style></head><body><article>${box.innerHTML}</article>${w ? '<script>addEventListener("load",()=>setTimeout(()=>print(),400))<\/script>' : ''}</body></html>`;
+        if (w) {
+          w.document.open();
+          w.document.write(html);
+          w.document.close();
+          return;
+        }
+        const url = URL.createObjectURL(new Blob([html], { type: 'text/html;charset=utf-8' }));
+        const a = Object.assign(document.createElement('a'), {
+          href: url,
+          download: (slug(title) || 'documento') + '.html',
+        });
+        document.body.appendChild(a);
+        a.click();
+        a.remove();
+        URL.revokeObjectURL(url);
+      }
+
+      /* ============ PESTAÑA DE VISTA PREVIA + ÍNDICE ============ */
+      function bootPreview(id) {
+        $('#app').style.display = 'none';
+        const pv = $('#pv');
+        pv.classList.remove('hidden');
+        pv.classList.add('flex');
+        document.title = `Vista previa · Editor ${id === 'a' ? 1 : 2}`;
+        document.documentElement.style.setProperty('--z', num('mdviewer:zoom', 1));
+        pv.dataset.toc = store.get('mdviewer:toc') || 'open';
+
+        const key = `mdviewer:panel-${id}:content`,
+          art = $('#pv-content'),
+          sc = $('#pv-sc'),
+          navs = $$('.toc');
+        const float = $('#toc-float');
+        let heads = [],
+          sig = '',
+          cur = -1,
+          raf = 0,
+          tm;
+
+        function mark() {
+          raf = 0;
+          if (!heads.length) return;
+          const top = sc.getBoundingClientRect().top + 24;
+          let i = 0;
+          for (let j = 0; j < heads.length; j++) {
+            if (heads[j].getBoundingClientRect().top <= top) i = j;
+            else break;
+          }
+          if (i === cur) return;
+          cur = i;
+          navs.forEach((n) => {
+            n.querySelector('.on')?.classList.remove('on');
+            const a = n.querySelector(`a[data-id="${heads[i].id}"]`);
+            if (a) {
+              a.classList.add('on');
+              a.scrollIntoView({ block: 'nearest' });
+            }
+          });
+        }
+
+        function buildToc() {
+          heads = $$('h1,h2,h3,h4', art);
+          const s = heads.map((h) => h.tagName + h.id + h.textContent).join('|');
+          if (s !== sig) {
+            sig = s;
+            const min = Math.min(...heads.map((h) => +h.tagName[1]));
+            const html = heads.length
+              ? heads
+                  .map(
+                    (h) =>
+                      `<a href="#${h.id}" data-id="${h.id}" title="${escH(h.textContent)}" style="padding-left:${12 + (h.tagName[1] - min) * 14}px">${escH(h.textContent)}</a>`,
+                  )
+                  .join('')
+              : '<p class="px-3 py-2 text-xs text-neutral-600">Este documento no tiene encabezados.</p>';
+            navs.forEach((n) => (n.innerHTML = html));
+          }
+          cur = -1;
+          mark();
+        }
+
+        navs.forEach((n) =>
+          n.addEventListener('click', (e) => {
+            const a = e.target.closest('a[data-id]');
+            if (!a) return;
+            e.preventDefault();
+            heads
+              .find((h) => h.id === a.dataset.id)
+              ?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+            float.classList.add('hidden');
+          }),
+        );
+        sc.addEventListener(
+          'scroll',
+          () => {
+            if (!raf) raf = requestAnimationFrame(mark);
+          },
+          { passive: true },
+        );
+        $('#toc-fab').addEventListener('click', () => float.classList.toggle('hidden'));
+        const setToc = (v) => {
+          pv.dataset.toc = v;
+          store.set('mdviewer:toc', v);
+        };
+        $('#toc-close').addEventListener('click', () => setToc('closed'));
+        $('#toc-open').addEventListener('click', () => setToc('open'));
+
+        const render = () =>
+          renderInto(art, store.get(key) || '').then((ok) => {
+            if (!ok) return;
+            buildToc();
+            $('#pv-status').textContent =
+              'Sincronizado · ' + new Date().toLocaleTimeString('es-PE');
+          });
+        window.addEventListener('storage', (e) => {
+          if (e.key === 'mdviewer:zoom')
+            document.documentElement.style.setProperty('--z', num('mdviewer:zoom', 1));
+          else if (e.key === key || e.key === null) {
+            clearTimeout(tm);
+            tm = setTimeout(render, 120);
+          }
+        });
+        render();
+      }
+
+      /* ============ EDITOR ============ */
+      const MT = (id) => `
+    <section id="ed-${id}" class="editor flex flex-1 min-h-0">
+      <div class="code-pane relative min-w-0 min-h-0">
+        <textarea data-r="ta" spellcheck="false" placeholder="# Escribe o pega tu Markdown aquí…"
+          class="ed-ta w-full h-full resize-none bg-black text-neutral-200 font-mono leading-relaxed p-4 pb-16 outline-none placeholder-neutral-700"></textarea>
+        <div class="fr" data-r="fr" hidden>
+          <input data-r="fi" placeholder="Buscar" aria-label="Buscar"><input data-r="ri" placeholder="Reemplazar por" aria-label="Reemplazar por">
+          <button type="button" class="hb" data-r="cs" title="Distinguir mayúsculas" aria-label="Distinguir mayúsculas"><iconify-icon icon="lucide:case-sensitive"></iconify-icon></button>
+          <span data-r="fc" class="text-neutral-500"></span>
+          <button type="button" class="hb !bg-blue-600 !text-white" data-r="ra" title="Reemplazar todo (Enter)">Reemplazar todo</button>
+          <button type="button" class="hb" data-r="fx" title="Cerrar (Esc)" aria-label="Cerrar"><iconify-icon icon="lucide:x"></iconify-icon></button>
+        </div>
+        <div class="fm">
+          <button type="button" class="fm-btn" data-menu="fmt-${id}" aria-haspopup="true" aria-expanded="false" title="Formato de Markdown">
+            <iconify-icon icon="lucide:type"></iconify-icon>Formato<iconify-icon icon="lucide:chevron-up"></iconify-icon>
+          </button>
+          <div class="pop fm-pop" data-pop="fmt-${id}" hidden>${FMT_HTML}</div>
+        </div>
+      </div>
+      <div class="rz hidden md:block w-1 shrink-0 bg-neutral-900 hover:bg-blue-500/60 active:bg-blue-500 transition-colors cursor-col-resize touch-none" role="separator" aria-orientation="vertical"></div>
+      <div data-r="pv" class="pv-pane min-w-0 min-h-0 overflow-y-auto p-5 sm:p-6 prose prose-invert prose-sm max-w-none bg-[#030303]"></div>
+    </section>`;
+
+      const FMT_GROUPS = [
+        [
+          'Texto',
+          [
+            ['bold', 'lucide:bold', 'Negrita', 'Negrita (Ctrl+B)'],
+            ['italic', 'lucide:italic', 'Cursiva', 'Cursiva (Ctrl+I)'],
+            ['strike', 'lucide:strikethrough', 'Tachado', 'Tachado (Ctrl+Shift+X)'],
+            ['code', 'lucide:code', 'Código', 'Código en línea (Ctrl+E)'],
+            ['link', 'lucide:link', 'Enlace', 'Enlace (Ctrl+K)'],
+          ],
+        ],
+        [
+          'Bloques',
+          [
+            ['h', 'lucide:heading', 'Título', 'Encabezado (alterna H1 → H3 → ninguno)'],
+            ['quote', 'lucide:quote', 'Cita', 'Cita'],
+            ['ul', 'lucide:list', 'Lista', 'Lista con viñetas'],
+            ['ol', 'lucide:list-ordered', 'Numerada', 'Lista numerada'],
+            ['task', 'lucide:list-checks', 'Tareas', 'Lista de tareas'],
+          ],
+        ],
+        [
+          'Insertar',
+          [
+            ['table', 'lucide:table', 'Tabla', 'Insertar tabla'],
+            ['fence', 'lucide:braces', 'Bloque', 'Bloque de código'],
+            ['mermaid', 'lucide:workflow', 'Mermaid', 'Insertar diagrama Mermaid'],
+            ['hr', 'lucide:minus', 'Línea', 'Línea horizontal'],
+          ],
+        ],
+        [
+          'Edición',
+          [
+            ['undo', 'lucide:undo-2', 'Deshacer', 'Deshacer (Ctrl+Z)'],
+            ['redo', 'lucide:redo-2', 'Rehacer', 'Rehacer (Ctrl+Y)'],
+            ['find', 'lucide:search', 'Buscar', 'Buscar y reemplazar (Ctrl+H · Ctrl+Shift+L)'],
+          ],
+        ],
+      ];
+      const FMT_HTML = FMT_GROUPS.map(
+        ([g, items]) =>
+          `<div class="pop-label">${g}</div><div class="fgrid">${items
+            .map(
+              ([a, ic, lb, tt]) =>
+                `<button type="button" class="ft" data-a="${a}" title="${tt}"><iconify-icon icon="${ic}"></iconify-icon><span>${lb}</span></button>`,
+            )
+            .join('')}</div>`,
+      ).join('');
+
+      const W = /[\p{L}\p{N}_]/u;
+      const wordAt = (v, p) => {
+        let s = p,
+          e = p;
+        while (s > 0 && W.test(v[s - 1])) s--;
+        while (e < v.length && W.test(v[e])) e++;
+        return s < e ? [s, e] : null;
+      };
+      const ls = (v, i) => (i ? v.lastIndexOf('\n', i - 1) + 1 : 0);
+      const le = (v, i) => {
+        const n = v.indexOf('\n', i);
+        return n < 0 ? v.length : n;
+      };
+      const escRx = (s) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+
+      const panels = {};
+      let active = 'a',
+        syncOn = store.get('mdviewer:sync') !== '0';
+      let toastT;
+      const toast = (m) => {
+        const el = $('#st-msg');
+        el.textContent = m;
+        clearTimeout(toastT);
+        toastT = setTimeout(() => (el.textContent = ''), 1400);
+      };
+
+      function initPanel(id) {
+        const root = $('#ed-' + id),
+          r = (k) => $(`[data-r=${k}]`, root);
+        const ta = r('ta'),
+          pv = r('pv'),
+          fr = r('fr'),
+          fi = r('fi'),
+          ri = r('ri'),
+          cs = r('cs'),
+          fc = r('fc');
+        const KEY = `mdviewer:panel-${id}:content`;
+        let dirty = false,
+          tm,
+          caseSens = false,
+          ign = null,
+          posRaf = 0;
+
+        const stored = store.get(KEY);
+        ta.value = stored !== null ? stored : DEFAULTS[id];
+        if (stored === null) store.set(KEY, ta.value); // la pestaña de vista previa necesita el contenido
+
+        /* --- guardado, render y estado (con debounce adaptativo) --- */
+        const save = () => {
+          if (dirty) {
+            store.set(KEY, ta.value);
+            dirty = false;
+            return true;
+          }
+          return false;
+        };
+        const label = () => `Editor ${id === 'a' ? 1 : 2}`;
+        const pos = () => {
+          if (posRaf) return;
+          posRaf = requestAnimationFrame(() => {
+            posRaf = 0;
+            const p = ta.selectionStart,
+              b = ta.value.slice(0, p);
+            $('#st-pos').textContent =
+              `${label()} · Ln ${b.split('\n').length}, Col ${p - b.lastIndexOf('\n')}`;
+          });
+        };
+        const info = () => {
+          const v = ta.value,
+            t = v.trim();
+          $('#st-info').textContent =
+            `${v ? v.split('\n').length : 0} líneas · ${t ? t.split(/\s+/).length : 0} palabras · ${v.length} caracteres`;
+        };
+        const ratio = (el) => {
+          const m = el.scrollHeight - el.clientHeight;
+          return m > 0 ? el.scrollTop / m : 0;
+        };
+        const pvFromTa = () => {
+          ign = 'pv';
+          pv.scrollTop = ratio(ta) * (pv.scrollHeight - pv.clientHeight);
+        };
+        const render = () =>
+          renderInto(pv, ta.value).then((ok) => {
+            if (ok && syncOn && document.activeElement === ta) pvFromTa();
+          });
+        const flush = () => {
+          if (save()) toast('Guardado');
+          render();
+          if (active === id) info();
+        };
+        ta.addEventListener('input', () => {
+          dirty = true;
+          clearTimeout(tm);
+          tm = setTimeout(flush, Math.min(350, 80 + ta.value.length / 150));
+          pos();
+        });
+        addEventListener('pagehide', save);
+        document.addEventListener('visibilitychange', () => document.hidden && save());
+        ['keyup', 'click', 'focus'].forEach((ev) => ta.addEventListener(ev, pos));
+
+        /* --- scroll sincronizado bidireccional (por proporción, sin bucles) --- */
+        const link = (src, dst, me, other) =>
+          src.addEventListener(
+            'scroll',
+            () => {
+              if (ign === me) {
+                ign = null;
+                return;
+              }
+              if (!syncOn) return;
+              const t = ratio(src) * (dst.scrollHeight - dst.clientHeight);
+              if (Math.abs(dst.scrollTop - t) < 1) return;
+              ign = other;
+              dst.scrollTop = t;
+              requestAnimationFrame(() => requestAnimationFrame(() => (ign = null)));
+            },
+            { passive: true },
+          );
+        link(ta, pv, 'ta', 'pv');
+        link(pv, ta, 'pv', 'ta');
+
+        /* --- edición: todo pasa por execCommand para conservar Ctrl+Z / Ctrl+Y nativos --- */
+        function edit(s, e, t, a, b) {
+          if (!t && s === e) return;
+          ta.focus();
+          ta.setSelectionRange(s, e);
+          const ok =
+            t === ''
+              ? document.execCommand('delete')
+              : document.execCommand('insertText', false, t);
+          if (!ok) {
+            ta.setRangeText(t, s, e, 'end');
+            ta.dispatchEvent(new Event('input'));
+          }
+          if (a !== undefined) ta.setSelectionRange(a, b ?? a);
+        }
+        const rng = () => {
+          const v = ta.value;
+          let e = ta.selectionEnd;
+          if (e > ta.selectionStart && v[e - 1] === '\n') e--;
+          return [ls(v, ta.selectionStart), le(v, e)];
+        };
+        const lines = (fn) => {
+          const [s, e] = rng(),
+            out = fn(ta.value.slice(s, e).split('\n')).join('\n');
+          edit(s, e, out, s, s + out.length);
+        };
+        const pre = (test, add, strip) =>
+          lines((L) =>
+            L.every((l) => test.test(l)) ? L.map((l) => l.replace(strip, '$1')) : L.map(add),
+          );
+
+        function wrap(m, ph = 'texto') {
+          const v = ta.value;
+          let s = ta.selectionStart,
+            e = ta.selectionEnd;
+          if (s === e) {
+            const w = wordAt(v, s);
+            if (w) [s, e] = w;
+          }
+          const sel = v.slice(s, e),
+            L = m.length;
+          if (v.slice(s - L, s) === m && v.slice(e, e + L) === m)
+            return edit(s - L, e + L, sel, s - L, e - L);
+          if (sel.length >= 2 * L && sel.startsWith(m) && sel.endsWith(m))
+            return edit(s, e, sel.slice(L, -L), s, e - 2 * L);
+          const t = sel || ph;
+          edit(s, e, m + t + m, s + L, s + L + t.length);
+        }
+        function link_() {
+          const s = ta.selectionStart,
+            e = ta.selectionEnd,
+            t = ta.value.slice(s, e) || 'texto';
+          edit(s, e, `[${t}](url)`, s + t.length + 3, s + t.length + 6);
+        }
+        function block(t, a = 0, b = 0) {
+          const v = ta.value,
+            p = le(v, ta.selectionEnd),
+            s = ls(v, p),
+            empty = !v.slice(s, p).trim();
+          const at = empty ? s : p,
+            o = at + (empty ? 0 : 2);
+          edit(at, p, (empty ? '' : '\n\n') + t + '\n', o + a, o + b);
+        }
+        const fence = () => {
+          const s = ta.selectionStart,
+            e = ta.selectionEnd;
+          if (s === e) return block('```\n\n```', 4, 4);
+          const sel = ta.value.slice(s, e);
+          edit(s, e, '```\n' + sel + '\n```', s + 4, s + 4 + sel.length);
+        };
+        const selLine = () => {
+          const v = ta.value,
+            s = ls(v, ta.selectionStart),
+            e = le(v, ta.selectionEnd);
+          ta.setSelectionRange(s, Math.min(v.length, e + 1));
+        };
+        const delLine = () => {
+          const v = ta.value,
+            [s, e] = rng();
+          if (e < v.length) edit(s, e + 1, '', s);
+          else if (s > 0) edit(s - 1, e, '', s - 1);
+          else edit(s, e, '', s);
+        };
+        const newLine = (below) => {
+          const v = ta.value,
+            [s, e] = rng();
+          below ? edit(e, e, '\n', e + 1) : edit(s, s, '\n', s);
+        };
+        function move(d) {
+          const v = ta.value,
+            [s, e] = rng(),
+            a = ta.selectionStart,
+            b = ta.selectionEnd,
+            blk = v.slice(s, e);
+          if (d < 0) {
+            if (!s) return;
+            const ps = ls(v, s - 1),
+              prev = v.slice(ps, s - 1);
+            edit(ps, e, blk + '\n' + prev, a - (s - ps), b - (s - ps));
+          } else {
+            if (e >= v.length) return;
+            const ne = le(v, e + 1),
+              nxt = v.slice(e + 1, ne),
+              k = nxt.length + 1;
+            edit(s, ne, nxt + '\n' + blk, a + k, b + k);
+          }
+        }
+        function dup(d) {
+          const [s, e] = rng(),
+            blk = ta.value.slice(s, e),
+            a = ta.selectionStart,
+            b = ta.selectionEnd,
+            k = blk.length + 1;
+          edit(e, e, '\n' + blk, d > 0 ? a + k : a, d > 0 ? b + k : b);
+        }
+        const comment = () =>
+          lines((L) => {
+            const on = L.every((l) => !l.trim() || /^\s*<!-- .* -->\s*$/.test(l));
+            return L.map((l) =>
+              !l.trim()
+                ? l
+                : on
+                  ? l.replace(/<!-- ?/, '').replace(/ ?-->/, '')
+                  : l.replace(/^(\s*)(.*)$/, '$1<!-- $2 -->'),
+            );
+          });
+        const indent = (out) =>
+          lines((L) => L.map((l) => (out ? l.replace(/^( {1,2}|\t)/, '') : '  ' + l)));
+        function listEnter() {
+          // continúa listas, tareas y citas al pulsar Enter
+          const v = ta.value,
+            p = ta.selectionStart;
+          if (p !== ta.selectionEnd) return false;
+          const s = ls(v, p),
+            m = v.slice(s, p).match(/^(\s*)([-*+]|\d+\.|>)( \[[ xX]\])? (.*)$/);
+          if (!m) return false;
+          if (!m[4] && le(v, p) === p) {
+            edit(s, p, '', s);
+            return true;
+          }
+          const mk = /\d/.test(m[2]) ? parseInt(m[2]) + 1 + '.' : m[2];
+          edit(p, p, '\n' + m[1] + mk + (m[3] ? ' [ ]' : '') + ' ');
+          return true;
+        }
+
+        ta.addEventListener('keydown', (e) => {
+          const c = e.ctrlKey || e.metaKey,
+            k = e.key.length === 1 ? e.key.toLowerCase() : e.key;
+          let f;
+          if (c && !e.altKey) {
+            f = e.shiftKey
+              ? {
+                  l: () => openFind(true),
+                  k: delLine,
+                  Enter: () => newLine(0),
+                  x: () => wrap('~~'),
+                }[k]
+              : {
+                  b: () => wrap('**'),
+                  i: () => wrap('*'),
+                  e: () => wrap('`'),
+                  k: link_,
+                  '/': comment,
+                  l: selLine,
+                  h: () => openFind(false),
+                  Enter: () => newLine(1),
+                }[k];
+          } else if (e.altKey && !c && (k === 'ArrowUp' || k === 'ArrowDown')) {
+            const d = k === 'ArrowUp' ? -1 : 1;
+            f = e.shiftKey ? () => dup(d) : () => move(d);
+          } else if (k === 'Tab' && !c && !e.altKey) {
+            f = () =>
+              e.shiftKey || ta.value.slice(ta.selectionStart, ta.selectionEnd).includes('\n')
+                ? indent(e.shiftKey)
+                : edit(ta.selectionStart, ta.selectionEnd, '  ');
+          } else if (k === 'Enter' && !e.shiftKey && !c && !e.altKey && listEnter()) {
+            e.preventDefault();
+            return;
+          }
+          if (f) {
+            e.preventDefault();
+            f();
+          }
+        });
+
+        /* --- Buscar / reemplazar y Ctrl+Shift+L (todas las coincidencias de golpe) --- */
+        const rx = () => (fi.value ? new RegExp(escRx(fi.value), caseSens ? 'g' : 'gi') : null);
+        const count = () => {
+          const q = rx();
+          fc.textContent = q ? `${(ta.value.match(q) || []).length} coincidencias` : '';
+        };
+        function openFind(multi) {
+          const v = ta.value;
+          let q = v.slice(ta.selectionStart, ta.selectionEnd);
+          if (!q || q.includes('\n')) {
+            const w = wordAt(v, ta.selectionStart);
+            q = w ? v.slice(w[0], w[1]) : '';
+          }
+          if (q) fi.value = q;
+          fr.hidden = false;
+          count();
+          const t = multi && fi.value ? ri : fi;
+          t.focus();
+          t.select();
+        }
+        const closeFind = () => {
+          fr.hidden = true;
+          ta.focus();
+        };
+        function replaceAll() {
+          const q = rx();
+          if (!q) return;
+          const v = ta.value,
+            out = v.replace(q, () => ri.value);
+          if (out === v) return;
+          edit(0, v.length, out, Math.min(ta.selectionStart, out.length));
+          count();
+          toast('Reemplazado');
+        }
+        fi.addEventListener('input', count);
+        cs.addEventListener('click', () => {
+          caseSens = !caseSens;
+          cs.classList.toggle('on', caseSens);
+          count();
+        });
+        r('ra').addEventListener('click', replaceAll);
+        r('fx').addEventListener('click', closeFind);
+        fr.addEventListener('keydown', (e) => {
+          if (e.key === 'Escape') {
+            e.preventDefault();
+            closeFind();
+          } else if (e.key === 'Enter') {
+            e.preventDefault();
+            replaceAll();
+          }
+        });
+
+        /* --- Redimensionar código | vista previa (compartido) --- */
+        const rz = $('.rz', root);
+        let drag = false;
+        rz.addEventListener('pointerdown', (e) => {
+          drag = true;
+          rz.setPointerCapture(e.pointerId);
+          document.body.classList.add('select-none');
+        });
+        rz.addEventListener('pointermove', (e) => {
+          if (drag) {
+            const b = root.getBoundingClientRect();
+            setSplit(((e.clientX - b.left) / b.width) * 100);
+          }
+        });
+        ['pointerup', 'pointercancel'].forEach((ev) =>
+          rz.addEventListener(ev, () => {
+            drag = false;
+            document.body.classList.remove('select-none');
+          }),
+        );
+
+        root.addEventListener('focusin', () => setAct(id));
+
+        /* --- API que usa el header --- */
+        const ops = {
+          undo: () => {
+            ta.focus();
+            document.execCommand('undo');
+          },
+          redo: () => {
+            ta.focus();
+            document.execCommand('redo');
+          },
+          bold: () => wrap('**'),
+          italic: () => wrap('*'),
+          strike: () => wrap('~~'),
+          code: () => wrap('`'),
+          link: link_,
+          h: () =>
+            lines((L) =>
+              L.map((l) => {
+                const n = (l.match(/^(#{1,6}) /) || [''])[0].length - 1;
+                return (n >= 3 ? '' : '#'.repeat(n + 1) + ' ') + l.replace(/^#{1,6} /, '');
+              }),
+            ),
+          quote: () => pre(/^>/, (l) => '> ' + l, /^(>) ?/),
+          ul: () => pre(/^\s*[-*+] (?!\[)/, (l) => '- ' + l, /^(\s*)[-*+] /),
+          ol: () => pre(/^\s*\d+\. /, (l, i) => `${i + 1}. ${l}`, /^(\s*)\d+\. /),
+          task: () => pre(/^\s*- \[[ xX]\] /, (l) => '- [ ] ' + l, /^(\s*)- \[[ xX]\] /),
+          table: () =>
+            block('| Columna 1 | Columna 2 | Columna 3 |\n|---|---|---|\n|  |  |  |', 2, 11),
+          fence,
+          mermaid: () =>
+            block('```mermaid\nflowchart TD\n    A["Inicio"] --> B["Fin"]\n```', 11, 23),
+          hr: () => block('---'),
+          find: () => openFind(false),
+          popout: () => {
+            save();
+            const u = new URL(location.href);
+            u.search = '';
+            u.hash = '';
+            u.searchParams.set('preview', id);
+            const w = window.open(u.href, 'mdviewer-preview-' + id);
+            if (w) w.focus();
+            else
+              alert(
+                'El navegador bloqueó la nueva pestaña. Permite las ventanas emergentes para este sitio.',
+              );
+          },
+          copy: async () => {
+            try {
+              await navigator.clipboard.writeText(ta.value);
+              toast('Copiado');
+            } catch {
+              alert('No se pudo copiar al portapapeles.');
+            }
+          },
+          download: () => {
+            const url = URL.createObjectURL(
+              new Blob([ta.value], { type: 'text/markdown;charset=utf-8' }),
+            );
+            const a = Object.assign(document.createElement('a'), {
+              href: url,
+              download: `documento-${id}.md`,
+            });
+            document.body.appendChild(a);
+            a.click();
+            a.remove();
+            URL.revokeObjectURL(url);
+          },
+          html: () => exportDoc('html', ta.value, id),
+          pdf: () => exportDoc('pdf', ta.value, id),
+          clear: () => {
+            if (
+              ta.value &&
+              confirm(
+                `¿Limpiar el contenido del ${label().toLowerCase()}? Esta acción no se puede deshacer.`,
+              )
+            ) {
+              ta.value = '';
+              dirty = true;
+              flush();
+            }
+          },
+        };
+        info();
+        pos();
+        render();
+        return {
+          run: (n) => ops[n] && ops[n](),
+          status: () => {
+            info();
+            pos();
+          },
+          focus: () => ta.focus(),
+          has: () => !!ta.value,
+          wipe: () => {
+            ta.value = '';
+            dirty = true;
+            flush();
+          },
+        };
+      }
+
+      function setSplit(p) {
+        p = Math.min(80, Math.max(20, p));
+        document.documentElement.style.setProperty('--split', p + '%');
+        store.set('mdviewer:split', String(p));
+      }
+      // Pestañas: solo se ve un editor a la vez; se conserva el scroll de cada uno al cambiar
+      function setAct(id) {
+        if (active !== id) {
+          const o = $('#ed-' + active);
+          o._sc = [$('[data-r=ta]', o).scrollTop, $('[data-r=pv]', o).scrollTop];
+        }
+        active = id;
+        ['a', 'b'].forEach((k) => {
+          const el = $('#ed-' + k);
+          el.classList.toggle('act', k === id);
+          el.style.display = k === id ? '' : 'none';
+        });
+        const el = $('#ed-' + id);
+        if (el._sc) {
+          $('[data-r=ta]', el).scrollTop = el._sc[0];
+          $('[data-r=pv]', el).scrollTop = el._sc[1];
+        }
+        tog($$('[data-act]'), (b) => b.dataset.act === id);
+        $$('[data-act]').forEach((b) => b.setAttribute('aria-selected', b.dataset.act === id));
+        store.set('mdviewer:tab', id);
+        panels[id].status();
+      }
+
+      function bootEditor() {
+        setSplit(num('mdviewer:split', 50));
+        setZoom(num('mdviewer:zoom', 1));
+        $('#editors').innerHTML = MT('a') + MT('b');
+        panels.a = initPanel('a');
+        panels.b = initPanel('b');
+
+        /* --- Menús y popups (header + formato): se colocan solos arriba o abajo según el espacio --- */
+        const pops = () => $$('[data-pop]');
+        const trigOf = (p) => $(`[data-menu="${p.dataset.pop}"]`);
+        function closeMenus(except) {
+          pops().forEach((p) => {
+            if (p === except || p.hidden) return;
+            p.hidden = true;
+            const t = trigOf(p);
+            if (t) {
+              t.classList.remove('on');
+              t.setAttribute('aria-expanded', 'false');
+            }
+          });
+        }
+        function openMenu(p, t) {
+          p.hidden = false;
+          const r = t.getBoundingClientRect(),
+            w = p.offsetWidth,
+            h = p.offsetHeight,
+            vw = innerWidth,
+            vh = innerHeight;
+          const below = vh - r.bottom - 8,
+            above = r.top - 8,
+            preferUp = p.classList.contains('fm-pop');
+          const down = preferUp ? above < h && below >= h : below >= h || below >= above;
+          p.style.left = Math.max(8, Math.min(r.right - w, vw - w - 8)) + 'px';
+          p.style.top = Math.max(8, down ? r.bottom + 8 : r.top - h - 8) + 'px';
+          t.classList.add('on');
+          t.setAttribute('aria-expanded', 'true');
+        }
+        document.addEventListener('click', (e) => {
+          const t = e.target.closest('[data-menu]');
+          if (t) {
+            const p = $(`[data-pop="${t.dataset.menu}"]`),
+              willOpen = p.hidden;
+            closeMenus(p);
+            if (willOpen) openMenu(p, t);
+            else closeMenus();
+            return;
+          }
+          const inside = e.target.closest('[data-pop]');
+          if (!inside) return closeMenus();
+          if (e.target.closest('button') && !e.target.closest('[data-keep]')) closeMenus();
+        });
+        document.addEventListener('keydown', (e) => {
+          if (e.key === 'Escape') closeMenus();
+        });
+        addEventListener('resize', () => closeMenus());
+
+        // Acciones del popup de formato: van al editor donde está el popup
+        const eds = $('#editors');
+        eds.addEventListener('mousedown', (e) => {
+          if (e.target.closest('.fm button')) e.preventDefault();
+        });
+        eds.addEventListener('click', (e) => {
+          const b = e.target.closest('.fm-pop button[data-a]');
+          if (!b) return;
+          const id = b.closest('.editor').id.slice(3);
+          setAct(id);
+          panels[id].run(b.dataset.a);
+        });
+
+        const header = $('header');
+        header.addEventListener('mousedown', (e) => {
+          if (e.target.closest('button')) e.preventDefault();
+        }); // no roba el foco ni la selección
+        header.addEventListener('click', (e) => {
+          const b = e.target.closest('button');
+          if (!b || b.dataset.menu !== undefined) return;
+          const { a, act, m } = b.dataset;
+          if (act) {
+            setAct(act);
+            return panels[act].focus();
+          }
+          if (m) {
+            document.body.dataset.m = m;
+            return tog($$('[data-m]', header), (x) => x.dataset.m === m);
+          }
+          const z = num('mdviewer:zoom', 1);
+          if (a === 'sync') {
+            syncOn = !syncOn;
+            store.set('mdviewer:sync', syncOn ? '1' : '0');
+            tog([b], () => syncOn);
+            toast(syncOn ? 'Scroll sincronizado' : 'Scroll independiente');
+          } else if (a === 'zin') setZoom(z + 0.1);
+          else if (a === 'zout') setZoom(z - 0.1);
+          else if (a === 'zreset') setZoom(1);
+          else if (a === 'clearall') {
+            if (
+              Object.values(panels).some((p) => p.has()) &&
+              confirm(
+                '¿Limpiar el contenido de todos los editores? Esta acción no se puede deshacer.',
+              )
+            )
+              Object.values(panels).forEach((p) => p.wipe());
+          } else panels[active].run(a);
+        });
+
+        tog($$('[data-a=sync]'), () => syncOn);
+        tog($$('[data-m]', header), (x) => x.dataset.m === 'code');
+        setAct(store.get('mdviewer:tab') === 'b' ? 'b' : 'a');
+      }
+
+      const previewId = new URLSearchParams(location.search).get('preview');
+      if (previewId === 'a' || previewId === 'b') bootPreview(previewId);
+      else bootEditor();
+    </script>
+  </body>
+</html>

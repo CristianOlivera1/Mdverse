@@ -1,0 +1,88 @@
+---
+import Avatar from '@/components/ui/Avatar.astro';
+import Icon from '@/components/ui/Icon.astro';
+import { toAccountSummary } from '@/lib/auth/account';
+import Layout from '@/layouts/Layout.astro';
+
+interface Props {
+  title: string;
+  description?: string;
+  /** Which nav entry to highlight. */
+  current?: 'editor' | 'dashboard' | 'settings';
+}
+
+const { title, description, current } = Astro.props;
+
+// The middleware already guards these routes; this is a second line of defence
+// for anyone reusing the layout somewhere else.
+const account = toAccountSummary(Astro.locals.user, Astro.locals.profile);
+if (!account) return Astro.redirect('/login?next=/dashboard');
+
+const nav = [
+  { id: 'editor', label: 'Editor', href: '/' },
+  { id: 'dashboard', label: 'Documents', href: '/dashboard' },
+  { id: 'settings', label: 'Profile', href: '/settings' },
+] as const;
+---
+
+<Layout
+  title={`${title} · OpenMarkdown`}
+  bodyClass="min-h-screen bg-black text-neutral-200 font-sans"
+>
+  <Fragment slot="head">
+    <meta name="robots" content="noindex" />
+  </Fragment>
+
+  <div class="min-h-screen flex flex-col">
+    <header class="flex items-center justify-between gap-3 h-12 px-3 border-b border-neutral-800 shrink-0">
+      <div class="flex items-center gap-3 min-w-0">
+        <a href="/" class="flex items-center gap-2.5 shrink-0" aria-label="OpenMarkdown home">
+          <span class="w-5 h-5 rounded-[5px] bg-white flex items-center justify-center">
+            <span class="text-black text-[11px] font-bold leading-none">M</span>
+          </span>
+          <span class="hidden lg:inline text-sm font-medium text-neutral-100">OpenMarkdown</span>
+        </a>
+        <span class="sep"></span>
+        <nav class="flex items-center gap-1" aria-label="Account">
+          {nav.map((item) => (
+            <a
+              href={item.href}
+              class:list={['hb', current === item.id && 'on']}
+              aria-current={current === item.id ? 'page' : undefined}
+            >
+              {item.label}
+            </a>
+          ))}
+        </nav>
+      </div>
+
+      <div class="flex items-center gap-2 shrink-0">
+        <a
+          href="/settings"
+          class="flex items-center gap-2 rounded-lg px-1.5 py-1 hover:bg-neutral-900"
+        >
+          <Avatar name={account.displayName} seed={account.toneSeed} size="sm" />
+          <span class="hidden sm:flex flex-col leading-tight text-left">
+            <span class="text-xs text-neutral-100">{account.displayName}</span>
+            <span class="text-[11px] text-neutral-500">@{account.username}</span>
+          </span>
+        </a>
+        <form method="POST" action="/auth/signout">
+          <input type="hidden" name="next" value="/" />
+          <button type="submit" class="hb" title="Sign out" aria-label="Sign out">
+            <Icon name="log-out" />
+            <span class="hidden lg:inline">Sign out</span>
+          </button>
+        </form>
+      </div>
+    </header>
+
+    <main class="flex-1 w-full max-w-3xl mx-auto px-4 sm:px-6 py-8 sm:py-12">
+      <h1 class="text-xl sm:text-2xl font-semibold text-neutral-50">{title}</h1>
+      {description && <p class="mt-2 text-sm text-neutral-400">{description}</p>}
+      <div class="mt-8">
+        <slot />
+      </div>
+    </main>
+  </div>
+</Layout>

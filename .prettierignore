@@ -1,0 +1,13 @@
+dist
+.astro
+node_modules
+pnpm-lock.yaml
+
+# Third-party agent skills: not part of the app, never reformat them.
+.agents/
+
+# Reference artifact for the production migration: read-only, never reformat.
+visor-markdown.html
+
+# Long-form planning document: keep its hand-made formatting.
+PLAN_VISOR_MARKDOWN_PRODUCCION.md

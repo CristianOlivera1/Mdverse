@@ -1,0 +1,91 @@
+---
+import Avatar from '@/components/ui/Avatar.astro';
+import Icon from '@/components/ui/Icon.astro';
+import AccountLayout from '@/layouts/AccountLayout.astro';
+import { toAccountSummary } from '@/lib/auth/account';
+import { formatMemberSince } from '@/lib/auth/profile';
+
+const account = toAccountSummary(Astro.locals.user, Astro.locals.profile);
+if (!account) return Astro.redirect('/login?next=/dashboard');
+
+const provider = String(Astro.locals.user?.app_metadata.provider ?? 'email');
+---
+
+<AccountLayout
+  title="Your documents"
+  description="Documents move to Postgres in phase 3. Until then the editor keeps working offline in this browser."
+  current="dashboard"
+>
+  <section class="rounded-xl border border-neutral-800 bg-neutral-950/60 p-4 sm:p-5">
+    <div class="flex items-center gap-4">
+      <Avatar name={account.displayName} seed={account.toneSeed} size="lg" />
+      <div class="min-w-0">
+        <p class="text-base font-medium text-neutral-50 truncate">{account.displayName}</p>
+        <p class="text-xs text-neutral-500 truncate">@{account.username}</p>
+        <p class="text-xs text-neutral-500 truncate">{account.email}</p>
+      </div>
+    </div>
+
+    <dl class="mt-5 grid gap-3 sm:grid-cols-2 text-xs">
+      <div>
+        <dt class="text-neutral-500">Member since</dt>
+        <dd class="mt-0.5 text-neutral-200">
+          {formatMemberSince(account.createdAt) || 'Not recorded yet'}
+        </dd>
+      </div>
+      <div>
+        <dt class="text-neutral-500">Signed in with</dt>
+        <dd class="mt-0.5 text-neutral-200">{provider}</dd>
+      </div>
+    </dl>
+
+    <div class="mt-5 flex flex-wrap gap-2">
+      <a href="/settings" class="hb on">
+        <Icon name="settings" />
+        Edit profile
+      </a>
+      <a href="/" class="hb">
+        <Icon name="file-code" />
+        Open the editor
+      </a>
+      <form method="POST" action="/auth/signout">
+        <input type="hidden" name="next" value="/" />
+        <button type="submit" class="hb danger">
+          <Icon name="log-out" />
+          Sign out
+        </button>
+      </form>
+    </div>
+  </section>
+
+  <section class="mt-6 rounded-xl border border-dashed border-neutral-800 p-6 text-center">
+    <Icon name="file-text" size={20} class="mx-auto text-neutral-600" />
+    <h2 class="mt-3 text-sm font-medium text-neutral-200">No documents yet</h2>
+    <p class="mx-auto mt-1 max-w-md text-xs leading-relaxed text-neutral-500">
+      Phase 3 adds documents, folders and sharing: every tab in the editor becomes a row in
+      <code class="text-neutral-400">public.documents</code>, protected by row level security. Your
+      local drafts will be imported the first time you sign in.
+    </p>
+    <a href="/" class="mt-4 inline-flex text-xs text-sky-300 hover:text-sky-200">
+      Keep writing in the editor →
+    </a>
+  </section>
+
+  <section class="mt-6 grid gap-3 sm:grid-cols-2">
+    <div class="rounded-xl border border-neutral-800 p-4">
+      <Icon name="shield-check" size={16} class="text-neutral-500" />
+      <h2 class="mt-2 text-xs font-medium text-neutral-200">Session</h2>
+      <p class="mt-1 text-xs leading-relaxed text-neutral-500">
+        Your session lives in httpOnly cookies refreshed on every request, so a reload keeps you
+        signed in and the browser never stores a token in JavaScript.
+      </p>
+    </div>
+    <div class="rounded-xl border border-neutral-800 p-4">
+      <Icon name="key-round" size={16} class="text-neutral-500" />
+      <h2 class="mt-2 text-xs font-medium text-neutral-200">No pictures, on purpose</h2>
+      <p class="mt-1 text-xs leading-relaxed text-neutral-500">
+        Accounts are represented by initials, so nothing has to be uploaded or moderated.
+      </p>
+    </div>
+  </section>
+</AccountLayout>

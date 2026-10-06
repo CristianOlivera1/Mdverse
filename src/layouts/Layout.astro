@@ -1,0 +1,28 @@
+---
+import '@/styles/global.css';
+import '@/styles/markdown.css';
+
+interface Props {
+  title?: string;
+  bodyClass?: string;
+  dataPanel?: 'code' | 'preview';
+}
+
+const { title = 'Mdverse', bodyClass = '', dataPanel } = Astro.props;
+---
+
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <link rel="icon" href="/favicon.ico" />
+    <meta name="generator" content={Astro.generator} />
+    <title>{title}</title>
+    <slot name="head" />
+  </head>
+  <body class={bodyClass} data-panel={dataPanel}>
+    <slot />
+  </body>
+</html>
