@@ -14,69 +14,80 @@ const next = safeRedirectPath(params.get('next'), DEFAULT_AUTHENTICATED_PATH);
 const notice = authNotice({ error: params.get('error'), sent: params.get('sent') });
 const email = params.get('email') ?? '';
 const configured = isSupabaseConfigured();
-// Signing in before confirming the address is the one failure the user can fix
-// from here, so it gets its own action instead of a dead end.
 const needsConfirmation = params.get('error') === 'email_not_confirmed';
 ---
 
-<AuthShell
-  title="Sign in · Mdverse"
-  heading="Sign in"
-  subtitle="Your drafts live in this browser until you sign in. Afterwards they follow you across devices."
-  notice={notice}
->
-  {!configured && (
-    <p class="rounded-lg border border-amber-500/40 bg-amber-500/10 px-3 py-2 text-xs leading-relaxed text-amber-200">
-      <Icon name="lucide:triangle-alert" size={14} class="inline -mt-0.5 mr-1" />
-      {SUPABASE_SETUP_HINT}
-    </p>
-  )}
+<div class="relative overflow-hidden z-10 min-h-screen flex flex-col justify-center">
+  <div class="absolute inset-0 -z-10 overflow-hidden pointer-events-none">
+    <img
+      src="/images/bg-login.avif"
+      alt=""
+      class="w-full h-full object-cover opacity-80 mask-b-from-80% mask-b-to-99%"
+    />
+  </div>
 
-  <form method="POST" action="/auth/signin" class="space-y-3">
-    <input type="hidden" name="next" value={next} />
-    <EmailField value={email} />
-    <PasswordField label="Password" autocomplete="current-password">
-      <Fragment slot="label-extra">
-        <a href="/forgot-password" class="text-[11px] text-sky-300 hover:text-sky-200">
-          Forgot password?
-        </a>
-      </Fragment>
-    </PasswordField>
-    <button
-      type="submit"
-      disabled={!configured}
-      class="w-full rounded-lg bg-white px-3 py-2 text-sm font-medium text-black hover:bg-neutral-200 disabled:opacity-50 disabled:hover:bg-white"
-    >
-      Sign in
-    </button>
-  </form>
+  <AuthShell
+    title="Sign in · Mdverse"
+    heading="Sign in"
+    subtitle="Your drafts live in this browser until you sign in. Afterwards they follow you across devices."
+    notice={notice}
+  >
+    {!configured && (
+      <p class="rounded-lg border border-amber-500/40 bg-amber-500/10 px-3 py-2 text-xs leading-relaxed text-amber-200">
+        <Icon name="lucide:triangle-alert" size={14} class="inline -mt-0.5 mr-1" />
+        {SUPABASE_SETUP_HINT}
+      </p>
+    )}
 
-  {needsConfirmation && (
-    <form method="POST" action="/auth/resend" class="mt-3">
+    <form method="POST" action="/auth/signin" class="space-y-3">
       <input type="hidden" name="next" value={next} />
-      <input type="hidden" name="email" value={email} />
+      <EmailField value={email} />
+      <PasswordField label="Password" autocomplete="current-password">
+        <Fragment slot="label-extra">
+          <a href="/forgot-password" class="text-[11px] text-sky-300 hover:text-sky-200">
+            Forgot password?
+          </a>
+        </Fragment>
+      </PasswordField>
       <button
         type="submit"
         disabled={!configured}
-        class="w-full rounded-lg border border-neutral-800 px-3 py-2 text-xs text-neutral-300 hover:border-neutral-700 hover:bg-neutral-900 disabled:opacity-50"
+        class="w-full rounded-lg bg-white px-3 py-2 text-sm font-medium text-black hover:bg-neutral-200 disabled:opacity-50 disabled:hover:bg-white"
       >
-        Send me a new confirmation link
+        Sign in
       </button>
     </form>
-  )}
 
-  <div class="mt-6">
-    <OAuthButtons next={next} verb="Sign in" />
-  </div>
+    {needsConfirmation && (
+      <form method="POST" action="/auth/resend" class="mt-3">
+        <input type="hidden" name="next" value={next} />
+        <input type="hidden" name="email" value={email} />
+        <button
+          type="submit"
+          disabled={!configured}
+          class="w-full rounded-lg border border-neutral-800 px-3 py-2 text-xs text-neutral-300 hover:border-neutral-700 hover:bg-neutral-900 disabled:opacity-50"
+        >
+          Send me a new confirmation link
+        </button>
+      </form>
+    )}
 
-  <p class="mt-8 text-center text-xs text-neutral-500">
-    New here?{' '}
-    <a href={`/signup?next=${encodeURIComponent(next)}`} class="text-neutral-200 hover:text-white">
-      Create an account
-    </a>
-    <span class="mx-1.5 text-neutral-700">·</span>
-    <a href="/" class="text-neutral-400 hover:text-neutral-200">
-      Continue without an account
-    </a>
-  </p>
-</AuthShell>
+    <div class="mt-6">
+      <OAuthButtons next={next} verb="Sign in" />
+    </div>
+
+    <p class="mt-8 text-center text-xs text-neutral-500">
+      New here?{' '}
+      <a
+        href={`/signup?next=${encodeURIComponent(next)}`}
+        class="text-neutral-200 hover:text-white"
+      >
+        Create an account
+      </a>
+      <span class="mx-1.5 text-neutral-700">·</span>
+      <a href="/" class="text-neutral-400 hover:text-neutral-200">
+        Continue without an account
+      </a>
+    </p>
+  </AuthShell>
+</div>

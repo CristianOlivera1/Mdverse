@@ -50,7 +50,7 @@ textarea {
   flex-shrink: 0;
 }
 
-button{
+button {
   cursor: pointer;
 }
 
@@ -79,6 +79,42 @@ button{
 .ft:focus-visible,
 .fm-btn:focus-visible,
 .tab:focus-visible {
+  outline: 1px solid #3b82f6;
+  outline-offset: -1px;
+}
+
+/* Account sidebar: the same look as .hb, but left-aligned and full width. */
+.sb-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  height: 34px;
+  padding: 0 10px;
+  border-radius: 8px;
+  font-size: 13px;
+  color: #9a9a9a;
+  transition:
+    color 0.15s,
+    background 0.15s;
+}
+
+.sb-item:hover {
+  color: #fff;
+  background: #171717;
+}
+
+.sb-item.on {
+  color: #fff;
+  background: #262626;
+}
+
+.sb-item svg {
+  width: 16px;
+  height: 16px;
+  flex-shrink: 0;
+}
+
+.sb-item:focus-visible {
   outline: 1px solid #3b82f6;
   outline-offset: -1px;
 }

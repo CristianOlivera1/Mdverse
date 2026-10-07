@@ -1,0 +1,323 @@
+---
+import Icon from '@/components/ui/Icon.astro';
+import {
+  LINK_EXPIRIES,
+  ROLE_HINTS,
+  VISIBILITY_LABELS,
+  VISIBILITIES,
+} from '@/lib/documents/sharing';
+
+// The button stays hidden until the editor says there is a saved document behind it.
+---
+
+<button
+  type="button"
+  class="hb"
+  id="collaborate-open"
+  hidden
+  title="Invite people to this document"
+  aria-haspopup="dialog"
+>
+  <Icon name="lucide:user-plus" />
+  <span class="hidden lg:inline">Collaborate</span>
+</button>
+
+<dialog
+  id="collaborate-dialog"
+  class="collab-dialog"
+  aria-labelledby="collaborate-heading"
+  data-collab-dialog
+>
+  <header class="flex items-start justify-between gap-3 border-b border-neutral-800 px-4 py-3">
+    <div class="min-w-0">
+      <h2
+        id="collaborate-heading"
+        class="flex items-center gap-2 text-sm font-medium text-neutral-100"
+      >
+        <Icon name="lucide:users" size={15} />
+        Collaborate
+      </h2>
+      <p class="mt-0.5 truncate text-[11px] text-neutral-500" data-collab="subtitle">
+        Who can reach this document
+      </p>
+    </div>
+    <div class="flex shrink-0 items-center gap-1">
+      <a href="/dashboard" class="hb" data-collab="full-page" title="Open the full sharing page">
+        <Icon name="lucide:external-link" />
+        <span class="hidden sm:inline">Full page</span>
+      </a>
+      <button type="button" class="hb" data-collab="close" title="Close" aria-label="Close">
+        <Icon name="lucide:x" />
+      </button>
+    </div>
+  </header>
+
+  <div class="min-h-0 flex-1 overflow-y-auto px-4 py-4" data-collab="body">
+    <p
+      class="mb-4 rounded-lg border px-3 py-2 text-xs"
+      data-collab="notice"
+      role="status"
+      aria-live="polite"
+      hidden
+    ></p>
+
+    <p class="text-xs text-neutral-500" data-collab="loading">
+      Loading who has access…
+    </p>
+
+    <p
+      class="rounded-xl border border-dashed border-neutral-800 p-4 text-xs leading-relaxed text-neutral-500"
+      data-collab="unavailable"
+      hidden
+    >
+      We could not read who has access right now. Check your connection and try again.
+    </p>
+
+    <section data-collab="readonly" hidden>
+      <div class="rounded-xl border border-dashed border-neutral-800 p-4">
+        <h3 class="flex items-center gap-2 text-xs font-medium text-neutral-200">
+          <Icon name="lucide:lock" size={13} />
+          Only the owner decides who has access
+        </h3>
+        <p class="mt-2 text-xs leading-relaxed text-neutral-500">
+          <span data-collab="role-line">Your role here is a reader.</span> You can read the document
+          and its history, and keep editing if that is your role — sharing stays with the owner.
+        </p>
+      </div>
+    </section>
+
+    <div class="space-y-6" data-collab="manage" hidden>
+      <section>
+        <h3 class="flex items-center gap-2 text-xs font-medium text-neutral-300">
+          <Icon name="lucide:user-plus" size={13} />
+          Invite by email
+        </h3>
+        <form class="mt-2 space-y-2" data-collab-form="invite">
+          <textarea
+            name="emails"
+            rows="2"
+            required
+            placeholder="ana@example.com, luis@example.com"
+            aria-label="Email addresses to invite"
+            class="w-full rounded-lg border border-neutral-800 bg-black px-3 py-2 text-sm text-neutral-100 placeholder:text-neutral-600 focus:border-neutral-600 focus:outline-none"
+          ></textarea>
+          <div class="flex flex-wrap items-center gap-2">
+            <select
+              name="role"
+              aria-label="Role for the invited addresses"
+              class="rounded-lg border border-neutral-800 bg-black px-2 py-1.5 text-xs text-neutral-200"
+            >
+              <option value="reader">Can view</option>
+              <option value="editor">Can edit</option>
+            </select>
+            <button type="submit" class="hb on">
+              <Icon name="lucide:send" />
+              Send invitation
+            </button>
+          </div>
+          <p class="text-[11px] leading-relaxed text-neutral-500">
+            An address with an account gets access immediately. One without an account keeps the
+            invitation until it signs up.
+          </p>
+        </form>
+      </section>
+
+      <section>
+        <h3 class="flex items-center gap-2 text-xs font-medium text-neutral-400">
+          <Icon name="lucide:users" size={13} />
+          People with access
+          <span class="text-neutral-600" data-collab="people-count"></span>
+        </h3>
+        <ul class="mt-2 space-y-2" data-collab="people"></ul>
+        <p class="mt-2 text-xs text-neutral-500" data-collab="people-empty" hidden>
+          Nobody else yet — invite someone above.
+        </p>
+
+        <div class="mt-3" data-collab="invitations-block" hidden>
+          <h4 class="text-[11px] font-medium text-neutral-400">Waiting for an account</h4>
+          <ul class="mt-2 space-y-2" data-collab="invitations"></ul>
+        </div>
+      </section>
+
+      <section>
+        <h3 class="flex items-center gap-2 text-xs font-medium text-neutral-300">
+          <Icon name="lucide:link" size={13} />
+          Share by link
+        </h3>
+        <form class="mt-2 flex flex-wrap items-center gap-2" data-collab-form="link">
+          <input type="hidden" name="action" value="create" />
+          <select
+            name="role"
+            aria-label="Role granted by the link"
+            class="rounded-lg border border-neutral-800 bg-black px-2 py-1.5 text-xs text-neutral-200"
+          >
+            <option value="reader">Can view</option>
+            <option value="editor">Can edit</option>
+          </select>
+          <select
+            name="expiry"
+            aria-label="Link expiry"
+            class="rounded-lg border border-neutral-800 bg-black px-2 py-1.5 text-xs text-neutral-200"
+          >
+            {LINK_EXPIRIES.map((expiry) => (
+              <option value={String(expiry.days)}>{expiry.label}</option>
+            ))}
+          </select>
+          <button type="submit" class="hb">
+            <Icon name="lucide:plus" />
+            Create link
+          </button>
+        </form>
+        <ul class="mt-2 space-y-2" data-collab="links"></ul>
+        <p class="mt-2 text-xs text-neutral-500" data-collab="links-empty" hidden>
+          No links yet.
+        </p>
+      </section>
+
+      <section>
+        <h3 class="flex items-center gap-2 text-xs font-medium text-neutral-300">
+          <Icon name="lucide:eye" size={13} />
+          Who can reach it
+        </h3>
+        <form class="mt-2 space-y-2" data-collab-form="visibility">
+          {VISIBILITIES.map((visibility) => (
+            <label class="flex items-start gap-3 rounded-lg border border-neutral-800 p-3">
+              <input
+                type="radio"
+                name="visibility"
+                value={visibility}
+                class="mt-0.5"
+                data-collab-visibility={visibility}
+              />
+              <span class="min-w-0">
+                <span class="block text-sm text-neutral-100">
+                  {VISIBILITY_LABELS[visibility].label}
+                </span>
+                <span class="mt-0.5 block text-[11px] leading-relaxed text-neutral-500">
+                  {VISIBILITY_LABELS[visibility].hint}
+                </span>
+              </span>
+            </label>
+          ))}
+          <button type="submit" class="hb on">
+            Save
+          </button>
+        </form>
+        <p class="mt-3 text-[11px] leading-relaxed text-neutral-600">
+          Roles: {ROLE_HINTS.reader} {ROLE_HINTS.editor} Everything here is enforced by row level
+          security in Postgres, not by this dialog.
+        </p>
+      </section>
+    </div>
+  </div>
+</dialog>
+
+<template data-collab-template="person">
+  <li class="rounded-xl border border-neutral-800 p-3">
+    <div class="flex flex-wrap items-center justify-between gap-2">
+      <div class="min-w-0">
+        <p class="truncate text-sm text-neutral-100" data-field="name"></p>
+        <p class="mt-0.5 truncate text-[11px] text-neutral-500" data-field="meta"></p>
+      </div>
+      <div class="flex shrink-0 items-center gap-1">
+        <select
+          class="rounded-lg border border-neutral-800 bg-black px-2 py-1.5 text-xs text-neutral-200"
+          data-field="role"
+          aria-label="Role"
+        >
+          <option value="reader">Can view</option>
+          <option value="editor">Can edit</option>
+        </select>
+        <button type="button" class="hb danger" data-action="remove" title="Remove access">
+          <Icon name="lucide:user-minus" />
+        </button>
+      </div>
+    </div>
+  </li>
+</template>
+
+<template data-collab-template="invitation">
+  <li class="rounded-xl border border-dashed border-neutral-800 p-3">
+    <div class="flex flex-wrap items-center justify-between gap-2">
+      <div class="min-w-0">
+        <p class="truncate text-sm text-neutral-200" data-field="email"></p>
+        <p class="mt-0.5 truncate text-[11px] text-neutral-500" data-field="meta"></p>
+      </div>
+      <button type="button" class="hb danger" data-action="revoke">
+        <Icon name="lucide:x" />
+        Revoke
+      </button>
+    </div>
+  </li>
+</template>
+
+<template data-collab-template="link">
+  <li class="rounded-xl border border-neutral-800 p-3">
+    <div class="flex flex-wrap items-center justify-between gap-2">
+      <p class="text-[11px] text-neutral-400" data-field="meta"></p>
+      <button type="button" class="hb danger" data-action="revoke">
+        <Icon name="lucide:trash" />
+        Revoke
+      </button>
+    </div>
+    <div class="mt-2 flex items-center gap-1">
+      <input
+        type="text"
+        readonly
+        aria-label="Share link"
+        class="min-w-0 flex-1 rounded-lg border border-neutral-800 bg-black px-2 py-1.5 font-mono text-[11px] text-neutral-300"
+        data-field="url"
+      />
+      <button type="button" class="hb" data-action="copy" title="Copy link">
+        <Icon name="lucide:copy" />
+        Copy
+      </button>
+    </div>
+  </li>
+</template>
+
+<style>
+  .collab-dialog {
+    width: min(560px, calc(100vw - 24px));
+    max-height: min(84vh, 760px);
+    /* Tailwind's preflight zeroes every margin, including the one the browser uses
+       to centre a modal dialog. */
+    margin: auto;
+    padding: 0;
+    overflow: hidden;
+    color: #e5e5e5;
+    background: #0b0b0b;
+    border: 1px solid #2a2a2a;
+    border-radius: 16px;
+    box-shadow: 0 24px 70px #000e;
+  }
+
+  .collab-dialog[open] {
+    display: flex;
+    flex-direction: column;
+    animation: collab-in 0.14s ease-out;
+  }
+
+  .collab-dialog::backdrop {
+    background: #000000cc;
+  }
+
+  @keyframes collab-in {
+    from {
+      opacity: 0;
+      transform: translateY(6px);
+    }
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .collab-dialog[open] {
+      animation: none;
+    }
+  }
+</style>
+
+<script>
+  import { initCollaborateDialog } from '@/lib/app/collaborateDialog';
+
+  initCollaborateDialog();
+</script>

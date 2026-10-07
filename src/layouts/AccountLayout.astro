@@ -19,16 +19,13 @@ const account = toAccountSummary(Astro.locals.user, Astro.locals.profile);
 if (!account) return Astro.redirect('/login?next=/dashboard');
 
 const nav = [
-  { id: 'editor', label: 'Editor', href: '/' },
-  { id: 'dashboard', label: 'Documents', href: '/dashboard' },
-  { id: 'settings', label: 'Profile', href: '/settings' },
+  { id: 'editor', label: 'Editor', href: '/', icon: 'lucide:pencil-line' },
+  { id: 'dashboard', label: 'Documents', href: '/dashboard', icon: 'lucide:file-text' },
+  { id: 'settings', label: 'Profile', href: '/settings', icon: 'lucide:settings' },
 ] as const;
 ---
 
-<Layout
-  title={`${title} · Mdverse`}
-  bodyClass="min-h-screen bg-black text-neutral-200 font-sans"
->
+<Layout title={`${title} · Mdverse`} bodyClass="min-h-screen bg-black text-neutral-200 font-sans">
   <Fragment slot="head">
     <meta name="robots" content="noindex" />
   </Fragment>
@@ -42,8 +39,7 @@ const nav = [
           </span>
           <span class="hidden lg:inline text-sm font-medium text-neutral-100">Mdverse</span>
         </a>
-        <span class="sep"></span>
-        <nav class="flex items-center gap-1" aria-label="Account">
+        <nav class="flex items-center gap-1 sm:hidden" aria-label="Account">
           {nav.map((item) => (
             <a
               href={item.href}
@@ -77,12 +73,30 @@ const nav = [
       </div>
     </header>
 
-    <main class="flex-1 w-full max-w-3xl mx-auto px-4 sm:px-6 py-8 sm:py-12">
-      <h1 class="text-xl sm:text-2xl font-semibold text-neutral-50">{title}</h1>
-      {description && <p class="mt-2 text-sm text-neutral-400">{description}</p>}
-      <div class="mt-8">
-        <slot />
-      </div>
-    </main>
+    <div class="flex flex-1 min-h-0">
+      <nav
+        class="max-sm:hidden flex w-[210px] shrink-0 flex-col gap-1 border-r border-neutral-800 p-3"
+        aria-label="Account"
+      >
+        {nav.map((item) => (
+          <a
+            href={item.href}
+            class:list={['sb-item', current === item.id && 'on']}
+            aria-current={current === item.id ? 'page' : undefined}
+          >
+            <Icon name={item.icon} />
+            {item.label}
+          </a>
+        ))}
+      </nav>
+
+      <main class="flex-1 w-full min-w-0 max-w-3xl mx-auto px-4 sm:px-6 py-8 sm:py-12">
+        <h1 class="text-xl sm:text-2xl font-semibold text-neutral-50">{title}</h1>
+        {description && <p class="mt-2 text-sm text-neutral-400">{description}</p>}
+        <div class="mt-8">
+          <slot />
+        </div>
+      </main>
+    </div>
   </div>
 </Layout>

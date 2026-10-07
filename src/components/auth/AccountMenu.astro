@@ -7,15 +7,46 @@ const account = toAccountSummary(Astro.locals.user, Astro.locals.profile);
 ---
 
 {account ? (
-  <a
-    href="/dashboard"
-    class="hb"
-    title={`${account.displayName} — your account`}
-    aria-label={`Account: ${account.displayName}`}
-  >
-    <Avatar name={account.displayName} seed={account.toneSeed} size="sm" />
-    <span class="hidden lg:inline max-w-[120px] truncate">{account.displayName}</span>
-  </a>
+  <div>
+    <button
+      type="button"
+      class="hb"
+      data-menu="account"
+      aria-haspopup="true"
+      aria-expanded="false"
+      title={`${account.displayName} — your account`}
+      aria-label={`Account: ${account.displayName}`}
+    >
+      <Avatar name={account.displayName} seed={account.toneSeed} size="sm" />
+      <span class="hidden lg:inline max-w-[120px] truncate">{account.displayName}</span>
+    </button>
+
+    <div class="pop" data-pop="account" hidden>
+      <p class="pop-label truncate" title={account.email}>
+        {account.displayName} · @{account.username}
+      </p>
+      <a href="/" class="mi">
+        <Icon name="lucide:pencil-line" />
+        Editor
+      </a>
+      <a href="/dashboard" class="mi">
+        <Icon name="lucide:file-text" />
+        Documents
+      </a>
+      <a href="/settings" class="mi">
+        <Icon name="lucide:settings" />
+        Profile
+      </a>
+      <div class="pop-sep"></div>
+      <form method="POST" action="/auth/signout">
+        <input type="hidden" name="next" value="/" />
+        <button type="submit" class="mi danger">
+          <Icon name="lucide:log-out" />
+          Sign out
+        </button>
+      </form>
+    </div>
+  </div>
 ) : (
   <a href="/login" class="hb" title="Sign in to sync your documents">
     <Icon name="lucide:log-in" />
