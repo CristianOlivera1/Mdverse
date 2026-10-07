@@ -85,6 +85,9 @@ export function initEditorApp(): void {
   const lastSaved = new Map<string, string>();
   const saveTimers = new Map<string, number>();
   const conflicted = new Set<string>();
+  // Documents whose save is in flight, and documents asked to save again while that happened.
+  const saving = new Set<string>();
+  const pendingSaves = new Set<string>();
   let booted = false;
 
   let collab: CollabSession | null = null;
@@ -120,6 +123,14 @@ export function initEditorApp(): void {
     window.clearTimeout(saveTimers.get(doc.id));
     saveTimers.delete(doc.id);
 
+    // A save of this document is already in flight. Sending a second write with the same
+    // base revision can only come back as a conflict — the row already moved on — so wait
+    // for the running one and save again with the revision it returns.
+    if (saving.has(doc.id)) {
+      pendingSaves.add(doc.id);
+      return;
+    }
+
     const run = (): void => {
       void runCloudSave(doc, keepalive);
     };
@@ -136,13 +147,29 @@ export function initEditorApp(): void {
     const content = doc.content;
 
     showStatus('Saving…', 900);
-    const result = await cloud.save({
-      id: doc.id,
-      content,
-      revision,
-      keepalive,
-    });
+    saving.add(doc.id);
+
+    let result: SaveDocumentResult;
+    try {
+      result = await cloud.save({
+        id: doc.id,
+        content,
+        revision,
+        keepalive,
+        // The title travels with every save: a rename that waits for an in-flight save
+        // is then persisted by it instead of being dropped.
+        title: doc.title,
+      });
+    } finally {
+      saving.delete(doc.id);
+    }
+
     applySaveResult(doc, result, content);
+
+    // Whoever asked to save while this one was travelling gets a fresh revision to use.
+    if (pendingSaves.delete(doc.id) && !conflicted.has(doc.id)) {
+      queueCloudSave(doc, true, keepalive);
+    }
   }
 
   function applySaveResult(
@@ -183,10 +210,23 @@ export function initEditorApp(): void {
 
     const server = await cloud.fetch(doc.id);
     if (!server) {
-      showStatus('This document no longer exists', 4000);
+      // A failed read is not proof the document is gone; let the next save find out.
+      conflicted.delete(doc.id);
+      showStatus('Could not check the other version — retrying', 3000);
+      window.setTimeout(() => queueCloudSave(doc, true), RETRY_DELAY);
       return;
     }
     revisions.set(doc.id, server.revision);
+
+    // The revision moved on without the text changing — publishing the document, or another
+    // window writing the same thing — so there is nothing to decide. Asking here is what
+    // made this dialog look like it fired for no reason.
+    if (server.content === doc.content && server.title === doc.title) {
+      lastSaved.set(doc.id, server.content);
+      conflicted.delete(doc.id);
+      showStatus('Synced', 1600);
+      return;
+    }
 
     const keepMine = window.confirm(
       `“${doc.title}” was changed somewhere else.\n\n` +
@@ -221,16 +261,12 @@ export function initEditorApp(): void {
       return;
     }
 
-    const revision = revisions.get(doc.id);
-    if (revision === undefined) return;
+    // Renaming is a write too: sending it while an autosave is in the air would make
+    // one of the two fail with a revision conflict for no reason.
+    if (saving.has(doc.id)) pendingSaves.add(doc.id);
+    else await runCloudSave(doc);
 
-    const content = doc.content;
-    showStatus('Saving…', 900);
-    applySaveResult(
-      doc,
-      await cloud.save({ id: doc.id, content, revision, title: doc.title }),
-      content,
-    );
+    announceActiveDocument();
   }
 
   function renderPresence(): void {
@@ -318,16 +354,19 @@ export function initEditorApp(): void {
     const known = revisions.get(save.documentId);
     if (known === undefined || save.revision <= known) return;
 
-    revisions.set(save.documentId, save.revision);
-
     const doc = documentById(save.documentId);
-    if (!doc) return;
+    const dirty = doc ? doc.content !== lastSaved.get(save.documentId) : false;
 
-    const dirty = doc.content !== lastSaved.get(save.documentId);
     if (dirty || conflicted.has(save.documentId)) {
+      // The revision *we* knew is kept on purpose: the save that follows comes back as a
+      // conflict and asks which text to keep, instead of quietly writing over the version
+      // that just arrived.
       showStatus('Changed elsewhere — your next save will ask what to keep', 4000);
       return;
     }
+
+    revisions.set(save.documentId, save.revision);
+    if (!doc) return;
 
     void (async () => {
       const server = await cloud?.fetch(save.documentId);
@@ -475,7 +514,13 @@ export function initEditorApp(): void {
   function flushAll(keepalive = false): void {
     panes.forEach(flushPane);
     persist();
-    if (cloud) documents.forEach((doc) => queueCloudSave(doc, true, keepalive));
+    if (!cloud) return;
+
+    // Only documents that actually changed. Writing an untouched row bumps its revision,
+    // which makes every other open editor ask about a conflict that never happened.
+    documents.forEach((doc) => {
+      if (doc.content !== lastSaved.get(doc.id)) queueCloudSave(doc, true, keepalive);
+    });
   }
 
   const scrollRatio = (element: HTMLElement): number => {
@@ -689,6 +734,19 @@ export function initEditorApp(): void {
 
     collab?.setDocument(id);
     syncOverlay();
+    announceActiveDocument();
+  }
+
+  /** The header's collaboration dialog follows whichever tab is on screen. */
+  function announceActiveDocument(): void {
+    const doc = documentById(activeId);
+    if (!doc) return;
+
+    document.dispatchEvent(
+      new CustomEvent('mdverse:active-document', {
+        detail: { id: doc.id, title: doc.title, collaborative: cloud !== null },
+      }),
+    );
   }
 
   async function addDocument(): Promise<void> {
@@ -742,6 +800,7 @@ export function initEditorApp(): void {
     panes.delete(id);
     window.clearTimeout(saveTimers.get(id));
     saveTimers.delete(id);
+    pendingSaves.delete(id);
     conflicted.delete(id);
     documents = documents.filter((item) => item.id !== id);
     if (activeId === id) activeId = documents[0].id;
@@ -1302,4 +1361,6 @@ export function initEditorApp(): void {
   setPanel(document.body.dataset.panel === 'preview' ? 'preview' : 'code');
   showStatus('Loading your documents…', 4000);
   void boot();
+
+  document.addEventListener('mdverse:request-active-document', () => announceActiveDocument());
 }
