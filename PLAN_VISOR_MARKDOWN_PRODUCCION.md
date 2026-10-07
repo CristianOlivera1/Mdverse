@@ -552,6 +552,7 @@ alter table public.document_invitations   enable row level security;
 - **Nunca** usar `user_metadata`/`raw_user_meta_data` para autorización; usar `app_metadata`.
 - Vistas con `security_invoker = true` (Postgres 15+) → Supabase ya usa PG ≥ 15.
 - Evitar `SECURITY DEFINER`; si es imprescindible, fuera del esquema expuesto + chequeo de `auth.uid()`.
+- **Ayudantes de autorización con `boolean` estricto**: `select coalesce(<expresión>, false)`, nunca NULL. En una política un NULL equivale a «no permitido», pero en un guard de PL/pgSQL (`if not private.can_manage_document(...)`) **se salta el `raise`** y la función `SECURITY DEFINER` —que no tiene RLS detrás— queda abierta. El guard se escribe siempre `if private.can_...(...) is not true then`.
 
 Ejemplo de política de documentos (lectura para dueño o colaborador):
 
@@ -657,6 +658,8 @@ create policy "documents_update_owner_or_editor"
 - **Reconexión:** backoff exponencial; estado de conexión en `stores/collab.ts` y en el badge "Sincronizado / Sin conexión" (el actual `#pv-status`).
 - **Offline:** los cambios se encolan en IndexedDB y se reenvían al reconectar.
 
+**Lo que la Fase 4 implementó de verdad** (ver el detalle en el Bloque 12, Fase 4): presencia, `postgres_changes` sobre `documents`, `broadcast` de cursores con throttle, badge *Synced / Offline*, backoff exponencial y reintento al volver la red. **Aplazado:** la cola en IndexedDB (hoy el texto sin guardar vive en memoria y se reintenta; un cierre de pestaña sin red lo pierde — decisión consciente, anotada aquí) y los canales privados con políticas sobre `realtime.messages` (hoy el topic es `doc:{uuid}`: el uuid es la capacidad y solo lo conocen los miembros, pero el endurecimiento propio es el de la Fase 6).
+
 ### 8.2 Nivel 2 (Fase opcional, recomendado a futuro) — CRDT con Yjs
 
 - Sustituir el editor por **CodeMirror 6 + y-codemirror.next** y sincronizar con **Yjs**.
@@ -690,6 +693,8 @@ Requisito explícito del cliente. Dos mecanismos, ambos gestionados desde `Share
 - Escritura: dueño, colaborador `editor`/`admin`, o token `role='editor'` **+ usuario autenticado**.
 - Cambio de rol y revocación: solo dueño o `admin`.
 - Toda decisión se aplica en **RLS** (no solo en la UI).
+
+**Implementado en la Fase 4:** invitación por correo con rol (una función `public.invite_collaborator` resuelve si la dirección tiene cuenta o no), cambio de rol, revocación de invitación y de acceso, enlaces con caducidad y revocación, visibilidad private/unlisted/public, la página `/documents/:id/share`, y `/s/:token` resolviendo el token en la base de datos. Un enlace con rol `editor` sigue exigiendo sesión: al abrirlo, `public.claim_share_link` crea la fila de colaborador con ese rol (sin degradar nunca un rol mayor). **Pendiente (Fase 5):** `d/[slug]` público e indexable con SEO y cabeceras de caché.
 
 ---
 
@@ -749,9 +754,9 @@ SENTRY_DSN=                           # observabilidad (Fase 6)
 | 4b | Política de contraseñas | Authentication → Settings | Longitud mínima **8** (debe coincidir con `PASSWORD_MIN_LENGTH`). ✅|
 | 4c | Plantillas de correo | Authentication → Email Templates | “Confirm signup” y “Reset password” apuntan a `{{ .SiteURL }}/auth/callback` (así el enlace pasa por el intercambio PKCE). ✅|
 | 5 | SMTP propio | Authentication → SMTP | Recomendado en producción (entrega fiable de magic links). ✅|
-| 6 | Aplicar migraciones | CLI: `supabase link` + `supabase db push` | O pegar los archivos de `supabase/migrations/` en el SQL Editor, **en orden de nombre**. Ambos son idempotentes y reconciliadores: reaplicarlos es la forma prevista de actualizar un esquema ya creado a mano. ✅ `profiles` aplicada (2026-10-06). ◐ `20261006130000_documents.sql`: falta **reaplicar** por la corrección de recursión en `documents_update_editor` (ver 6.4); sin eso todo `UPDATE` sobre `documents` falla.✅ |
+| 6 | Aplicar migraciones | CLI: `supabase link` + `supabase db push` | O pegar los archivos de `supabase/migrations/` en el SQL Editor, **en orden de nombre**. Ambos son idempotentes y reconciliadores: reaplicarlos es la forma prevista de actualizar un esquema ya creado a mano. ✅ Las tres migraciones (`profiles`, `documents`, `sharing`) aplicadas por el usuario y verificadas con `pnpm db:rls` (**32/32**). ✅ `20261006140000_sharing.sql` reaplicada y comprobada en vivo (funciones de compartir, y `documents` en la publicación de Realtime). ◐ **Reaplicar `20261006130000_documents.sql`**: corrige los ayudantes de autorización (`coalesce`, hallazgo 1) y es donde vive ahora el guard de publicación (hallazgo 5). |
 | 7 | Exponer tablas a la Data API | Integrations → Data API settings | Si recién creadas no aparecen: `GRANT` explícito a `authenticated` **con RLS activado** (ver skill `supabase`).✅ |
-| 8 | Activar Realtime | Database → Replication | Añadir `documents`, `document_collaborators`, `comments` a la publicación `supabase_realtime`.✅ |
+| 8 | Activar Realtime | Database → Replication | La migración `20261006140000_sharing.sql` añade `documents` a `supabase_realtime` si la publicación existe (idempotente). `document_collaborators` y `comments` se añadirán cuando alguna fase emita cambios suyos. ✅ Aplicada y comprobada en vivo: dos clientes reciben el `UPDATE` de un documento privado y un extraño no recibe nada. |
 | 9 | Crear bucket de Storage | Storage → New bucket | `doc-images` (privado) + políticas (INSERT/SELECT/UPDATE).✅ |
 | 10 | Revisar advisors | CLI `supabase db advisors` o Dashboard → Advisors | Corregir warnings de RLS/permisos antes de producción. |
 | 11 | Backups | Settings → Database → Backups | Definir política (PITR según plan) y probar restauración. |
@@ -883,7 +888,7 @@ supabase db advisors              # revisar antes de commitear
 
 ### Fase 3 — Documentos y persistencia real (3–5 días) ✅ *código completo; reaplicar la migración de documentos*
 - ✅ **Esquema del Bloque 6 + RLS**, en `supabase/migrations/20261006130000_documents.sql`: seis tablas, enums, índices, triggers (`updated_at`, `bump_document_revision`, `snapshot_document_version`, `set_document_slug`) y las funciones de autorización en `private`. Ver decisiones y correcciones en 6.4.
-- ✅ **Pruebas de RLS** (31 escenarios), en `tests/db/rls.mjs` (`pnpm db:rls`) y **de integración** (9 escenarios), en `tests/integration/documents.test.ts` (`pnpm test:db`). Solo el proyecto real puede probar una política o un trigger.
+- ✅ **Pruebas de RLS** (32 escenarios, 32/32 al cerrar la fase; **36** tras la Fase 4), en `tests/db/rls.mjs` (`pnpm db:rls`) y **de integración** (9 escenarios), en `tests/integration/documents.test.ts` (`pnpm test:db`). Solo el proyecto real puede probar una política o un trigger. La Fase 4 añadió una tercera suite de integración (`tests/integration/sharing.test.ts`, 13 escenarios) y una de Realtime (`tests/integration/realtime.test.ts`, 5 escenarios).
 - ✅ Dashboard (crear/renombrar/eliminar/abrir), autosave con `revision` y resolución de conflictos, historial con restauración.
 - ✅ **Editores ilimitados con nombre propio** (multi-pestaña) persistidos en `documents.title`: en sesión, cada pestaña del editor es una fila.
 - ✅ Migración de borradores locales (`mdviewer:*` y las pestañas previas) desde el dashboard.
@@ -918,7 +923,7 @@ supabase db advisors              # revisar antes de commitear
 | Borrar | `.delete().select('id')`: 0 filas significa «RLS lo filtró», y se distingue de «ya no existe» leyendo lo que ese mismo usuario puede ver. |
 | Errores | Códigos cortos (`stale`, `forbidden`, `not_found`, …) en la URL y en el JSON; el detalle de Postgres se queda en el log del servidor. |
 
-**Estado medido en el proyecto real (2026-10-06):** `pnpm db:rls` → **23/31**; los 8 fallos son todos el `42P17` de `documents_update_editor` (el archivo ya lleva la corrección, pendiente de reaplicar). `pnpm test:db` → **3/9** por la misma causa (crear, listar, leer y aislar pasan; guardar, conflicto, historial y restaurar no pueden pasar mientras el `UPDATE` esté bloqueado). Los dos conjuntos deben quedar en **31/31** y **9/9** tras reaplicar el archivo. Ya verificado en la ruta HTTP real: iniciar sesión, `/dashboard`, `POST /documents` (fila creada con `slug` derivado del título) y `/documents/:id/history` funcionan; el `PATCH` de autosave devuelve `500 save_failed` mientras la política rota siga aplicada.
+**Estado medido en el proyecto real (2026-10-06):** `pnpm db:rls` → **32/32** y `pnpm test:db` → documentos **9/9**, tras reaplicar `20261006130000_documents.sql` con la corrección de recursión de `documents_update_editor` (ver 6.4). El historial del hallazgo: antes de la corrección eran **23/31** y **3/9**, todos los fallos por el `42P17` de esa política, que dejaba todo `UPDATE` sobre `documents` sin efecto (`PATCH`/autosave respondía `500 save_failed`). La comprobación `owner_id cannot be reassigned` acepta ahora las dos respuestas correctas de Postgres —rechazo explícito `42501` o filtrado silencioso— y añade una lectura posterior que confirma que el documento sigue siendo del dueño.
 
 **Lo que encontró la reconciliación (esquema creado a mano a partir del DDL del Bloque 6):** faltaban las políticas, `documents.slug` no tenía trigger (todo insert fallaba con `23502`), `document_versions` no tenía `title`, `document_collaborators` no tenía `updated_at` y el índice de búsqueda estaba configurado en `spanish`. Las migraciones del repo reconcilian todo eso de forma idempotente: **pegar los dos archivos de `supabase/migrations/` en orden y ejecutar `pnpm db:rls`**.
 
@@ -934,10 +939,64 @@ supabase db advisors              # revisar antes de commitear
 | Invitaciones | Segundo trigger en `auth.users` (`private.handle_new_user_invitations`) que convierte las invitaciones pendientes en colaboradores al registrarse; el trigger de perfiles sigue siendo responsabilidad de su migración. |
 | Búsqueda | Columna generada `to_tsvector('english', …)`; el idioma se corrige en la reconciliación si el esquema se creó con otro. |
 
-### Fase 4 — Colaboración Nivel 1 (3–5 días)
-- Realtime: presencia, cambios en vivo, cursores, estado de conexión, reconexión, offline queue.
-- Compartir: invitación por correo con rol **editor/lector** + enlace público con token (ver 8.4).
-- **Entregable:** dos usuarios editan el mismo documento en vivo.
+### Fase 4 — Colaboración Nivel 1 (3–5 días) ✅ *código completo; reaplicar `20261006130000_documents.sql`, que es donde vive el guard de publicación*
+- ✅ **Compartir**: invitación por correo con rol editor/lector (con o sin cuenta), cambio de rol, revocación, enlace con token + caducidad + revocación, y visibilidad private/unlisted/public. Todo en `/documents/:id/share` con formularios POST normales.
+- ✅ **Realtime Nivel 1**: presencia (iniciales + color estable), cambios en vivo vía `postgres_changes` sobre `documents`, cursores remotos por `broadcast` (dibujados sobre el textarea), estado de conexión con reconexión exponencial y reintento al volver la red.
+- ✅ **Enlace que funciona**: `/s/:token` resuelve el token **dentro de Postgres** (`public.resolve_share_token`) y muestra el documento en solo lectura a un visitante anónimo; con sesión, `public.claim_share_link` convierte el enlace en acceso real y manda a editar a quien puede.
+- ⏭️ **Aplazado a propósito** (ver 8.1 y 8.4): cola offline en IndexedDB, canales privados con políticas sobre `realtime.messages`, y la página pública indexable `d/[slug]` con SEO (Fase 5).
+- **Entregable:** dos usuarios editan el mismo documento en vivo. ◐ Verificado con dos clientes reales (suite de integración): `20261006140000_sharing.sql` ya está aplicada y comprobada en vivo —el guard de invitación rechaza a un extraño con `42501`, y `postgres_changes` entrega el `UPDATE` de un documento **privado** al dueño y al editor, y nada a un extraño—. Falta reaplicar `20261006130000_documents.sql`, que es donde vive ahora el guard de publicación: sin él, `pnpm db:rls` da **33/36** y el escenario «el editor no publica» falla.
+
+**Hallazgos de la primera corrida en vivo (2026-10-06)** — tres defectos reales, ninguno visible sin ejecutar:
+
+| # | Síntoma | Causa | Arreglo |
+|---|---|---|---|
+| 1 | **Agujero de seguridad**: cualquier cuenta con sesión podía hacerse `editor` de un documento ajeno (`invite_collaborator` respondía `collaborator`) | `private.can_manage_document` devolvía **NULL** para quien no es dueño ni admin (`NULL = 'admin'` → NULL), y en PL/pgSQL `if not NULL then raise` **no** se ejecuta: la única puerta de una función `SECURITY DEFINER` (que salta RLS) se abría sola | Los tres ayudantes (`can_read`/`can_edit`/`can_manage`) envuelven su expresión en `coalesce(..., false)`, y el guard pasa a `is not true` |
+| 2 | `public.claim_share_link` fallaba con **`42702: column reference "document_id" is ambiguous`**: abrir un enlace con sesión no daba acceso | La primera columna de salida (`document_id`) ensombrece la columna homónima, así que `on conflict (document_id, user_id)` es ambiguo | El conflicto se declara por constraint (`on conflict on constraint document_collaborators_pkey`) |
+| 3 | La migración **abortaba en una base limpia**: `comment on column public.document_versions.title` antes de que la tabla existiera | `comment on column` es de las pocas sentencias que no se pueden guardar con `if exists`; con el esquema ya creado a mano, el fallo quedaba oculto | El comentario se movió debajo del `create table` |
+| 4 | Dos pruebas de integración afirmaban lo contrario de la política: `removeCollaborator` de un colaborador sobre **su propia** fila (la política permite «irse del documento») y un handler `postgres_changes` registrado **después** de `subscribe()` (realtime lo rechaza) | Prueba mal escrita, no código | La suite apunta a la fila de otra persona y añade un escenario propio para «irse»; el test de Realtime abre su canal antes de suscribirse |
+
+**Hallazgos de la segunda corrida en vivo (2026-10-06)** — dos formas de fallar que leer el SQL no delata:
+
+| # | Síntoma | Causa | Arreglo |
+|---|---|---|---|
+| 5 | **La política endurecida se deshizo sin que nada avisara**: un editor volvía a publicar el borrador ajeno (`PATCH documents {visibility:'public'}` → `ok`) con las dos migraciones aplicadas | `20261006130000_documents.sql` **redefinía** `documents_update_editor` sin el guard de visibilidad, así que reaplicar los ficheros con `documents` al final devolvía la política vieja: el endurecimiento de la Fase 4 vivía en el fichero equivocado | El guard y `private.document_visibility` se mudaron al fichero de documentos, junto a las demás políticas de la tabla: ningún fichero redefine ya una política del otro, así que el orden de aplicación es indiferente. `pnpm db:rls` pasa a **36** checks (los dos nuevos lo detectan hoy) y el arnés PGlite reaplica ambos ficheros al revés y comprueba que el `42501` sigue ahí |
+| 6 | La suite de Realtime esperaba 25 s un `postgres_changes` que no podía llegar, justo después de añadir `documents` a la publicación | Arranque en frío del *changer* de WAL: una suscripción que llega antes de que el servidor tenga *listener* para la tabla no dispara nunca. Los mismos eventos llegaban segundos después; el test pasa en solitario (1,5 s) | `tests/integration/realtime.test.ts` abre un test propio («streams a change at all») que reintenta con canal nuevo hasta 4 veces con 120 s de presupuesto y deja el resto de aserciones con un stream ya caliente |
+| 7 | El arnés PGlite fallaba con `permission denied for schema auth` en el primer `UPDATE` de editor que dispara el snapshot | El arnés no concedía `usage on schema auth` a `authenticated`; Supabase real sí lo concede, y por eso el proyecto en vivo nunca lo vio | `grant usage on schema auth to anon, authenticated, service_role` en el arnés |
+
+**Cómo se verificó sin Docker:** los tres `.sql` se cargaron en **Postgres 18 real** (PGlite/WASM) con `auth.users`, `auth.uid()`/`auth.jwt()` y los roles `anon`/`authenticated` simulados. Ahí se comprobó que las migraciones se aplican en una base limpia, que un extraño recibe `42501` al invitar, que el dueño sí invita, que un enlace nunca degrada un rol y que `claim_share_link` ya no revienta. Lo que solo el proyecto real puede probar (políticas con RLS, Realtime sobre la publicación) sigue comprobándose con `pnpm db:rls` y `pnpm test:db`.
+
+**Implementación real:**
+
+| Módulo | Contenido |
+|---|---|
+| `supabase/migrations/20261006130000_documents.sql` | Bloque 6 completo: seis tablas, enums, triggers, los ayudantes de autorización en `private` y las políticas RLS — incluida la que impide que un `editor` publique (`private.document_visibility`). Idempotente. |
+| `supabase/migrations/20261006140000_sharing.sql` | `private.role_rank`, `public.invite_collaborator`, `public.resolve_share_token`, `public.claim_share_link` y `documents` en la publicación `supabase_realtime`. Idempotente, y sin redefinir ninguna política de la migración de documentos: el orden de aplicación es indiferente. |
+| `src/lib/documents/sharing.ts` | Reglas puras: parseo de direcciones, roles que un humano puede dar, ranking (espejo de `private.role_rank`), caducidades, URL del enlace, orden y resumen de la lista. |
+| `src/lib/documents/repository.ts` | `inviteCollaborator` (RPC), `listCollaborators`, `setCollaboratorRole`, `removeCollaborator`, `listInvitations`, `revokeInvitation`, `listShareLinks`, `createShareLink`, `revokeShareLink`, `setVisibility`, `resolveShareToken`, `claimShareLink`. |
+| `src/pages/documents/[id]/share.astro` | Página de gestión: invitar, lista de personas, invitaciones pendientes, enlaces con copiar, y visibilidad. Un no-owner ve un aviso en vez de listas vacías. |
+| `src/pages/documents/[id]/share/{invite,collaborator,invitation,link,visibility}.ts` | Una acción por endpoint, 303 con código corto (`invite_failed`, `email_invalid`, `role_failed`, `link=created`, …). |
+| `src/pages/s/[token].astro` | Página del enlace: anónimo → solo lectura; con sesión → reclama el acceso; token desconocido o caducado → la misma 404. Render con el pipeline probado (marked + DOMPurify) en cliente. |
+| `src/lib/collab/presence.ts` | Presencia pura: color estable por cuenta, plegado de pestañas repetidas, caducidad, «You and Ana». |
+| `src/lib/collab/cursor.ts` | Geometría pura del cursor: línea/columna, columnas visuales con tabuladores, caja del cursor y de la selección, visibilidad. |
+| `src/lib/collab/session.ts` | Cliente Realtime: un canal por documento (`presence` + `postgres_changes` filtrado por id + `broadcast`), throttle de cursores a ~16 Hz, heartbeat, TTL de cursores, backoff exponencial y reconexión al evento `online`. |
+| `src/lib/collab/overlay.ts` | Pinta los cursores remotos sobre el textarea (capa `pointer-events: none`, ancho de carácter medido, se recoloca al hacer scroll). |
+| `src/components/app/PresenceBar.astro`, `StatusBar.astro` | Iniciales de quién está conectado (oculto si estás solo) y el badge *Synced / Offline*. |
+| `src/lib/app/editorApp.ts` | Modo nube: el canal sigue a la pestaña visible, guarda `lastSaved` para saber qué está sin guardar, adopta en silencio lo que llega si no has tocado nada y **nunca** pisa tu texto si lo has tocado (el conflicto ya pregunta). |
+
+**Decisiones y hallazgos:**
+
+| Tema | Decisión |
+|---|---|
+| Resolver un enlace | El token se resuelve en la base de datos (función `SECURITY DEFINER`), no con la secret key en la ruta: un solo camino auditable, y «caducado» y «no existe» responden lo mismo. |
+| Enlace y escritura | Un enlace `editor` **no** escribe por sí solo: exige sesión y convierte el token en una fila de colaborador (`claim_share_link`), que nunca degrada un rol mayor (`role_rank`). |
+| Publicar no es editar | `documents_update_editor` exige derechos de gestión para cambiar `visibility`: sin eso, un colaborador `editor` podía hacer público el borrador de otra persona. La política vive con las demás de la tabla, en `20261006130000_documents.sql`: tenerla en la migración de `sharing` hacía que reaplicar los ficheros en el orden contrario la debilitara otra vez (hallazgo 5). |
+| Coste en el navegador | El cliente de Supabase (233 kB) se importa de forma dinámica **solo con sesión**: el script de la página del editor bajó de 265 kB a **32 kB** para un visitante anónimo (medido en el build). |
+| Sin regresión local | Si Realtime no está disponible, `openCollab` devuelve `null` y el editor sigue guardando exactamente como en la Fase 3; nada finge estar sincronizado. |
+| Presencia ≠ texto | El canal lleva overlays (nombre, color, cursores) y no texto: el guardado sigue siendo el `revision` de Postgres, que ya estaba probado. |
+
+**Estado medido (2026-10-06):** `pnpm db:rls` → **33/36** a falta de reaplicar `20261006130000_documents.sql` (los tres fallos son la política de publicación y el check anónimo que arrastra; con ella → **36/36**); `pnpm test:db` → documentos **9/9**, compartir **12/13** y Realtime **5/5** en solitario; `pnpm test` → **182 tests**; `astro check` 0 errores / 0 warnings (5 hints conocidos); `astro build` en verde; bundle del servidor con **63 iconos** de `iconNames.ts`. La página de compartir y el panel de edición se verificaron sobre el **build** (`pnpm preview`, puerto 4322) con una cuenta desechable: `/dashboard` 200 con el enlace *Share*, `/documents/:id/share` 200 con las cuatro secciones (invitar, personas, enlaces, visibilidad), `POST …/share/link` → `?link=created` con token de 48 hex, `GET /api/documents` con `viewer`, y `/s/<token>` → 404 amable mientras la migración no esté aplicada.
+
+**Aviso de entorno:** el servidor de desarrollo que quedó corriendo en el puerto 4321 (más de 45 minutos con HMR) empezó a responder HTML **vacío** (200, 0 bytes) en las páginas con sesión —`/dashboard`, `/documents/:id/history`, `/documents/:id/share`— mientras `/`, `/login` y los endpoints seguían bien. El mismo código compilado en `pnpm preview` renderiza todo, así que es un artefacto de ese proceso: `pnpm astro dev stop` y volver a arrancarlo lo resuelve. |
 
 ### Fase 5 — Compartir público, comentarios y export server-side (3–4 días)
 - Página pública `d/[slug]` SSR + SEO + cache headers.
@@ -1013,7 +1072,7 @@ supabase db advisors              # revisar antes de commitear
 | Unit | Vitest | `slug`, `patch`, `commands`, `findReplace`, `shortcuts`, `renderer`, `sanitize`, `permissions`. |
 | Componente | Vitest + DOM | Render de nuevos módulos sin regresión visual lógica. |
 | E2E | Playwright | Escribir → guardar → recargar → exportar → abrir preview con índice; login; compartir. |
-| DB/RLS | `tests/db/rls.mjs` (`pnpm db:rls`) | 31 escenarios contra el proyecto real con tres cuentas desechables: aislamiento entre usuarios, roles, concurrencia optimista, snapshots, invitaciones (incluido el alta posterior y el rol concedido), borrado y lectura anónima de documentos públicos. Es el único nivel que puede probar una política: la aplica Postgres, no el código. |
+| DB/RLS | `tests/db/rls.mjs` (`pnpm db:rls`) | 36 escenarios contra el proyecto real con tres cuentas desechables: aislamiento entre usuarios, roles, concurrencia optimista, snapshots, invitaciones (incluido el alta posterior y el rol concedido), borrado, lectura anónima de documentos públicos, que un extraño no puede auto-invitarse por el RPC y que un editor no puede publicar. Es el único nivel que puede probar una política: la aplica Postgres, no el código. |
 | Integración | Vitest + proyecto real (`pnpm test:db`) | `tests/integration/documents.test.ts`: 9 escenarios sobre la capa de datos (`create/list/save/conflict/rename/history/restore/forbidden/delete`) con sesiones reales, sin keys de servicio en el camino de la app. |
 | Paridad | Checklist del Bloque 2.1 | Cada funcionalidad actual probada antes y después de cada fase. |
 | Performance | Lighthouse CI | LCP, size de bundle y regresiones. |
@@ -1078,8 +1137,8 @@ supabase db advisors              # revisar antes de commitear
 
 - [ ] Un usuario crea una cuenta, escribe, cierra el navegador y recupera su documento.
 - [ ] Un usuario se registra con correo y contraseña, confirma la dirección, entra también con **GitHub/Google** y puede recuperar su contraseña desde el enlace de correo.
-- [ ] Dos usuarios editan el mismo documento y ven cambios/presencia en vivo.
-- [ ] Un documento puede compartirse por enlace con rol y caducidad y quedar público y indexable (si aplica).
+- [x] Dos usuarios editan el mismo documento y ven cambios/presencia en vivo. *(Fase 4: presencia, cambios en vivo y cursores; verificado con dos clientes reales sobre el proyecto. La suite de Realtime se ejecuta con `pnpm test:db` y requiere la publicación aplicada; su primer test calienta el *listener* de la tabla, con reintentos, para que una publicación recién activada no haga fallar a los demás.)*
+- [x] Un documento puede compartirse por **enlace** (con rol, caducidad y revocación) y por **invitación a un correo** con rol editor/lector. ◐ Queda para la Fase 5 que un documento `public` tenga además página indexable (`d/[slug]`) con SEO.
 - [ ] El historial permite restaurar una versión anterior.
 - [ ] El editor publica HTML y PDF reproducibles.
 - [ ] Todas las funcionalidades del inventario original (Bloque 2.1) siguen operativas.
@@ -1107,7 +1166,7 @@ supabase db advisors              # revisar antes de commitear
 
 **Tú (manual, Supabase):** crear proyecto ✅ → copiar URL + publishable + secret ✅ → activar email (**Confirm email**) + OAuth **GitHub/Google** ✅ → **pendiente:** Site/Redirect URLs, migraciones (`supabase link`/`db push`), SMTP propio, Data API grants, activar Realtime, bucket `doc-images`, `db advisors`, backups/alarmas, variables en el host.
 
-**Yo (código, por fases):** Fase 0 fundaciones ✅ → Fase 1 componentización con paridad ✅ → Fase 2 auth con contraseña + verificación por correo + OAuth ✅ → Fase 3 documentos + RLS ✅ (código completo; reaplicar `20261006130000_documents.sql` por la corrección de recursión) → Fase 4 colaboración Nivel 1 → Fase 5 público/comentarios/export → Fase 6 hardening → Fase 7 backlog.
+**Yo (código, por fases):** Fase 0 fundaciones ✅ → Fase 1 componentización con paridad ✅ → Fase 2 auth con contraseña + verificación por correo + OAuth ✅ → Fase 3 documentos + RLS ✅ → Fase 4 colaboración Nivel 1 ✅ (código completo; reaplicar `20261006130000_documents.sql` y `20261006140000_sharing.sql`) → Fase 5 público/comentarios/export → Fase 6 hardening → Fase 7 backlog.
 
 **Nunca:** `service_role` en el cliente · `auth.role()` en políticas · `user_metadata` para autorización · tablas sin RLS · versiones sin fijar · secretos en el repo.
 

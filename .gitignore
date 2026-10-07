@@ -34,3 +34,5 @@ supabase/.branches/
 .idea/
 
 PLAN_VISOR_MARKDOWN_PRODUCCION.md
+.freebuff
+supabase/migrations/**
