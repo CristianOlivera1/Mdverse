@@ -1,10 +1,6 @@
 ---
-import { avatarToneIndex, initials } from '@/lib/auth/profile';
-
 interface Props {
-  /** Display name (or email) to derive the initials from. */
   name?: string | null;
-  /** Stable color seed — normally the user id, so colors never shuffle. */
   seed?: string | null;
   size?: 'sm' | 'md' | 'lg';
   class?: string;
@@ -12,35 +8,84 @@ interface Props {
 
 const { name, seed, size = 'md', class: className = '' } = Astro.props;
 
-/** No profile pictures in this product: initials on a deterministic color. */
-const TONES = [
-  'bg-sky-500/15 text-sky-300 ring-sky-500/30',
-  'bg-emerald-500/15 text-emerald-300 ring-emerald-500/30',
-  'bg-amber-500/15 text-amber-300 ring-amber-500/30',
-  'bg-violet-500/15 text-violet-300 ring-violet-500/30',
-  'bg-rose-500/15 text-rose-300 ring-rose-500/30',
-  'bg-cyan-500/15 text-cyan-300 ring-cyan-500/30',
+// Hash key is `seed ?? name`, never name alone, so avatar colors survive renames.
+const key = seed ?? name ?? '';
+
+interface AuraFamily {
+  base: string;
+  colors: [string, string, string];
+}
+
+const FAMILIES: AuraFamily[] = [
+  { base: '#fff7ed', colors: ['#fb923c', '#f43f5e', '#c026d3'] },
+  { base: '#ecfeff', colors: ['#38bdf8', '#2563eb', '#22d3ee'] },
+  { base: '#faf5ff', colors: ['#a855f7', '#ec4899', '#6366f1'] },
+  { base: '#ecfdf5', colors: ['#2dd4bf', '#10b981', '#a3e635'] },
 ];
 
+function hashCode(value: string): number {
+  let hash = 0;
+  for (let i = 0; i < value.length; i++) {
+    hash = (hash * 31 + value.charCodeAt(i)) | 0;
+  }
+  return Math.abs(hash);
+}
+
+const h = hashCode(key);
+const family = FAMILIES[h % FAMILIES.length]!;
+const ci = Math.floor(h / 4) % 3;
+const c1 = family.colors[ci]!;
+const c2 = family.colors[(ci + 1) % 3]!;
+const c3 = family.colors[(ci + 2) % 3]!;
+
+const angBase = h % 360;
+const ang1 = (Math.floor(h / 7) + 120) % 360;
+const ang2 = (Math.floor(h / 49) + 240) % 360;
+
+// Blur scaled to element size so the wash stays cheap to paint.
+const blur = size === 'sm' ? 4 + (h % 3) : size === 'md' ? 6 + (h % 3) : 10 + (h % 5);
+
+const mid = 55 + (h % 15);
+const midB = 52 + (Math.floor(h / 13) % 15);
+const s1 = 5 + (h % 10);
+const s2 = s1 + 40 + (Math.floor(h / 3) % 9);
+const topMode = h % 2 === 0 ? 'screen' : 'overlay';
+const isLarge = size === 'lg';
+
+const baseLayer = `background: linear-gradient(${angBase}deg, ${family.base} 0%, #ffffff 100%); mix-blend-mode: normal; filter: blur(${blur}px);`;
+
+// Small sizes get one diffused duo veil so 24px never turns muddy.
+const softVeil = `background: linear-gradient(${ang1}deg, ${c1} 0%, ${c2} ${mid}%, transparent 100%); mix-blend-mode: multiply; filter: blur(${blur}px);`;
+const veilA = `background: linear-gradient(${ang1}deg, transparent ${s1}%, ${c1} ${s2}%, transparent 98%); mix-blend-mode: multiply; filter: blur(${blur}px);`;
+const veilB = `background: linear-gradient(${ang2}deg, ${c2} 0%, ${c3} ${midB}%, transparent 100%); mix-blend-mode: ${topMode}; filter: blur(${blur}px);`;
+
 const SIZES = {
-  sm: 'h-6 w-6 text-[10px]',
-  md: 'h-8 w-8 text-xs',
-  lg: 'h-14 w-14 text-lg',
+  sm: 'h-6 w-6',
+  md: 'h-8 w-8',
+  lg: 'h-14 w-14',
 } as const;
 
 const label = (name ?? '').trim();
-const tone = TONES[avatarToneIndex(seed ?? label, TONES.length)];
 ---
 
-<span
+<div
+  role="img"
+  aria-label={label || undefined}
+  aria-hidden={label ? undefined : 'true'}
+  title={label || undefined}
   class:list={[
-    'inline-flex items-center justify-center rounded-full ring-1 font-semibold shrink-0 select-none',
+    'relative rounded-full overflow-hidden ring-1 ring-white/10 shrink-0 select-none',
     SIZES[size],
-    tone,
     className,
   ]}
-  title={label || undefined}
-  aria-hidden="true"
 >
-  {initials(label)}
-</span>
+  <div aria-hidden="true" class:list={['absolute inset-0 pointer-events-none']} style={baseLayer} />
+  {isLarge ? (
+    <>
+      <div aria-hidden="true" class:list={['absolute inset-0 pointer-events-none']} style={veilA} />
+      <div aria-hidden="true" class:list={['absolute inset-0 pointer-events-none']} style={veilB} />
+    </>
+  ) : (
+    <div aria-hidden="true" class:list={['absolute inset-0 pointer-events-none']} style={softVeil} />
+  )}
+</div>
