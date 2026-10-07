@@ -4,7 +4,6 @@ import { renderMarkdown } from '../markdown/render';
 import { renderDiagram } from '../markdown/mermaid';
 import { slugifyHeading } from '../markdown/slug';
 
-/** Print/standalone styles for exported documents (ported from the viewer). */
 export const EXPORT_CSS =
   '*{box-sizing:border-box;print-color-adjust:exact;-webkit-print-color-adjust:exact}' +
   'body{margin:0;background:#fff;color:#1f2328;font:16px/1.65 Inter,system-ui,-apple-system,"Segoe UI",sans-serif}' +
@@ -29,7 +28,6 @@ export interface ExportRequest {
   readonly fallbackName: string;
 }
 
-/** Build the standalone HTML document for an export. */
 export async function buildExportHtml(markdown: string, title: string): Promise<string> {
   const host = document.createElement('div');
   await renderMarkdown(host, markdown, { renderDiagram });
@@ -48,10 +46,7 @@ export interface ExportResult {
   readonly reason?: 'empty' | 'popup-blocked' | 'aborted';
 }
 
-/**
- * Export through a print window (PDF) or a downloaded `.html` file.
- * Returns a structured result instead of using `alert()`.
- */
+/** Print window (PDF) or `.html` download; structured result instead of `alert()`. */
 export async function exportDocument({
   kind,
   markdown,
@@ -89,7 +84,6 @@ export async function exportDocument({
   return { ok: true };
 }
 
-/** Download the raw Markdown source. */
 export function downloadMarkdown(markdown: string, fileName: string): void {
   const url = URL.createObjectURL(new Blob([markdown], { type: 'text/markdown;charset=utf-8' }));
   const anchor = Object.assign(document.createElement('a'), {

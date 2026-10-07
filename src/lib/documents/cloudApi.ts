@@ -1,20 +1,23 @@
 import { isCloudDocument, parseCloudDocuments } from './types';
 import type { CloudDocument, SaveDocumentResult } from './types';
 
+export interface CloudViewer {
+  readonly id: string;
+  readonly name: string;
+}
+
 export interface CloudSession {
   /** Documents owned by, or shared with, the account, newest first. */
   readonly documents: CloudDocument[];
+  /** Who is signed in, as the server sees them; `null` if it did not say. */
+  readonly viewer: CloudViewer | null;
   create(title: string, content?: string): Promise<CloudDocument>;
   save(input: {
     id: string;
     content: string;
     revision: number;
     title?: string;
-    /**
-     * For `pagehide`/`visibilitychange`: lets the request outlive the page. The
-     * browser caps keepalive bodies (~64 KB), so large documents fall back to a
-     * normal request.
-     */
+    /** `keepalive` lets pagehide saves outlive the page; browsers cap bodies (~64 KB). */
     keepalive?: boolean;
   }): Promise<SaveDocumentResult>;
   fetch(id: string): Promise<CloudDocument | null>;
@@ -27,10 +30,7 @@ function documentUrl(id: string): string {
   return `/api/documents/${encodeURIComponent(id)}`;
 }
 
-/**
- * Returns a cloud session, or `null` when this visitor is not signed in (or
- * Supabase is not configured, which also answers 401).
- */
+/** `null` when signed out — or Supabase unconfigured, which also answers 401. */
 export async function openCloudDocuments(): Promise<CloudSession | null> {
   let response: Response;
   try {
@@ -52,12 +52,27 @@ export async function openCloudDocuments(): Promise<CloudSession | null> {
     return null;
   }
 
-  return cloudSession(parseCloudDocuments(payload));
+  return cloudSession(parseCloudDocuments(payload), parseViewer(payload));
 }
 
-export function cloudSession(documents: CloudDocument[]): CloudSession {
+function parseViewer(payload: unknown): CloudViewer | null {
+  if (typeof payload !== 'object' || payload === null) return null;
+  const viewer = (payload as { viewer?: unknown }).viewer;
+  if (typeof viewer !== 'object' || viewer === null) return null;
+
+  const { id, name } = viewer as { id?: unknown; name?: unknown };
+  return typeof id === 'string' && id
+    ? { id, name: typeof name === 'string' ? name : 'Guest' }
+    : null;
+}
+
+export function cloudSession(
+  documents: CloudDocument[],
+  viewer: CloudViewer | null = null,
+): CloudSession {
   return {
     documents,
+    viewer,
 
     async create(title: string, content = ''): Promise<CloudDocument> {
       const response = await fetch('/api/documents', {
@@ -119,7 +134,6 @@ export function cloudSession(documents: CloudDocument[]): CloudSession {
       return { ok: false, reason: 'error' };
     },
 
-    /** Fresh server copy, used to resolve a revision conflict. */
     async fetch(id: string): Promise<CloudDocument | null> {
       try {
         const response = await fetch(documentUrl(id), {

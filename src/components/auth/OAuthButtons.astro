@@ -1,15 +1,9 @@
 ---
-/**
- * OAuth buttons (Google, GitHub), built from the same provider allowlist the
- * `/auth/oauth/:provider` route accepts — add a provider there and here.
- */
 import Icon from '@/components/ui/Icon.astro';
 import type { IconName } from '@/lib/ui/iconNames';
 
 interface Props {
-  /** Destination carried through the round-trip and used after the callback. */
   next: string;
-  /** `Sign in` / `Create account` — used for the accessible label. */
   verb?: string;
 }
 

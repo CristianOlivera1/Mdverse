@@ -6,16 +6,11 @@
   --font-mono: 'JetBrains Mono', ui-monospace, SFMono-Regular, monospace;
 }
 
-/*
- * Design tokens carried over from the original static viewer (`visor-markdown.html`).
- * `--split` controls the code/preview split and `--z` the text zoom.
- */
 :root {
   --split: 50%;
   --z: 1;
 }
 
-/* ============================ App shell ============================ */
 html,
 body {
   height: 100%;
@@ -37,7 +32,6 @@ textarea {
   font-size: calc(0.875rem * var(--z));
 }
 
-/* --------------------------- Header buttons -------------------------- */
 .hb {
   display: inline-flex;
   align-items: center;
@@ -116,7 +110,6 @@ textarea {
   display: none;
 }
 
-/* ------------------------- Popovers and menus ------------------------ */
 .pop {
   position: fixed;
   z-index: 50;
@@ -233,7 +226,6 @@ button.mi.danger:hover svg {
   background: #fff;
 }
 
-/* ------------------------ Format toolbar popup ----------------------- */
 .fm {
   position: absolute;
   right: 16px;
@@ -306,7 +298,6 @@ button.mi.danger:hover svg {
   color: #fff;
 }
 
-/* ------------------------------ Tabs -------------------------------- */
 .tab {
   display: inline-flex;
   align-items: center;
@@ -369,7 +360,6 @@ button.mi.danger:hover svg {
   height: 12px;
 }
 
-/* ----------------------------- Editors ------------------------------ */
 @media (min-width: 768px) {
   .code-pane {
     flex: 0 0 var(--split);
@@ -400,7 +390,6 @@ button.mi.danger:hover svg {
   }
 }
 
-/* -------------------------- Find and replace ------------------------ */
 .fr {
   position: absolute;
   top: 8px;
@@ -438,8 +427,6 @@ button.mi.danger:hover svg {
   border-color: #3b82f6;
 }
 
-/* --------------------------- Password fields ------------------------- */
-/* One icon per state: the reveal button swaps them without rebuilding the DOM. */
 [data-password-toggle] .pw-hide {
   display: none;
 }
@@ -452,7 +439,6 @@ button.mi.danger:hover svg {
   display: inline;
 }
 
-/* ---------------------------- Scrollbars ---------------------------- */
 ::-webkit-scrollbar {
   width: 10px;
   height: 10px;
@@ -472,7 +458,6 @@ button.mi.danger:hover svg {
   background: #333;
 }
 
-/* ------------------------------- TOC -------------------------------- */
 .toc a {
   display: block;
   padding: 4px 12px;

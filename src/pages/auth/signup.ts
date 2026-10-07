@@ -1,17 +1,3 @@
-/**
- * `POST /auth/signup` — creates an account, then asks the user to confirm the
- * address by email.
- *
- * With "Confirm email" enabled (the project setting the plan requires) Supabase
- * returns a user but **no session**, and it deliberately does not say whether the
- * address was already registered. So:
- *  - success → "check your inbox" on /login;
- *  - a session coming back means the project has confirmations turned off, which
- *    is still a valid signup: the user is signed in, so go straight on;
- *  - an explicit already-registered error (only returned with confirmations off)
- *    is sent to sign-in, where the account already exists.
- */
-
 import type { APIRoute } from 'astro';
 
 import { authFeedbackUrl, loginFeedbackUrl, passwordProblemErrorCode } from '@/lib/auth/messages';

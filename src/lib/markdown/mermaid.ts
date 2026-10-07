@@ -26,10 +26,7 @@ const THEME_VARIABLES = {
 let loader: Promise<MermaidModule> | null = null;
 let initialised = false;
 
-/**
- * Mermaid is heavy, so it is imported lazily: the chunk only loads the first
- * time a document actually contains a diagram (see block 13 of the plan).
- */
+/** Lazy import keeps the chunk out until a diagram exists; `strict` blocks XSS. */
 async function loadMermaid(): Promise<MermaidModule> {
   loader ??= import('mermaid');
   const module = await loader;
@@ -50,7 +47,6 @@ const cache = new Map<string, string>();
 const CACHE_LIMIT = 100;
 let counter = 0;
 
-/** Render a Mermaid definition to an SVG string, with a small cache. */
 export async function renderDiagram(source: string): Promise<string> {
   const cached = cache.get(source);
   if (cached !== undefined) return cached;

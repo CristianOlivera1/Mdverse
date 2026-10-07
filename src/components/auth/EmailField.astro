@@ -1,10 +1,8 @@
 ---
-/** Email field: the same markup and accessibility wiring on every auth screen. */
 import Icon from '@/components/ui/Icon.astro';
 
 interface Props {
   id?: string;
-  /** Pre-filled from the query string after a failed attempt. */
   value?: string;
   label?: string;
   autocomplete?: 'email' | 'username';

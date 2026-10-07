@@ -1,22 +1,10 @@
 ---
-/**
- * Icon — the single entry point for icons in the app.
- *
- * A thin wrapper over `astro-icon`'s Iconify component so call sites keep the
- * small `name`/`size`/`class` API while the icons themselves come from Iconify
- * (see `lib/ui/iconNames.ts`, the list that also configures the build filter).
- *
- * `class` is forwarded to the `<svg>`, which is how the existing stylesheets
- * (`.hb svg`, `.mi svg`, …) and Tailwind utilities size and colour the icons.
- */
 import { Icon as IconifyIcon } from 'astro-icon/components';
 
 import type { IconName } from '../../lib/ui/iconNames';
 
 interface Props {
-  /** Iconify id, e.g. `lucide:bold` — typed from the allowlist in `iconNames.ts`. */
   name: IconName;
-  /** Square size in pixels; sets both `width` and `height`. */
   size?: number;
   class?: string;
 }

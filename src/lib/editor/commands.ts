@@ -1,11 +1,5 @@
 import { lineEnd, lineRange, lineStart, wordAt, type TextState } from './text';
 
-/**
- * A single, reversible edit computed from a {@link TextState}.
- * Commands are pure: they never touch the DOM, which keeps them unit-testable.
- * The DOM adapter applies the result through `document.execCommand` so the
- * browser's native undo/redo stack keeps working.
- */
 export interface EditOp {
   readonly from: number;
   readonly to: number;
@@ -83,10 +77,6 @@ export function insertCodeFence(state: TextState): EditOp {
   return op(start, end, `\`\`\`\n${selected}\n\`\`\``, start + 4, start + 4 + selected.length);
 }
 
-/**
- * Wrap the selection (or the word under the caret) with a marker.
- * Calling it again with the same marker removes the surrounding markers.
- */
 export function wrapInline(state: TextState, marker: string, placeholder = 'text'): EditOp {
   const { value } = state;
   let start = state.start;
@@ -129,9 +119,7 @@ export function cycleHeading(state: TextState): EditOp {
 }
 
 export function toggleBlockquote(state: TextState): EditOp {
-  // The original viewer captured the `>` in the strip group, so un-quoting left a
-  // stray marker (`>q`). This port removes the prefix completely, keeping any
-  // leading indentation only.
+  // Strip prefix fully: capturing `>` leaves a stray marker.
   return toggleLinePrefix(state, /^\s*>/, (line) => `> ${line}`, /^(\s*)> ?/);
 }
 
@@ -229,10 +217,6 @@ export function duplicateLines(state: TextState, direction: -1 | 1): EditOp {
   );
 }
 
-/**
- * Continue a list, task list or blockquote when Enter is pressed.
- * Returns `null` when the caret is not inside a list, so Enter keeps its default behaviour.
- */
 export function continueList(state: TextState): EditOp | null {
   const { value, start, end } = state;
   if (start !== end) return null;
@@ -240,8 +224,6 @@ export function continueList(state: TextState): EditOp | null {
   const from = lineStart(value, start);
   const match = value.slice(from, start).match(/^(\s*)([-*+]|\d+\.|>)( \[[ xX]\])? (.*)$/);
   if (!match) return null;
-
-  // Enter on an empty list item ends the list.
   if (!match[4] && lineEnd(value, start) === start) return op(from, start, '', from);
 
   const marker = /\d/.test(match[2]) ? `${parseInt(match[2], 10) + 1}.` : match[2];

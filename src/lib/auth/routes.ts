@@ -1,12 +1,5 @@
-/**
- * Route access rules, kept in one place so the middleware, pages and tests agree.
- *
- * Phase 2 protects the account area and the password screens. Phase 3 adds
- * `/documents/*`; add the prefix here and both the middleware and the links keep
- * working.
- */
+/** Route access rules, shared by middleware, pages and tests. */
 
-/** Paths that require an authenticated session. */
 export const PROTECTED_PREFIXES = [
   '/dashboard',
   '/settings',
@@ -16,7 +9,6 @@ export const PROTECTED_PREFIXES = [
   '/reset-password',
 ] as const;
 
-/** Paths that only make sense for anonymous visitors. */
 export const ANONYMOUS_ONLY_PATHS = ['/login', '/signup', '/forgot-password'] as const;
 
 function matchesPrefix(pathname: string, prefix: string): boolean {
@@ -31,7 +23,6 @@ export function isAnonymousOnlyPath(pathname: string): boolean {
   return ANONYMOUS_ONLY_PATHS.some((path) => matchesPrefix(pathname, path));
 }
 
-/** Login URL carrying the destination, so the user lands where they intended. */
 export function loginPathFor(pathname: string, search = ''): string {
   const target = `${pathname}${search}`;
   if (target === '/' || target.length === 0) return '/login';

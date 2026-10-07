@@ -5,7 +5,6 @@ import { sanitizeHtml } from './sanitize';
 import { slugifyHeading } from './slug';
 
 export interface RenderOptions {
-  /** Injected so tests and the standalone preview can share the pipeline. */
   renderDiagram?: (source: string) => Promise<string>;
   emptyMessage?: string;
 }
@@ -14,11 +13,6 @@ type RenderTarget = HTMLElement & { renderToken?: number };
 
 const DEFAULT_EMPTY = '<p class="text-neutral-600 text-sm not-prose">Nothing to preview yet.</p>';
 
-/**
- * Update only the nodes that actually changed (longest matching prefix/suffix).
- * This is what keeps the preview from flickering and from losing scroll
- * position or already-drawn SVGs. Ported from `patch()` in the original viewer.
- */
 function patch(target: Element, staged: Element): void {
   const current = [...target.childNodes];
   const next = [...staged.childNodes];
@@ -43,11 +37,6 @@ function patch(target: Element, staged: Element): void {
   for (let i = start; i < nextEnd; i++) target.insertBefore(next[i], anchor);
 }
 
-/**
- * Give every heading a GitHub-compatible id, de-duplicating repeats.
- * Note: the original implementation produced the same `-1` suffix for the
- * third and later occurrences; this port numbers them sequentially.
- */
 function assignHeadingIds(root: Element): void {
   const used = new Map<string, number>();
   root.querySelectorAll<HTMLElement>('h1, h2, h3, h4, h5, h6').forEach((heading) => {
@@ -99,10 +88,6 @@ async function replaceMermaidBlocks(
   }
 }
 
-/**
- * Render Markdown into `target` and apply the incremental patch.
- * Returns `false` when a newer render superseded this one.
- */
 export async function renderMarkdown(
   target: RenderTarget,
   markdown: string,

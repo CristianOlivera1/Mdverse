@@ -5,7 +5,6 @@ export const UNTITLED = 'Untitled';
 const MAX_TITLE_LENGTH = 120;
 const MAX_OPEN_DOCUMENTS = 20;
 
-/** Default welcome document, in English (see block 1.4 of the plan). */
 export const WELCOME_MARKDOWN = [
   '# Welcome to your Markdown viewer',
   '',
@@ -50,10 +49,7 @@ export function normalizeTitle(title: string): string {
   return trimmed || UNTITLED;
 }
 
-/**
- * Next free `Untitled` style name.
- * Titles are unique per tab so users can tell their documents apart.
- */
+/** Next free `Untitled` name; titles stay unique per tab. */
 export function nextUntitledTitle(existing: readonly OpenDocument[]): string {
   const titles = new Set(existing.map((doc) => doc.title));
   if (!titles.has(UNTITLED)) return UNTITLED;

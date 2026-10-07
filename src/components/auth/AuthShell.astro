@@ -1,13 +1,4 @@
 ---
-/**
- * Shared frame for the four account screens (sign in, sign up, forgot password,
- * reset password): logo, heading, one notice slot, the form, and a footer with
- * the links to the sibling screens.
- *
- * The bundled script handles the two bits of client behaviour the forms share —
- * revealing a password and checking that confirmation matches — so every screen
- * gets them without repeating markup.
- */
 import Layout from '@/layouts/Layout.astro';
 import type { AuthNotice } from '@/lib/auth/messages';
 

@@ -1,14 +1,3 @@
-/**
- * Small helpers shared by the JSON endpoints under `src/pages/api/`.
- *
- * Two rules worth stating once:
- *  - Every response is `private, no-store`. These endpoints read and write a
- *    specific account's data, so no cache — browser or Cloudflare — may reuse it.
- *  - A failure is a short machine code, never a database message. The browser
- *    maps codes to copy (`src/lib/documents/messages.ts`), so a Postgres detail
- *    or a provider string can never end up rendered.
- */
-
 import type { APIContext } from 'astro';
 import type { SupabaseClient } from '@supabase/supabase-js';
 
@@ -27,7 +16,6 @@ export function jsonError(status: number, code: string, detail?: string): Respon
   return jsonResponse(detail ? { error: code, detail } : { error: code }, status);
 }
 
-/** Reads a JSON object body, or `null` when it is missing/not an object. */
 export async function readJsonObject(request: Request): Promise<Record<string, unknown> | null> {
   try {
     const body: unknown = await request.json();
@@ -44,11 +32,6 @@ export interface ApiSession {
   readonly userId: string;
 }
 
-/**
- * The account behind the request. `locals` is filled by the middleware from
- * verified cookies, so a non-null result means the token was already validated
- * against the auth server.
- */
 export function apiSession(context: APIContext | { locals: App.Locals }): ApiSession | null {
   const { supabase, user } = context.locals;
   if (!supabase || !user) return null;

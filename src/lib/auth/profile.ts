@@ -1,16 +1,8 @@
-/**
- * Avatars are **initials only** — the product decision is to store no profile
- * pictures (see PLAN_VISOR_MARKDOWN_PRODUCCION.md, block 6.2). `avatarToneIndex`
- * derives a stable color slot from a seed so the same person always gets the same
- * badge without persisting anything.
- */
-
 export const AVATAR_TONE_COUNT = 6;
 
-/** Username bounds shared with the SQL trigger `private.handle_new_user`. */
+/** Mirrors SQL trigger `private.handle_new_user`; change both. */
 export const USERNAME_MIN_LENGTH = 3;
 export const USERNAME_MAX_LENGTH = 30;
-/** The trigger truncates the derived base before appending a numeric suffix. */
 export const USERNAME_BASE_MAX_LENGTH = 24;
 export const DISPLAY_NAME_MAX_LENGTH = 60;
 
@@ -22,11 +14,6 @@ export function isLikelyEmail(value: unknown): value is string {
   return email.length >= 6 && email.length <= 254 && EMAIL_PATTERN.test(email);
 }
 
-/**
- * Canonical form of an address before it reaches Supabase: trimmed and
- * lowercased, so `Ana@Mail.com` and `ana@mail.com` are the same account (and the
- * same value comes back in the feedback URL).
- */
 export function normalizeEmail(value: unknown): string {
   return typeof value === 'string' ? value.trim().toLowerCase() : '';
 }
@@ -34,7 +21,6 @@ export function normalizeEmail(value: unknown): string {
 export function initials(name: string | null | undefined, max = 2): string {
   const cleaned = (name ?? '')
     .trim()
-    // Keep the local part of an email, so "ana.perez@x.com" reads as Ana Pérez.
     .replace(/@.*$/, '')
     .replace(/[^\p{L}\p{N}]+/gu, ' ')
     .trim();
@@ -67,19 +53,11 @@ export function displayNameFromEmail(email: string | null | undefined): string {
     .slice(0, DISPLAY_NAME_MAX_LENGTH);
 }
 
-/**
- * The local part of an address without its `+tag`, which is a routing label and
- * never part of someone's name (`ana+news@mail.com` → `ana`).
- */
 function localPartOf(email: string | null | undefined): string {
   return ((email ?? '').split('@')[0] ?? '').split('+')[0] ?? '';
 }
 
-/**
- * Derives a username from an email, mirroring the SQL in
- * `supabase/migrations/*_profiles.sql`. Kept in sync so an account created
- * client-side and one created by the trigger look identical.
- */
+/** Mirrors `supabase/migrations/*_profiles.sql`; keep in sync. */
 export function usernameFromEmail(email: string | null | undefined): string {
   let candidate = localPartOf(email)
     .toLowerCase()
@@ -115,7 +93,6 @@ export function avatarToneIndex(
   const value = (seed ?? '').trim();
   if (value.length === 0 || tones <= 1) return 0;
 
-  // djb2 — tiny, dependency-free and deterministic across runtimes.
   let hash = 5381;
   for (const char of value) {
     hash = (hash * 33) ^ (char.codePointAt(0) ?? 0);
@@ -124,7 +101,6 @@ export function avatarToneIndex(
   return Math.abs(hash) % tones;
 }
 
-/** `2026-10-06T…` → `Oct 6, 2026` (UTC, so tests are timezone independent). */
 export function formatMemberSince(value: string | Date | null | undefined): string {
   if (!value) return '';
   const date = value instanceof Date ? value : new Date(value);

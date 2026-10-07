@@ -1,21 +1,10 @@
-/**
- * Supabase connection settings.
- *
- * Kept free of `astro:env` imports on purpose: this module is pure so it can be
- * unit-tested outside the Astro runtime. `src/lib/supabase/env.ts` is the thin
- * layer that wires it to the real environment variables.
- */
-
 import { safeRedirectPath } from '../auth/redirect';
 
 export interface SupabaseConfig {
-  /** Project URL, without a trailing slash. */
   readonly url: string;
-  /** Publishable (a.k.a. legacy anon) key. Safe to ship to the browser. */
   readonly publishableKey: string;
 }
 
-/** Values copied from `.env.example` that must never be treated as configured. */
 const PLACEHOLDERS = [
   'YOUR_PROJECT_REF',
   'YOUR_PUBLISHABLE_KEY',
@@ -23,8 +12,6 @@ const PLACEHOLDERS = [
   'TU_CLAVE',
   'TU_PROJECT_REF',
   'xxx',
-  // The template ships `https://x.x.x.supabase.co` / `x.x.x`: copying it should
-  // show the "Supabase is not configured" notice, not fail with a network error.
   'x.x.x',
 ];
 
@@ -39,10 +26,6 @@ function isUsableUrl(value: string): boolean {
   return isUsableValue(value);
 }
 
-/**
- * Normalizes the raw environment values into a usable config, or `null` when the
- * project is not configured yet (missing or still holding `.env.example` values).
- */
 export function normalizeSupabaseConfig(input: {
   url?: string | null;
   publishableKey?: string | null;
@@ -55,14 +38,12 @@ export function normalizeSupabaseConfig(input: {
   return { url, publishableKey };
 }
 
-/** Absolute URL Supabase redirects back to after an email link or OAuth round-trip. */
 export function buildAuthCallbackUrl(siteUrl: string, next?: string | null): string {
   const base = siteUrl.trim().replace(/\/+$/, '');
   const target = safeRedirectPath(next, '/dashboard');
   return `${base}/auth/callback?next=${encodeURIComponent(target)}`;
 }
 
-/** Shown in the UI (and in thrown errors) when the Supabase project is missing. */
 export const SUPABASE_SETUP_HINT = [
   'Supabase is not configured yet.',
   'Copy .env.example to .env and fill in PUBLIC_SUPABASE_URL and',
