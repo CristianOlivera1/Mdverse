@@ -61,6 +61,14 @@ export default defineConfig({
 
       // Server-only secret. Never exposed to the browser.
       SUPABASE_SECRET_KEY: envField.string({ context: 'server', access: 'secret', optional: true }),
+
+      // ── Resend (transactional email) ────────────────────────────────────
+      // Get your key at https://resend.com/api-keys
+      RESEND_API_KEY: envField.string({ context: 'server', access: 'secret', optional: true }),
+      // Full "Name <email@domain.com>" sender string — must match a verified Resend domain.
+      RESEND_FROM_EMAIL: envField.string({ context: 'server', access: 'secret', optional: true }),
+      // Reply-to address (optional).
+      RESEND_REPLY_TO: envField.string({ context: 'server', access: 'secret', optional: true }),
     },
   },
 });

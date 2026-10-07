@@ -5,8 +5,10 @@ import { checkPassword } from '@/lib/auth/password';
 import { isLikelyEmail, normalizeEmail } from '@/lib/auth/profile';
 import { safeRedirectPath } from '@/lib/auth/redirect';
 import { DEFAULT_AUTHENTICATED_PATH } from '@/lib/auth/routes';
+import { sendConfirmEmail } from '@/lib/email/sender';
 import { authCallbackUrl } from '@/lib/supabase/env';
 import { isAlreadyRegistered } from '@/lib/supabase/errors';
+import { createAdminSupabaseClient } from '@/lib/supabase/admin';
 import { createServerSupabaseClient } from '@/lib/supabase/server';
 
 const SIGNUP_PATH = '/signup';
@@ -38,15 +40,38 @@ export const POST: APIRoute = async (context) => {
     if (isAlreadyRegistered(error)) {
       return context.redirect(loginFeedbackUrl({ error: 'email_taken', next, email }));
     }
-
     console.warn('[auth] sign-up failed:', error.message);
     return fail('signup_failed');
   }
 
-  // Confirmations on: Supabase sends the address a link and returns no
-  // session, so the user lands on the sign-in screen with a "check your
-  // inbox" notice. Confirmations off: Supabase signed the user in already.
+  // Session present means email confirmation is disabled — user is already in.
   if (data.session) return context.redirect(next);
+
+  // No session → email confirmation is required.
+  // Use the admin client to generate the confirmation link and send it via Resend.
+  const admin = createAdminSupabaseClient();
+  if (admin) {
+    try {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const { data: linkData, error: linkError } = await (admin.auth.admin.generateLink as any)({
+        type: 'signup',
+        email,
+        options: { redirectTo: authCallbackUrl(next) },
+      });
+
+      if (linkError) {
+        console.warn('[auth] generateLink (signup) failed:', linkError.message);
+      } else {
+        const confirmUrl = (linkData as { properties: { action_link: string } }).properties.action_link;
+        sendConfirmEmail({ to: email, confirmUrl }).catch((err: unknown) => {
+          console.warn('[email] confirm email send failed:', err);
+        });
+      }
+    } catch (err) {
+      console.warn('[auth] generateLink (signup) threw:', err);
+    }
+  }
 
   return context.redirect(loginFeedbackUrl({ sent: 'confirm', next, email }));
 };
+

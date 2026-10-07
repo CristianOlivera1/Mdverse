@@ -1,17 +1,10 @@
-/**
- * `POST /auth/password/forgot` — emails a one-time password recovery link.
- *
- * The recovery link points at `/auth/callback?next=/reset-password`: the callback
- * exchanges the token for a session and only then hands the user to the form, so
- * the new password is always set by an authenticated request. Like `/auth/resend`
- * the reply never depends on whether the address exists.
- */
-
 import type { APIRoute } from 'astro';
 
 import { authFeedbackUrl } from '@/lib/auth/messages';
 import { isLikelyEmail, normalizeEmail } from '@/lib/auth/profile';
+import { sendResetPasswordEmail } from '@/lib/email/sender';
 import { authCallbackUrl } from '@/lib/supabase/env';
+import { createAdminSupabaseClient } from '@/lib/supabase/admin';
 import { createServerSupabaseClient } from '@/lib/supabase/server';
 
 const FORGOT_PATH = '/forgot-password';
@@ -29,14 +22,32 @@ export const POST: APIRoute = async (context) => {
   const supabase = createServerSupabaseClient(context);
   if (!supabase) return context.redirect(`/login?error=not_configured`);
 
-  const { error } = await supabase.auth.resetPasswordForEmail(email, {
-    redirectTo: authCallbackUrl(RESET_PATH),
-  });
-
-  if (error) {
-    console.warn('[auth] reset request failed:', error.message);
+  // Generate the recovery link via admin API so we can send it ourselves.
+  const admin = createAdminSupabaseClient();
+  if (!admin) {
+    console.warn('[auth] admin client unavailable — SUPABASE_SECRET_KEY not set?');
     return fail('reset_failed');
   }
+
+  const { data: linkData, error: linkError } = await admin.auth.admin.generateLink({
+    type: 'recovery',
+    email,
+    options: { redirectTo: authCallbackUrl(RESET_PATH) },
+  });
+
+  if (linkError) {
+    // Log but don't leak whether the address exists.
+    console.warn('[auth] generateLink (recovery) failed:', linkError.message);
+    // Still redirect with success — never reveal whether an account exists.
+    return context.redirect(authFeedbackUrl({ to: FORGOT_PATH, sent: 'reset', email }));
+  }
+
+  const resetUrl = linkData.properties.action_link;
+
+  // Fire-and-forget: email failure never blocks the redirect.
+  sendResetPasswordEmail({ to: email, resetUrl }).catch((err: unknown) => {
+    console.warn('[email] reset password send failed:', err);
+  });
 
   return context.redirect(authFeedbackUrl({ to: FORGOT_PATH, sent: 'reset', email }));
 };
