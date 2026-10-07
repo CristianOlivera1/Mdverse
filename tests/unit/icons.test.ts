@@ -24,8 +24,13 @@ import { ICONIFY_ICONS } from '../../src/lib/ui/iconNames';
 const SRC_DIR = fileURLToPath(new URL('../../src', import.meta.url));
 const ICONIFY_DIR = fileURLToPath(new URL('../../node_modules/@iconify-json', import.meta.url));
 
-/** Literal `name="set:icon"` attributes, the only form we can resolve statically. */
-const ICON_ATTRIBUTE = /\bname="([a-z0-9-]+):([a-z0-9-]+)"/g;
+/**
+ * Literal `name="set:icon"` attributes *of an icon component*: the only form we
+ * can resolve statically. The component name is part of the pattern because
+ * `name` is not ours alone — `<meta name="twitter:card">` is not an icon, and a
+ * guard that flags it is a guard someone turns off.
+ */
+const ICON_ATTRIBUTE = /<(?:Icon|Iconify)\b[^>]*?\bname="([a-z0-9-]+):([a-z0-9-]+)"/g;
 
 const declaredIcons = new Set(
   Object.entries(ICONIFY_ICONS).flatMap(([set, names]) => names.map((name) => `${set}:${name}`)),

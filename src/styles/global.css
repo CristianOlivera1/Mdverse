@@ -50,6 +50,10 @@ textarea {
   flex-shrink: 0;
 }
 
+button{
+  cursor: pointer;
+}
+
 .hb svg {
   width: 16px;
   height: 16px;

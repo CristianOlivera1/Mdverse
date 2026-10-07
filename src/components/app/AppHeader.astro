@@ -9,11 +9,12 @@ import ViewMenu from './ViewMenu.astro';
 ---
 
 <header class="flex items-center justify-between h-12 px-3 border-b border-neutral-800 shrink-0 gap-2 sm:gap-3">
-  <div class="flex items-center gap-2 sm:gap-3 min-w-0">
+  
+  <div class="flex items-center gap-2 sm:gap-3 min-w-0 z-10">
     <div class="max-sm:hidden flex items-center shrink-0">
       <img
         src="/logo-calligraphy.svg"
-        alt="OpenMarkdown logo"
+        alt="Mdverse logo"
         class="h-7 w-auto"
         width="136"
         height="33"
@@ -33,7 +34,16 @@ import ViewMenu from './ViewMenu.astro';
     </div>
   </div>
 
-  <div class="flex items-center gap-1 shrink-0">
+  <div class="relative flex items-center h-full gap-1 shrink-0 z-10">
+    
+    <div class="absolute inset-0 -z-10 overflow-hidden pointer-events-none">
+      <img 
+        src="/images/bg-header.avif" 
+        alt="" 
+        class="w-full h-full object-cover opacity-90 mask-b-from-80% mask-b-to-99%"
+      />
+    </div>
+
     <button
       type="button"
       class="hb max-sm:hidden"

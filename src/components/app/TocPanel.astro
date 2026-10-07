@@ -6,17 +6,25 @@ import Icon from '../ui/Icon.astro';
   id="toc-side"
   class="hidden lg:flex flex-col w-72 shrink-0 border-r border-neutral-800 bg-[#050505]"
 >
-  <div class="flex items-center justify-between h-11 px-2.5 border-b border-neutral-800 shrink-0 gap-2">
-    <div class="max-sm:hidden flex items-center shrink-0">
+  <div class="relative overflow-hidden flex items-center justify-between h-11 px-2.5 border-b border-neutral-800 shrink-0 gap-2">
+    
+    <img 
+      src="/images/bg-header.avif" 
+      alt="" 
+      class="absolute inset-0 z-0 w-full h-full object-cover pointer-events-none mask-b-from-60% mask-b-to-90%"
+    />
+
+    <div class="max-sm:hidden flex items-center shrink-0 z-10">
       <img
         src="/logo-calligraphy.svg"
-        alt="OpenMarkdown logo"
+        alt="Mdverse logo"
         class="h-7 w-auto"
         width="136"
         height="33"
       />
     </div>
-    <button type="button" class="hb" id="toc-close" title="Hide index" aria-label="Hide index">
+
+    <button type="button" class="hb z-10" id="toc-close" title="Hide index" aria-label="Hide index">
       <Icon name="lucide:panel-left-close" />
     </button>
   </div>
