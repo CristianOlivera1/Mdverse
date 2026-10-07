@@ -1,20 +1,10 @@
-/**
- * Post-login redirect sanitizing.
- *
- * `?next=` values travel through query strings, hidden form fields and email
- * links, so they are attacker-controlled input. Only same-origin *paths* are
- * allowed: anything that could leave the origin (absolute URLs, protocol-relative
- * `//host`, backslash tricks, control characters used for header splitting) falls
- * back to a safe default.
- */
+/** `next` is attacker-controlled: only same-origin paths allowed (open redirect / header splitting). */
 
-/** Longest accepted `next` value; longer ones are treated as hostile/broken. */
 const MAX_LENGTH = 512;
 
 // eslint-disable-next-line no-control-regex
 const CONTROL_CHARS = /[\u0000-\u001f\u007f]/;
 
-/** Returns a safe, same-origin path to redirect to after authentication. */
 export function safeRedirectPath(value: unknown, fallback = '/dashboard'): string {
   if (typeof value !== 'string') return fallback;
 
@@ -29,7 +19,6 @@ export function safeRedirectPath(value: unknown, fallback = '/dashboard'): strin
   return path;
 }
 
-/** Keeps the destination's query string when building a login redirect. */
 export function currentPathWithSearch(url: { pathname: string; search?: string }): string {
   const search = url.search ?? '';
   if (search.length === 0) return url.pathname;

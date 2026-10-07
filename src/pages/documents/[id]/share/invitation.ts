@@ -1,14 +1,9 @@
-/**
- * `POST /documents/:id/share/invitation` — cancels a pending invitation.
- *
- * Kept apart from the collaborator endpoint because it acts on a row that has no
- * account behind it yet: an invitation is addressed, not someone's id.
- */
+/** Cancel a pending invitation (email-addressed row, no account yet). */
 
 import type { APIRoute } from 'astro';
 
+import { readShareInput, shareFeedbackResponse } from '@/lib/api/sharing';
 import { isDocumentId, isUuid } from '@/lib/documents/ids';
-import { sharePageUrl } from '@/lib/documents/messages';
 import { revokeInvitation } from '@/lib/documents/repository';
 
 export const POST: APIRoute = async (context) => {
@@ -18,22 +13,22 @@ export const POST: APIRoute = async (context) => {
   if (!user || !supabase) return context.redirect('/login?next=/dashboard');
   if (!isDocumentId(documentId)) return context.redirect('/dashboard?error=not_found');
 
-  const form = await context.request.formData();
-  const invitationId = String(form.get('invitation') ?? '');
+  const input = await readShareInput(context.request);
+  if (!input) return shareFeedbackResponse(context, documentId, { error: 'remove_failed' });
+
+  const invitationId = String(input.get('invitation') ?? '');
 
   if (!isUuid(invitationId)) {
-    return context.redirect(sharePageUrl(documentId, { error: 'remove_failed' }), 303);
+    return shareFeedbackResponse(context, documentId, { error: 'remove_failed' });
   }
 
   const result = await revokeInvitation(supabase, invitationId);
 
-  return context.redirect(
-    sharePageUrl(
-      documentId,
-      result.ok
-        ? { removed: true }
-        : { error: result.reason === 'forbidden' ? 'forbidden' : 'remove_failed' },
-    ),
-    303,
+  return shareFeedbackResponse(
+    context,
+    documentId,
+    result.ok
+      ? { removed: true }
+      : { error: result.reason === 'forbidden' ? 'forbidden' : 'remove_failed' },
   );
 };

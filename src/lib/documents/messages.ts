@@ -135,22 +135,22 @@ export function shareFailureCode(
   }
 }
 
-export function sharePageUrl(
-  documentId: string,
-  feedback: {
-    error?: DocumentErrorCode;
-    invited?: number;
-    added?: number;
-    yours?: number;
-    invalid?: number;
-    roleUpdated?: boolean;
-    removed?: boolean;
-    linkCreated?: boolean;
-    linkRevoked?: boolean;
-    visibilityUpdated?: boolean;
-  } = {},
-): string {
-  const base = `/documents/${encodeURIComponent(documentId)}/share`;
+/** Outcome of a sharing action, as a short code — never as database or exception text. */
+export interface ShareFeedback {
+  error?: DocumentErrorCode;
+  invited?: number;
+  added?: number;
+  yours?: number;
+  invalid?: number;
+  roleUpdated?: boolean;
+  removed?: boolean;
+  linkCreated?: boolean;
+  linkRevoked?: boolean;
+  visibilityUpdated?: boolean;
+}
+
+/** Query string for the same outcome, so the page and the JSON answer share one wording. */
+export function shareFeedbackParams(feedback: ShareFeedback = {}): URLSearchParams {
   const params = new URLSearchParams();
   if (feedback.error) params.set('error', feedback.error);
   if (feedback.invited) params.set('invited', String(feedback.invited));
@@ -162,8 +162,12 @@ export function sharePageUrl(
   if (feedback.linkCreated) params.set('link', 'created');
   if (feedback.linkRevoked) params.set('link', 'revoked');
   if (feedback.visibilityUpdated) params.set('visibility', '1');
+  return params;
+}
 
-  const query = params.toString();
+export function sharePageUrl(documentId: string, feedback: ShareFeedback = {}): string {
+  const base = `/documents/${encodeURIComponent(documentId)}/share`;
+  const query = shareFeedbackParams(feedback).toString();
   return query.length > 0 ? `${base}?${query}` : base;
 }
 
