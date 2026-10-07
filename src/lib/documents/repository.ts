@@ -2,19 +2,24 @@ import type { SupabaseClient } from '@supabase/supabase-js';
 
 import { slugifyHeading } from '../markdown/slug';
 import type { Database } from '../supabase/database.types';
-import type { CollaboratorRole, DocumentUpdate } from '../supabase/types';
+import type {
+  CollaboratorRole,
+  DocumentShareLink,
+  DocumentUpdate,
+  DocumentVisibility,
+} from '../supabase/types';
 import { documentAccess } from './access';
+import { isInviteStatus, type InviteRole, type InviteStatus } from './sharing';
 import { normalizeTitle } from './store';
 import type { CloudDocument, DocumentAccess, SaveDocumentResult } from './types';
 
 export type Db = SupabaseClient<Database>;
 
-/** Guardrail on the dashboard query, not a product limit. */
 export const MAX_LISTED_DOCUMENTS = 200;
 
 export const NEW_DOCUMENT_TITLE = 'Untitled';
 
-const DOCUMENT_COLUMNS = 'id, owner_id, title, slug, content, revision, updated_at';
+const DOCUMENT_COLUMNS = 'id, owner_id, title, slug, content, revision, visibility, updated_at';
 
 interface DocumentRow {
   id: string;
@@ -23,6 +28,7 @@ interface DocumentRow {
   slug: string;
   content: string;
   revision: number;
+  visibility: DocumentVisibility;
   updated_at: string;
 }
 
@@ -35,11 +41,6 @@ interface VersionRow {
   created_at: string;
 }
 
-/**
- * PostgREST row shapes cannot be validated at compile time (the generated types
- * are hand-written until `pnpm db:types` runs), so rows cross this boundary as
- * `unknown` and are read through narrow interfaces declared right here.
- */
 function asRows<T>(data: unknown): T[] {
   return Array.isArray(data) ? (data as T[]) : [];
 }
@@ -56,25 +57,18 @@ export function toCloudDocument(row: DocumentRow, access: DocumentAccess): Cloud
     content: row.content,
     revision: row.revision,
     role: access,
+    visibility: row.visibility,
     updatedAt: row.updated_at,
   };
 }
 
-/** Postgres `insufficient_privilege`: RLS said no. */
+// 42501 means RLS denied the row, not a system error.
 const INSUFFICIENT_PRIVILEGE = '42501';
 
 function failure(error: { code?: string } | null): 'forbidden' | 'error' {
   return error?.code === INSUFFICIENT_PRIVILEGE ? 'forbidden' : 'error';
 }
 
-/**
- * Documents the account owns plus the ones shared with it, newest first.
- *
- * The query itself is broader — RLS also lets an authenticated user read any
- * `public` document — so the list is narrowed to owner/collaborator here: a
- * public document reaches the editor through its public route (phase 5), not by
- * appearing uninvited in someone's tabs.
- */
 export async function listDocuments(db: Db, userId: string): Promise<CloudDocument[]> {
   const [documentsResult, rolesResult] = await Promise.all([
     db
@@ -162,11 +156,6 @@ export async function getVersion(
   return asRow<VersionRow>(data);
 }
 
-/**
- * A slug is supplied instead of letting the trigger derive one, so that public
- * links follow the tested `slugifyHeading` rule. The trigger still deduplicates
- * (`-1`, `-2`, …) and the fallback covers titles made only of symbols.
- */
 export function slugForTitle(title: string): string {
   return slugifyHeading(title).slice(0, 64) || 'untitled';
 }
@@ -219,14 +208,13 @@ async function lockedUpdate(
   const row = asRow<{ revision: number; updated_at: string }>(data);
   if (row) return { ok: true, revision: row.revision, updatedAt: row.updated_at };
 
-  // Zero rows: the revision moved on (or the document disappeared).
+  // Zero rows means the revision moved on, not success.
   const latest = await currentRevision(db, id);
   return latest === null
     ? { ok: false, reason: 'missing' }
     : { ok: false, reason: 'conflict', revision: latest };
 }
 
-/** Autosave. `title` is optional so a content-only save costs one round trip. */
 export function saveDocument(
   db: Db,
   userId: string,
@@ -237,7 +225,6 @@ export function saveDocument(
   return lockedUpdate(db, input.id, input.revision, patch);
 }
 
-/** Rename without touching the slug: public links must keep resolving. */
 export function renameDocument(
   db: Db,
   userId: string,
@@ -251,14 +238,7 @@ export function renameDocument(
   });
 }
 
-/**
- * Deletes a document, and reports what actually happened.
- *
- * The delete policy is owner-only, and a policy that filters the row out is not an
- * error — the statement simply touches nothing. Asking for the deleted ids back is
- * what separates "deleted" from "not allowed"; a plain `.delete()` would report
- * success while the row was still there.
- */
+// select('id') separates deleted from RLS-filtered; plain delete reports false success.
 export async function deleteDocument(
   db: Db,
   id: string,
@@ -267,9 +247,6 @@ export async function deleteDocument(
   if (error) return failure(error);
   if (asRows<{ id: string }>(data).length > 0) return 'ok';
 
-  // Nothing was deleted: either the caller may not (they can still read it) or
-  // the row is gone. RLS already decided what this caller can see, so answering
-  // from that same view leaks nothing new.
   const { data: visible } = await db.from('documents').select('id').eq('id', id).maybeSingle();
   return asRow<{ id: string }>(visible) ? 'forbidden' : 'missing';
 }
@@ -289,15 +266,287 @@ export async function restoreVersion(
   });
 }
 
+export interface CollaboratorEntry {
+  readonly userId: string;
+  readonly role: CollaboratorRole;
+  readonly name: string;
+  readonly username: string;
+  readonly addedAt: string;
+}
+
+export interface InvitationEntry {
+  readonly id: string;
+  readonly email: string;
+  readonly role: CollaboratorRole;
+  readonly createdAt: string;
+  readonly acceptedAt: string | null;
+}
+
+export type ShareLinkEntry = Pick<
+  DocumentShareLink,
+  'id' | 'token' | 'role' | 'expires_at' | 'created_at'
+>;
+
+export type ShareFailure = 'forbidden' | 'missing' | 'invalid_email' | 'error';
+
+export type ShareResult<T> =
+  { readonly ok: true; readonly value: T } | { readonly ok: false; readonly reason: ShareFailure };
+
+const INVALID_PARAMETER = '22023';
+const NO_DATA_FOUND = 'P0002';
+
+function shareFailure(error: { code?: string } | null): ShareFailure {
+  if (!error) return 'error';
+  if (error.code === INSUFFICIENT_PRIVILEGE) return 'forbidden';
+  if (error.code === NO_DATA_FOUND) return 'missing';
+  if (error.code === INVALID_PARAMETER) return 'invalid_email';
+  return 'error';
+}
+
+// One function for both cases so inviters cannot probe which addresses have accounts.
+export async function inviteCollaborator(
+  db: Db,
+  input: { documentId: string; email: string; role: InviteRole },
+): Promise<ShareResult<InviteStatus>> {
+  const { data, error } = await db.rpc('invite_collaborator', {
+    p_document_id: input.documentId,
+    p_email: input.email,
+    p_role: input.role,
+  });
+
+  if (error) return { ok: false, reason: shareFailure(error) };
+  return typeof data === 'string' && isInviteStatus(data)
+    ? { ok: true, value: data }
+    : { ok: false, reason: 'error' };
+}
+
+export async function listCollaborators(db: Db, documentId: string): Promise<CollaboratorEntry[]> {
+  const { data, error } = await db
+    .from('document_collaborators')
+    .select('user_id, role, created_at')
+    .eq('document_id', documentId);
+
+  if (error) throw error;
+
+  const rows = asRows<{
+    user_id: string;
+    role: CollaboratorRole;
+    created_at: string;
+  }>(data);
+
+  if (rows.length === 0) return [];
+
+  const { data: profileData, error: profileError } = await db
+    .from('profiles')
+    .select('id, display_name, username')
+    .in(
+      'id',
+      rows.map((row) => row.user_id),
+    );
+
+  if (profileError) throw profileError;
+
+  const profiles = new Map<string, { display_name: string; username: string }>();
+  for (const profile of asRows<{ id: string; display_name: string; username: string }>(
+    profileData,
+  )) {
+    profiles.set(profile.id, profile);
+  }
+
+  return rows.map((row) => ({
+    userId: row.user_id,
+    role: row.role,
+    name: profiles.get(row.user_id)?.display_name ?? 'Unknown account',
+    username: profiles.get(row.user_id)?.username ?? '',
+    addedAt: row.created_at,
+  }));
+}
+
+// Zero rows means RLS filtered the write: answer forbidden, never whether the row exists.
+export async function setCollaboratorRole(
+  db: Db,
+  input: { documentId: string; userId: string; role: InviteRole },
+): Promise<ShareResult<true>> {
+  const { data, error } = await db
+    .from('document_collaborators')
+    .update({ role: input.role, updated_at: new Date().toISOString() })
+    .eq('document_id', input.documentId)
+    .eq('user_id', input.userId)
+    .select('user_id');
+
+  if (error) return { ok: false, reason: shareFailure(error) };
+  return asRows<{ user_id: string }>(data).length > 0
+    ? { ok: true, value: true }
+    : { ok: false, reason: 'forbidden' };
+}
+
+export async function removeCollaborator(
+  db: Db,
+  input: { documentId: string; userId: string },
+): Promise<ShareResult<true>> {
+  const { data, error } = await db
+    .from('document_collaborators')
+    .delete()
+    .eq('document_id', input.documentId)
+    .eq('user_id', input.userId)
+    .select('user_id');
+
+  if (error) return { ok: false, reason: shareFailure(error) };
+  return asRows<{ user_id: string }>(data).length > 0
+    ? { ok: true, value: true }
+    : { ok: false, reason: 'forbidden' };
+}
+
+export async function listInvitations(db: Db, documentId: string): Promise<InvitationEntry[]> {
+  const { data, error } = await db
+    .from('document_invitations')
+    .select('id, email, role, created_at, accepted_at')
+    .eq('document_id', documentId)
+    .order('created_at', { ascending: false });
+
+  if (error) throw error;
+  return asRows<{
+    id: string;
+    email: string;
+    role: CollaboratorRole;
+    created_at: string;
+    accepted_at: string | null;
+  }>(data).map((row) => ({
+    id: row.id,
+    email: row.email,
+    role: row.role,
+    createdAt: row.created_at,
+    acceptedAt: row.accepted_at,
+  }));
+}
+
+export async function revokeInvitation(db: Db, id: string): Promise<ShareResult<true>> {
+  const { data, error } = await db.from('document_invitations').delete().eq('id', id).select('id');
+
+  if (error) return { ok: false, reason: shareFailure(error) };
+  return asRows<{ id: string }>(data).length > 0
+    ? { ok: true, value: true }
+    : { ok: false, reason: 'forbidden' };
+}
+
+export async function listShareLinks(db: Db, documentId: string): Promise<ShareLinkEntry[]> {
+  const { data, error } = await db
+    .from('share_links')
+    .select('id, token, role, expires_at, created_at')
+    .eq('document_id', documentId)
+    .order('created_at', { ascending: false });
+
+  if (error) throw error;
+  return asRows<ShareLinkEntry>(data);
+}
+
+export async function createShareLink(
+  db: Db,
+  userId: string,
+  input: { documentId: string; role: InviteRole; expiresAt: string | null },
+): Promise<ShareResult<ShareLinkEntry>> {
+  const { data, error } = await db
+    .from('share_links')
+    .insert({
+      document_id: input.documentId,
+      role: input.role,
+      expires_at: input.expiresAt,
+      created_by: userId,
+    })
+    .select('id, token, role, expires_at, created_at')
+    .single();
+
+  if (error) return { ok: false, reason: shareFailure(error) };
+  const row = asRow<ShareLinkEntry>(data);
+  return row ? { ok: true, value: row } : { ok: false, reason: 'error' };
+}
+
+export async function revokeShareLink(db: Db, id: string): Promise<ShareResult<true>> {
+  const { data, error } = await db.from('share_links').delete().eq('id', id).select('id');
+  if (error) return { ok: false, reason: shareFailure(error) };
+  return asRows<{ id: string }>(data).length > 0
+    ? { ok: true, value: true }
+    : { ok: false, reason: 'forbidden' };
+}
+
+export async function setVisibility(
+  db: Db,
+  input: { documentId: string; visibility: DocumentVisibility },
+): Promise<ShareResult<true>> {
+  const { data, error } = await db
+    .from('documents')
+    .update({ visibility: input.visibility })
+    .eq('id', input.documentId)
+    .select('id');
+
+  if (error) return { ok: false, reason: shareFailure(error) };
+  return asRows<{ id: string }>(data).length > 0
+    ? { ok: true, value: true }
+    : { ok: false, reason: 'forbidden' };
+}
+
+export async function resolveShareToken(
+  db: Db,
+  token: string,
+): Promise<{
+  slug: string;
+  title: string;
+  content: string;
+  revision: number;
+  role: CollaboratorRole;
+} | null> {
+  const { data, error } = await db.rpc('resolve_share_token', { p_token: token });
+  if (error) {
+    console.warn('[sharing] resolving a link token failed:', error.message);
+    return null;
+  }
+
+  const row = asRow<{
+    slug: string;
+    title: string;
+    content: string;
+    revision: number;
+    link_role: CollaboratorRole;
+  }>(asRows(data)[0]);
+
+  if (!row) return null;
+  return {
+    slug: row.slug,
+    title: row.title,
+    content: row.content,
+    revision: row.revision,
+    role: row.link_role,
+  };
+}
+
+export async function claimShareLink(
+  db: Db,
+  token: string,
+): Promise<{ documentId: string; slug: string; role: CollaboratorRole; isOwner: boolean } | null> {
+  const { data, error } = await db.rpc('claim_share_link', { p_token: token });
+  if (error) return null;
+
+  const row = asRow<{
+    document_id: string;
+    slug: string;
+    granted_role: CollaboratorRole;
+    is_owner: boolean;
+  }>(asRows(data)[0]);
+
+  if (!row) return null;
+  return {
+    documentId: row.document_id,
+    slug: row.slug,
+    role: row.granted_role,
+    isOwner: row.is_owner,
+  };
+}
+
 export interface DraftImportResult {
   readonly created: CloudDocument[];
   readonly failed: number;
 }
 
-/**
- * Creates one document per local draft. Failures are counted, not thrown: an
- * import of ten drafts should keep the nine that worked.
- */
 export async function importDrafts(
   db: Db,
   userId: string,

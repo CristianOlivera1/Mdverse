@@ -12,9 +12,8 @@
  */
 
 import { randomUUID } from 'node:crypto';
-import { readFileSync } from 'node:fs';
 
-import { createClient, type SupabaseClient } from '@supabase/supabase-js';
+import type { SupabaseClient } from '@supabase/supabase-js';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
 import {
@@ -28,43 +27,13 @@ import {
   saveDocument,
 } from '../../src/lib/documents/repository';
 import type { Database } from '../../src/lib/supabase/database.types';
+import { createAccount, createProjectAdmin, deleteAccounts, readLiveEnv } from './live';
+import type { LiveEnv } from './live';
 
-interface Env {
-  readonly url: string;
-  readonly anonKey: string;
-  readonly secretKey: string;
-}
-
-function readEnv(): Env | null {
-  let raw: string;
-  try {
-    raw = readFileSync(new URL('../../.env', import.meta.url), 'utf8');
-  } catch {
-    return null;
-  }
-
-  const values: Record<string, string> = {};
-  for (const line of raw.split(/\r?\n/)) {
-    if (!line.trim() || line.trim().startsWith('#')) continue;
-    const at = line.indexOf('=');
-    if (at < 0) continue;
-    values[line.slice(0, at).trim()] = line.slice(at + 1).trim();
-  }
-
-  const url = values.PUBLIC_SUPABASE_URL ?? '';
-  const anonKey = values.PUBLIC_SUPABASE_PUBLISHABLE_KEY ?? '';
-  const secretKey = values.SUPABASE_SECRET_KEY ?? '';
-  const usable = [url, anonKey, secretKey].every(
-    (value) => value.length > 0 && !/YOUR_|^x\.x\.x$/i.test(value),
-  );
-
-  return usable ? { url, anonKey, secretKey } : null;
-}
-
-const env = readEnv();
+const env = readLiveEnv();
 
 describe.skipIf(!env)('document repository (live project)', () => {
-  const config = env as Env;
+  const config = env as LiveEnv;
   const runId = randomUUID().slice(0, 8);
   const password = `mdverse-it-${randomUUID().slice(0, 12)}`;
 
@@ -81,31 +50,16 @@ describe.skipIf(!env)('document repository (live project)', () => {
   let revision = 1;
 
   async function signUp(index: number): Promise<{ client: SupabaseClient<Database>; id: string }> {
-    const email = `mdverse-it-${runId}-${index}@example.com`;
-    const { data, error } = await admin.auth.admin.createUser({
-      email,
+    const account = await createAccount(config, admin, {
+      email: `mdverse-it-${runId}-${index}@example.com`,
       password,
-      email_confirm: true,
     });
-    if (error) throw error;
-
-    const id = data.user?.id;
-    if (!id) throw new Error('the admin API created no user');
-    userIds.push(id);
-
-    const client = createClient<Database>(config.url, config.anonKey, {
-      auth: { persistSession: false, autoRefreshToken: false },
-    });
-    const { error: signInError } = await client.auth.signInWithPassword({ email, password });
-    if (signInError) throw signInError;
-
-    return { client, id };
+    userIds.push(account.id);
+    return { client: account.client, id: account.id };
   }
 
   beforeAll(async () => {
-    admin = createClient<Database>(config.url, config.secretKey, {
-      auth: { persistSession: false, autoRefreshToken: false },
-    });
+    admin = createProjectAdmin(config);
 
     const first = await signUp(1);
     const second = await signUp(2);
@@ -117,7 +71,7 @@ describe.skipIf(!env)('document repository (live project)', () => {
 
   afterAll(async () => {
     // Always clean up: the project belongs to the user, not to this suite.
-    for (const id of userIds) await admin.auth.admin.deleteUser(id);
+    await deleteAccounts(admin, userIds);
   });
 
   it('creates a document owned by the caller, with a slug from its title', async () => {

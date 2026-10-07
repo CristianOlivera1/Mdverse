@@ -1,12 +1,6 @@
 /**
- * `GET /api/documents/:id` — one document (RLS decides whether it is visible).
- * `PATCH /api/documents/:id` — autosave or rename, guarded by `revision`.
- * `DELETE /api/documents/:id` — owner only.
- *
- * A `PATCH` is the hot path: the editor sends `{content, revision}` every couple
- * of seconds while typing. The `revision` travels back and forth so a stale
- * writer gets `409 {error: "conflict", revision}` instead of overwriting text it
- * never saw.
+ * `PATCH` autosaves `{content, revision}`; stale writers get 409 + current
+ * revision instead of overwriting unseen text. RLS decides visibility.
  */
 
 import type { APIRoute } from 'astro';

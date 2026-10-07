@@ -17,6 +17,13 @@
  * What it cannot cover: a *token* holder reading an `unlisted` document, because
  * that resolution is deliberately server-side (phase 5) and never goes through
  * the Data API with the token.
+ *
+ * Two of the checks exist because the project has already been bitten by them:
+ * a stranger inviting themselves through the SECURITY DEFINER RPC (the guard has
+ * to ask `is not true`, never `if not <null>`), and an editor publishing somebody
+ * else's draft (the update policy compares the stored visibility). Both regress
+ * silently if the migrations are applied in an unlucky order, so they are pinned
+ * here rather than only in the plan.
  */
 
 import { readFileSync } from 'node:fs';
@@ -249,10 +256,54 @@ async function main() {
       headers: { Prefer: 'return=representation' },
       body: JSON.stringify({ owner_id: stranger.id }),
     });
+    // Two outcomes are both correct, and both are checked: Postgres either
+    // refuses the write (`42501`, new row violates the policy) or filters the row
+    // out silently. Anything else — a 200 that reassigned the owner — is a fail.
+    const stealRefused = steal.status >= 400 && steal.body?.code === '42501';
+    const stealNoop =
+      Array.isArray(steal.body) && (steal.body.length === 0 || steal.body[0].owner_id === owner.id);
     check(
       'owner_id cannot be reassigned',
-      Array.isArray(steal.body) && (steal.body.length === 0 || steal.body[0].owner_id === owner.id),
+      stealRefused || stealNoop,
       `${steal.status} ${JSON.stringify(steal.body)}`,
+    );
+
+    const stillOwned = await owner.client.rest(`documents?id=eq.${document.id}&select=owner_id`);
+    check(
+      'the document still belongs to its owner after the attempt',
+      Array.isArray(stillOwned.body) && stillOwned.body[0]?.owner_id === owner.id,
+      `${stillOwned.status} ${JSON.stringify(stillOwned.body)}`,
+    );
+
+    // 3b. The invite RPC is SECURITY DEFINER, so it is the one door RLS does not
+    //     stand behind: it has to refuse the caller itself. For an account with no
+    //     relation to the document `private.can_manage_document` answers NULL (not
+    //     false), and a PL/pgSQL `if not <null>` is simply not taken — which is how
+    //     any signed-in visitor used to be able to make themselves an editor by
+    //     knowing a document id. The guard asks `is not true`.
+    const selfInvite = await stranger.client.rest('rpc/invite_collaborator', {
+      method: 'POST',
+      body: JSON.stringify({
+        p_document_id: document.id,
+        p_email: stranger.email,
+        p_role: 'editor',
+      }),
+    });
+    check(
+      'a stranger cannot invite themselves into a document',
+      selfInvite.status >= 400 && selfInvite.body?.code === '42501',
+      selfInvite.body?.code === 'PGRST202'
+        ? `${selfInvite.status} — invite_collaborator is missing: apply supabase/migrations/20261006140000_sharing.sql`
+        : `${selfInvite.status} ${JSON.stringify(selfInvite.body)}`,
+    );
+
+    const afterSelfInvite = await owner.client.rest(
+      `document_collaborators?select=user_id&document_id=eq.${document.id}`,
+    );
+    check(
+      'the refused invitation left no collaborator row',
+      Array.isArray(afterSelfInvite.body) && afterSelfInvite.body.length === 0,
+      `${afterSelfInvite.status} ${JSON.stringify(afterSelfInvite.body)}`,
     );
 
     // 4. Collaboration: editor can write, reader cannot.
@@ -301,6 +352,28 @@ async function main() {
       headers: { Prefer: 'return=representation' },
       body: JSON.stringify({ content: 'stale write' }),
     });
+    // The hover of the whole phase: an editor edits the text, publishing is the
+    // owner's call. `with check` compares the new visibility against the stored
+    // one, so this has to be refused — and the stored value must survive.
+    const publish = await stranger.client.rest(`documents?id=eq.${document.id}`, {
+      method: 'PATCH',
+      headers: { Prefer: 'return=representation' },
+      body: JSON.stringify({ visibility: 'public' }),
+    });
+    check(
+      'an editor cannot publish somebody else\u2019s document',
+      publish.status >= 400 ||
+        (Array.isArray(publish.body) && publish.body.every((row) => row.visibility === 'private')),
+      `${publish.status} ${JSON.stringify(publish.body)}`,
+    );
+
+    const survived = await owner.client.rest(`documents?id=eq.${document.id}&select=visibility`);
+    check(
+      'the visibility survives the editor\u2019s attempt',
+      Array.isArray(survived.body) && survived.body[0]?.visibility === 'private',
+      `${survived.status} ${JSON.stringify(survived.body)}`,
+    );
+
     check(
       'a stale revision updates nothing (optimistic concurrency)',
       Array.isArray(staleWrite.body) && staleWrite.body.length === 0,

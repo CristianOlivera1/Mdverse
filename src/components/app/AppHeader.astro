@@ -4,13 +4,20 @@ import ClearMenu from './ClearMenu.astro';
 import DocumentTabs from './DocumentTabs.astro';
 import ExportMenu from './ExportMenu.astro';
 import Icon from '../ui/Icon.astro';
+import PresenceBar from './PresenceBar.astro';
 import ViewMenu from './ViewMenu.astro';
 ---
 
 <header class="flex items-center justify-between h-12 px-3 border-b border-neutral-800 shrink-0 gap-2 sm:gap-3">
   <div class="flex items-center gap-2 sm:gap-3 min-w-0">
     <div class="max-sm:hidden flex items-center shrink-0">
-      <img src="/logo-calligraphy.svg" alt="OpenMarkdown logo" class="h-6 w-auto" width="136" height="33" />
+      <img
+        src="/logo-calligraphy.svg"
+        alt="OpenMarkdown logo"
+        class="h-7 w-auto"
+        width="136"
+        height="33"
+      />
     </div>
     <span class="sep max-sm:hidden"></span>
     <DocumentTabs />
@@ -39,6 +46,7 @@ import ViewMenu from './ViewMenu.astro';
     </button>
     <ExportMenu />
     <ViewMenu />
+    <PresenceBar />
     <span class="sep"></span>
     <ClearMenu />
     <AccountMenu />

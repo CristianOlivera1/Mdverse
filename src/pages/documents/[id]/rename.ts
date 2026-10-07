@@ -1,11 +1,3 @@
-/**
- * `POST /documents/:id/rename` — the dashboard's rename form.
- *
- * The form carries the `revision` the page was rendered with, so renaming in one
- * window while another has the document open is reported as `stale` instead of
- * silently winning. The slug is untouched: public links must keep resolving.
- */
-
 import type { APIRoute } from 'astro';
 
 import { readRevision } from '@/lib/api/http';

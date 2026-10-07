@@ -1,12 +1,3 @@
-/**
- * `POST /documents/:id/restore` — puts an earlier snapshot back.
- *
- * The form carries the `revision` the history page was rendered with, so a
- * restore only applies if the document has not moved on since; otherwise the user
- * is told to reload instead of overwriting newer text. The snapshot is recreated
- * as a new revision, so history is never rewritten.
- */
-
 import type { APIRoute } from 'astro';
 
 import { readRevision } from '@/lib/api/http';

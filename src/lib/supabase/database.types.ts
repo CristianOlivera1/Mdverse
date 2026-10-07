@@ -5,9 +5,10 @@
  *
  * Until the Supabase CLI can reach the project (`SUPABASE_PROJECT_REF` +
  * `SUPABASE_ACCESS_TOKEN` in `.env`), it holds a hand-written placeholder for the
- * tables created in phases 2 and 3 (`public.profiles`, `public.documents`, …), so
- * the app typechecks without the generator. Once the project is linked,
- * regenerate it after every migration:
+ * tables created in phases 2–4 (`public.profiles`, `public.documents`, …) and for
+ * the phase 4 functions (`invite_collaborator`, `resolve_share_token`,
+ * `claim_share_link`), so the app typechecks without the generator. Once the
+ * project is linked, regenerate it after every migration:
  *
  *   pnpm db:types
  *
@@ -289,7 +290,35 @@ export interface Database {
       [_ in never]: never;
     };
     Functions: {
-      [_ in never]: never;
+      invite_collaborator: {
+        Args: {
+          p_document_id: string;
+          p_email: string;
+          p_role?: Database['public']['Enums']['collaborator_role'];
+        };
+        /** `owner` | `collaborator` | `invited`. */
+        Returns: string;
+      };
+      resolve_share_token: {
+        Args: { p_token: string };
+        Returns: {
+          document_id: string;
+          slug: string;
+          title: string;
+          content: string;
+          revision: number;
+          link_role: Database['public']['Enums']['collaborator_role'];
+        }[];
+      };
+      claim_share_link: {
+        Args: { p_token: string };
+        Returns: {
+          document_id: string;
+          slug: string;
+          granted_role: Database['public']['Enums']['collaborator_role'];
+          is_owner: boolean;
+        }[];
+      };
     };
     Enums: {
       collaborator_role: 'reader' | 'editor' | 'admin';

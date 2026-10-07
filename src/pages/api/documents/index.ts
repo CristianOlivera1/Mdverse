@@ -1,15 +1,12 @@
 /**
- * `GET /api/documents` — the account's documents (owned + shared with it).
- * `POST /api/documents` — creates an empty document.
- *
- * This is the editor's endpoint: it runs as the signed-in user, so every read and
- * write is filtered by the RLS policies in
- * `supabase/migrations/20261006130000_documents.sql`.
+ * Editor endpoint: runs as the signed-in user, filtered by RLS
+ * (`supabase/migrations/20261006130000_documents.sql`).
  */
 
 import type { APIRoute } from 'astro';
 
 import { apiSession, jsonError, jsonResponse, readJsonObject, readString } from '@/lib/api/http';
+import { displayNameFromEmail } from '@/lib/auth/profile';
 import { createDocument, listDocuments } from '@/lib/documents/repository';
 
 export const GET: APIRoute = async (context) => {
@@ -20,7 +17,14 @@ export const GET: APIRoute = async (context) => {
 
   try {
     const documents = await listDocuments(supabase, userId);
-    return jsonResponse({ documents });
+    // Display name only (never a credential) so the editor can join presence without a second round trip.
+    const viewer = {
+      id: userId,
+      name:
+        context.locals.profile?.display_name?.trim() ||
+        displayNameFromEmail(context.locals.user?.email ?? null),
+    };
+    return jsonResponse({ documents, viewer });
   } catch (error) {
     console.warn('[documents] list failed:', error);
     return jsonError(500, 'list_failed');

@@ -4,6 +4,11 @@ import { downloadMarkdown, exportDocument } from '../editor/exportDocument';
 import { buildSearchRegex, countMatches, replaceAllMatches } from '../editor/findReplace';
 import { PREF_KEYS, readNumberPref, readPref, writePref } from '../editor/prefs';
 import { wordAt, type TextState } from '../editor/text';
+import { createCursorOverlay } from '../collab/overlay';
+import type { CursorOverlay } from '../collab/overlay';
+import { describePeers } from '../collab/presence';
+import type { Peer } from '../collab/presence';
+import type { CollabSession, CollabStatus, RemoteCursor, RemoteSave } from '../collab/session';
 import { openCloudDocuments } from '../documents/cloudApi';
 import type { CloudSession } from '../documents/cloudApi';
 import { migrateLegacyDocuments } from '../documents/migrate';
@@ -28,9 +33,7 @@ const MIN_SPLIT = 20;
 const MAX_SPLIT = 80;
 const MAX_OPEN_DOCUMENTS = 20;
 
-/** Quiet period before an autosave leaves for the server, per document. */
 const AUTOSAVE_DELAY = 1200;
-/** How long to wait before retrying a save that failed for a transient reason. */
 const RETRY_DELAY = 5000;
 
 type ScrollSource = 'code' | 'preview';
@@ -52,7 +55,6 @@ interface Pane {
   savedScroll?: [number, number];
 }
 
-/** Formatting commands that simply wrap the selection with a marker. */
 const INLINE_MARKERS: Record<string, string> = {
   bold: '**',
   italic: '*',
@@ -66,13 +68,10 @@ export function initEditorApp(): void {
   const template = document.getElementById('editor-pane-template') as HTMLTemplateElement | null;
   if (!panesHost || !tabsHost || !template) return;
 
-  // Non-nullable aliases: TypeScript does not preserve the narrowing above
-  // inside the closures declared further down.
   const panesHostEl: HTMLElement = panesHost;
   const tabsHostEl: HTMLElement = tabsHost;
   const paneTemplate: HTMLTemplateElement = template;
 
-  // The highlight theme is shared with the export path, so it is injected once.
   document.head.insertAdjacentHTML('beforeend', `<style>${HIGHLIGHT_THEME_CSS}</style>`);
 
   let documents = loadOpenDocuments();
@@ -81,19 +80,20 @@ export function initEditorApp(): void {
   let renaming = false;
   let toastTimer: number | undefined;
 
-  /**
-   * Cloud mode: the tabs are rows in `public.documents` instead of entries in
-   * `localStorage`. It is decided once at boot by `openCloudDocuments()`, which
-   * answers `null` for anonymous visitors — so this page stays identical for
-   * everybody (and cacheable) and the decision is the request's.
-   */
   let cloud: CloudSession | null = null;
-  /** Last revision confirmed by the server, per document. */
   const revisions = new Map<string, number>();
+  const lastSaved = new Map<string, string>();
   const saveTimers = new Map<string, number>();
-  /** Documents whose version moved on elsewhere; autosave pauses for them. */
   const conflicted = new Set<string>();
   let booted = false;
+
+  let collab: CollabSession | null = null;
+  let collabStatus: CollabStatus = 'connecting';
+  let overlay: CursorOverlay | null = null;
+  let overlayHost: HTMLElement | null = null;
+  let peers: Peer[] = [];
+  let remoteCursors: RemoteCursor[] = [];
+  let viewerId = '';
 
   const panes = new Map<string, Pane>();
 
@@ -109,9 +109,7 @@ export function initEditorApp(): void {
   }
 
   function persist(): void {
-    // In cloud mode the documents live in Postgres: caching them here would leave
-    // one account's text in the browser for the next visitor to read. The active
-    // tab stays a preference (it is just an id).
+    // Cloud mode never caches documents locally: one account's text would leak to the next visitor.
     if (!cloud) saveOpenDocuments(documents);
     saveActiveDocumentId(activeId);
   }
@@ -134,25 +132,33 @@ export function initEditorApp(): void {
     const revision = revisions.get(doc.id);
     if (!cloud || revision === undefined) return;
 
+    // Content is captured before the round trip; the textarea may move on mid-save.
+    const content = doc.content;
+
     showStatus('Saving…', 900);
     const result = await cloud.save({
       id: doc.id,
-      content: doc.content,
+      content,
       revision,
       keepalive,
     });
-    applySaveResult(doc, result);
+    applySaveResult(doc, result, content);
   }
 
-  function applySaveResult(doc: OpenDocument, result: SaveDocumentResult): void {
+  function applySaveResult(
+    doc: OpenDocument,
+    result: SaveDocumentResult,
+    savedContent?: string,
+  ): void {
     if (result.ok) {
       revisions.set(doc.id, result.revision);
+      if (savedContent !== undefined) lastSaved.set(doc.id, savedContent);
+      collab?.announceSave({ documentId: doc.id, revision: result.revision });
       showStatus('Saved', 1200);
       return;
     }
 
     if ('revision' in result) {
-      // The server moved on: adopt its revision and ask what to keep.
       revisions.set(doc.id, result.revision);
       conflicted.add(doc.id);
       void resolveConflict(doc);
@@ -172,10 +178,6 @@ export function initEditorApp(): void {
     }
   }
 
-  /**
-   * Two writers touched the same document. Nothing is discarded on its own: the
-   * user chooses between their text and the newer server version.
-   */
   async function resolveConflict(doc: OpenDocument): Promise<void> {
     if (!cloud) return;
 
@@ -211,7 +213,6 @@ export function initEditorApp(): void {
     showStatus('Loaded the server version', 2000);
   }
 
-  /** Rename keeps the content in the same request, so a pending edit is not lost. */
   async function renameDocument(doc: OpenDocument, rawTitle: string): Promise<void> {
     doc.title = normalizeTitle(rawTitle);
 
@@ -223,11 +224,158 @@ export function initEditorApp(): void {
     const revision = revisions.get(doc.id);
     if (revision === undefined) return;
 
+    const content = doc.content;
     showStatus('Saving…', 900);
     applySaveResult(
       doc,
-      await cloud.save({ id: doc.id, content: doc.content, revision, title: doc.title }),
+      await cloud.save({ id: doc.id, content, revision, title: doc.title }),
+      content,
     );
+  }
+
+  function renderPresence(): void {
+    const host = document.getElementById('presence-bar');
+    if (!host) return;
+
+    const others = peers.filter((peer) => peer.id !== viewerId);
+    host.replaceChildren();
+    host.hidden = peers.length === 0;
+    host.title = peers.length > 0 ? describePeers(peers, viewerId) : '';
+
+    for (const peer of others.slice(0, 4)) {
+      const chip = document.createElement('span');
+      chip.className =
+        'flex h-6 w-6 items-center justify-center rounded-full text-[10px] font-semibold text-black';
+      chip.style.background = peer.color;
+      chip.textContent = peer.initials;
+      chip.title = peer.name;
+      host.append(chip);
+    }
+
+    if (others.length > 4) {
+      const more = document.createElement('span');
+      more.className = 'text-[11px] text-neutral-500';
+      more.textContent = `+${others.length - 4}`;
+      more.title = others
+        .slice(4)
+        .map((peer) => peer.name)
+        .join(', ');
+      host.append(more);
+    }
+
+    if (others.length > 0) {
+      const label = document.createElement('span');
+      label.className = 'hidden lg:inline text-[11px] text-neutral-500 max-w-[14rem] truncate';
+      label.textContent = describePeers(peers, viewerId);
+      host.append(label);
+    }
+  }
+
+  function setCollabStatus(next: CollabStatus): void {
+    const badge = document.getElementById('status-collab');
+    if (badge) {
+      badge.textContent =
+        next === 'online' ? 'Synced' : next === 'offline' ? 'Offline' : 'Connecting…';
+      badge.className =
+        next === 'offline' ? 'shrink-0 text-amber-400/80' : 'shrink-0 text-neutral-600';
+    }
+
+    const was = collabStatus;
+    collabStatus = next;
+    if (next === 'online' && was !== 'online') flushAll();
+  }
+
+  function syncOverlay(): void {
+    const pane = currentPane();
+    if (!collab || !pane) {
+      overlay?.destroy();
+      overlay = null;
+      overlayHost = null;
+      return;
+    }
+
+    const host = pane.root.querySelector<HTMLElement>('.code-pane');
+    if (!host) return;
+
+    if (host === overlayHost && overlay) {
+      overlay.update(remoteCursors, peers, pane.textarea.value);
+      return;
+    }
+
+    overlay?.destroy();
+    overlay = createCursorOverlay(host, pane.textarea);
+    overlayHost = host;
+    overlay.update(remoteCursors, peers, pane.textarea.value);
+  }
+
+  function handleCursors(cursors: RemoteCursor[]): void {
+    remoteCursors = cursors;
+    overlay?.update(remoteCursors, peers, currentPane()?.textarea.value ?? '');
+  }
+
+  // Never overwrite local edits from remote; the next save surfaces the revision conflict.
+  function handleRemoteSave(save: RemoteSave): void {
+    const known = revisions.get(save.documentId);
+    if (known === undefined || save.revision <= known) return;
+
+    revisions.set(save.documentId, save.revision);
+
+    const doc = documentById(save.documentId);
+    if (!doc) return;
+
+    const dirty = doc.content !== lastSaved.get(save.documentId);
+    if (dirty || conflicted.has(save.documentId)) {
+      showStatus('Changed elsewhere — your next save will ask what to keep', 4000);
+      return;
+    }
+
+    void (async () => {
+      const server = await cloud?.fetch(save.documentId);
+      if (!server || revisions.get(save.documentId) !== server.revision) return;
+
+      doc.title = server.title;
+      doc.content = server.content;
+      lastSaved.set(doc.id, server.content);
+
+      const pane = panes.get(doc.id);
+      if (pane) {
+        const caret = Math.min(pane.textarea.selectionStart, server.content.length);
+        pane.textarea.value = server.content;
+        pane.textarea.setSelectionRange(caret, caret);
+        renderPane(pane);
+      }
+
+      renderTabs();
+      if (doc.id === activeId) updateStatus();
+
+      const editor = peers.find((peer) => peer.id === save.editorId);
+      showStatus(editor ? `Updated by ${editor.name}` : 'Updated elsewhere', 2200);
+    })();
+  }
+
+  async function openCollabSession(session: CloudSession): Promise<void> {
+    if (!session.viewer) return;
+    viewerId = session.viewer.id;
+
+    try {
+      const { openCollab } = await import('../collab/session');
+      collab = openCollab(
+        { userId: session.viewer.id, name: session.viewer.name },
+        {
+          onPeers(list) {
+            peers = list;
+            renderPresence();
+            overlay?.update(remoteCursors, peers, currentPane()?.textarea.value ?? '');
+          },
+          onStatus: setCollabStatus,
+          onRemoteSave: handleRemoteSave,
+          onCursors: handleCursors,
+        },
+      );
+      if (collab) setCollabStatus('connecting');
+    } catch {
+      collab = null;
+    }
   }
 
   function currentPane(): Pane | undefined {
@@ -273,10 +421,7 @@ export function initEditorApp(): void {
     end: textarea.selectionEnd,
   });
 
-  /**
-   * Apply a computed edit through `document.execCommand`, which keeps the
-   * browser's native undo/redo stack intact, with a `setRangeText` fallback.
-   */
+  // execCommand keeps native undo intact; setRangeText is fallback only.
   function applyEdit(textarea: HTMLTextAreaElement, edit: EditOp | null): void {
     if (!edit) return;
     textarea.focus();
@@ -442,10 +587,7 @@ export function initEditorApp(): void {
     return tab;
   }
 
-  /**
-   * Reuse the existing tab nodes instead of rebuilding them on every render:
-   * replacing the DOM would swallow the double-click that starts a rename.
-   */
+  // Reuse tab nodes: rebuilding swallows the dblclick that starts a rename.
   function renderTabs(): void {
     const existing = new Map(
       [...tabsHostEl.querySelectorAll<HTMLElement>('[data-tab-id]')].map((element) => [
@@ -544,6 +686,9 @@ export function initEditorApp(): void {
     renderTabs();
     persist();
     updateStatus();
+
+    collab?.setDocument(id);
+    syncOverlay();
   }
 
   async function addDocument(): Promise<void> {
@@ -557,6 +702,7 @@ export function initEditorApp(): void {
       try {
         const created = await cloud.create(nextUntitledTitle(documents));
         revisions.set(created.id, created.revision);
+        lastSaved.set(created.id, created.content);
         const doc: OpenDocument = {
           id: created.id,
           title: created.title,
@@ -603,6 +749,7 @@ export function initEditorApp(): void {
     if (cloud) {
       const session = cloud;
       revisions.delete(id);
+      lastSaved.delete(id);
       void session.remove(id).then((removed) => {
         if (!removed) toast(`Could not delete “${doc.title}” — it is still online`);
       });
@@ -872,7 +1019,6 @@ export function initEditorApp(): void {
     };
     panes.set(doc.id, pane);
 
-    // Each pane needs its own menu ids, otherwise the first pane always wins.
     const formatTrigger = root.querySelector<HTMLElement>('[data-menu="format"]');
     const formatPanel = root.querySelector<HTMLElement>('[data-pop="format"]');
     const menuName = `format-${doc.id}`;
@@ -891,6 +1037,12 @@ export function initEditorApp(): void {
     });
     ['keyup', 'click', 'focus'].forEach((eventName) =>
       textarea.addEventListener(eventName, () => updateStatus()),
+    );
+
+    const shareCursor = (): void =>
+      collab?.setCursor(textarea.selectionStart, textarea.selectionEnd);
+    ['keyup', 'click', 'select', 'input'].forEach((eventName) =>
+      textarea.addEventListener(eventName, shareCursor),
     );
 
     pane.findInput.addEventListener('input', () => updateFindCount(pane));
@@ -1066,8 +1218,6 @@ export function initEditorApp(): void {
 
     const tab = target.closest<HTMLElement>('[data-tab-id]');
     if (tab?.dataset.tabId) {
-      // Do not re-activate (or refocus) the tab that is already open, otherwise
-      // the double-click that starts a rename would be swallowed.
       if (tab.dataset.tabId !== activeId) activate(tab.dataset.tabId);
       return;
     }
@@ -1091,7 +1241,10 @@ export function initEditorApp(): void {
   });
 
   window.addEventListener('resize', () => closeMenus());
-  window.addEventListener('pagehide', () => flushAll(true));
+  window.addEventListener('pagehide', () => {
+    flushAll(true);
+    collab?.close();
+  });
   document.addEventListener('visibilitychange', () => {
     if (document.hidden) flushAll(true);
   });
@@ -1103,10 +1256,6 @@ export function initEditorApp(): void {
     activate(target.id);
   }
 
-  /**
-   * Signed in → the tabs come from the server; anonymous (or unreachable) → the
-   * local `localStorage` editor, exactly as before phase 3.
-   */
   async function boot(): Promise<void> {
     const requested = new URLSearchParams(window.location.search).get('doc');
     const session = await openCloudDocuments();
@@ -1119,23 +1268,24 @@ export function initEditorApp(): void {
     }
 
     cloud = session;
-    for (const entry of session.documents) revisions.set(entry.id, entry.revision);
+    for (const entry of session.documents) {
+      revisions.set(entry.id, entry.revision);
+      lastSaved.set(entry.id, entry.content);
+    }
     documents = session.documents.map((entry) => ({
       id: entry.id,
       title: entry.title,
       content: entry.content,
     }));
+    await openCollabSession(session);
 
-    // A brand new account opens the same welcome document the local editor
-    // starts with, so the screen is never empty.
     if (documents.length === 0) {
       try {
         const created = await session.create(nextUntitledTitle([]), WELCOME_MARKDOWN);
         revisions.set(created.id, created.revision);
+        lastSaved.set(created.id, created.content);
         documents = [{ id: created.id, title: created.title, content: created.content }];
       } catch {
-        // The account answered once and then failed: keep the user typing, but
-        // locally and without pretending it will be saved.
         cloud = null;
         documents = [createDocument([], WELCOME_MARKDOWN)];
         toast('Could not reach your documents — this session stays in the browser');

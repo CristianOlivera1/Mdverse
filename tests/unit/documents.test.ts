@@ -109,6 +109,7 @@ describe('parseCloudDocuments', () => {
     content: 'body',
     revision: 3,
     role: 'owner',
+    visibility: 'private',
     updatedAt: '2026-10-06T12:00:00.000Z',
     slug: 'a',
   };
@@ -116,11 +117,21 @@ describe('parseCloudDocuments', () => {
   it('keeps well-formed entries', () => {
     expect(isCloudDocument(valid)).toBe(true);
     expect(parseCloudDocuments({ documents: [valid] })).toHaveLength(1);
+    // The visibility travels with the document: the editor needs it to know
+    // whether a link can reach it.
+    expect(isCloudDocument({ ...valid, visibility: undefined })).toBe(false);
   });
 
   it('drops malformed entries instead of passing them to the editor', () => {
     const payload = {
-      documents: [valid, null, { id: 'b' }, { ...valid, content: 42 }, { ...valid, role: 'nope' }],
+      documents: [
+        valid,
+        null,
+        { id: 'b' },
+        { ...valid, content: 42 },
+        { ...valid, role: 'nope' },
+        { ...valid, visibility: 'secret' },
+      ],
     };
     expect(parseCloudDocuments(payload)).toEqual([valid]);
   });

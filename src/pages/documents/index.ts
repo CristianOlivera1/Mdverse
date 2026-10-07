@@ -1,10 +1,6 @@
 /**
- * `POST /documents` — the dashboard's "New document" button.
- *
- * A plain form, not fetch: the answer is a redirect straight into the editor with
- * the new document open. `/documents/*` is behind the auth guard (see
- * `src/lib/auth/routes.ts`), and `astro.config.mjs` keeps the built-in
- * same-origin check, so a cross-site form post cannot reach this handler.
+ * Plain-form POST (not fetch): redirects into the editor.
+ * Auth-guarded; the built-in same-origin check blocks cross-site posts.
  */
 
 import type { APIRoute } from 'astro';

@@ -1,11 +1,3 @@
-/**
- * `POST /documents/:id/delete` — the dashboard's delete button.
- *
- * The delete policy is owner-only, so a collaborator reaching this handler gets
- * `forbidden` rather than a deleted document. Deleting the row cascades to
- * collaborators, invitations, versions, comments and share links.
- */
-
 import type { APIRoute } from 'astro';
 
 import { isDocumentId } from '@/lib/documents/ids';

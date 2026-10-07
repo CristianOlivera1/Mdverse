@@ -1,0 +1,405 @@
+---
+
+import Icon from '@/components/ui/Icon.astro';
+import AccountLayout from '@/layouts/AccountLayout.astro';
+import { canManageDocument, describeAccess } from '@/lib/documents/access';
+import { formatTimestamp } from '@/lib/documents/format';
+import { isDocumentId } from '@/lib/documents/ids';
+import { shareNotice } from '@/lib/documents/messages';
+import {
+  getDocument,
+  listCollaborators,
+  listInvitations,
+  listShareLinks,
+} from '@/lib/documents/repository';
+import {
+  LINK_EXPIRIES,
+  linkIsActive,
+  maskToken,
+  ROLE_HINTS,
+  ROLE_LABELS,
+  shareUrl,
+  sortCollaborators,
+  VISIBILITIES,
+  VISIBILITY_LABELS,
+} from '@/lib/documents/sharing';
+
+export const prerender = false;
+
+const { user, supabase } = Astro.locals;
+const id = Astro.params.id ?? '';
+
+if (!user || !supabase) return Astro.redirect('/login?next=/dashboard');
+if (!isDocumentId(id)) return Astro.redirect('/dashboard?error=not_found');
+
+const document = await getDocument(supabase, user.id, id);
+if (!document) return Astro.redirect('/dashboard?error=not_found');
+
+const manageable = canManageDocument(document.role);
+const params = Astro.url.searchParams;
+const notice = shareNotice({
+  error: params.get('error'),
+  invited: params.get('invited'),
+  added: params.get('added'),
+  yours: params.get('yours'),
+  invalid: params.get('invalid'),
+  role: params.get('role'),
+  removed: params.get('removed'),
+  link: params.get('link'),
+  visibility: params.get('visibility'),
+});
+
+const action = `/documents/${encodeURIComponent(document.id)}/share`;
+const now = new Date();
+
+// Non-managers skip these queries entirely — RLS would reject them anyway.
+const collaborators = manageable
+  ? sortCollaborators(await listCollaborators(supabase, document.id))
+  : [];
+const invitations = manageable
+  ? (await listInvitations(supabase, document.id)).filter((entry) => entry.acceptedAt === null)
+  : [];
+const links = manageable ? await listShareLinks(supabase, document.id) : [];
+const origin = Astro.url.origin;
+const roleOptions = ['reader', 'editor'] as const;
+---
+
+<AccountLayout
+  title={document.title}
+  description={`Who can reach this document · you are ${describeAccess(document.role).toLowerCase()}`}
+  current="dashboard"
+>
+  {notice && (
+    <p
+      class:list={[
+        'mb-6 rounded-lg border px-3 py-2 text-xs',
+        notice.tone === 'error'
+          ? 'border-red-900 bg-red-950/40 text-red-300'
+          : 'border-emerald-900 bg-emerald-950/30 text-emerald-300',
+      ]}
+    >
+      {notice.message}
+    </p>
+  )}
+
+  <div class="mb-6 flex flex-wrap items-center gap-2">
+    <a href={`/?doc=${encodeURIComponent(document.id)}`} class="hb on">
+      <Icon name="lucide:pencil-line" />
+      Open in the editor
+    </a>
+    <a href={`/documents/${encodeURIComponent(document.id)}/history`} class="hb">
+      <Icon name="lucide:history" />
+      History
+    </a>
+    <a href="/dashboard" class="hb">
+      <Icon name="lucide:arrow-left" />
+      All documents
+    </a>
+  </div>
+
+  {!manageable ? (
+    <section class="rounded-xl border border-dashed border-neutral-800 p-6 text-center">
+      <Icon name="lucide:lock" size={20} class="mx-auto text-neutral-600" />
+      <h2 class="mt-3 text-sm font-medium text-neutral-200">
+        Only the owner decides who has access
+      </h2>
+      <p class="mx-auto mt-1 max-w-md text-xs leading-relaxed text-neutral-500">
+        Your role here is {describeAccess(document.role).toLowerCase()}. You can read the document
+        and its history, and keep editing if that is your role — sharing stays with the owner.
+      </p>
+    </section>
+  ) : (
+    <>
+      <section class="rounded-xl border border-neutral-800 bg-neutral-950/60 p-4">
+        <h2 class="flex items-center gap-2 text-xs font-medium text-neutral-300">
+          <Icon name="lucide:user-plus" size={14} />
+          Invite by email
+        </h2>
+        <form method="POST" action={`${action}/invite`} class="mt-3 space-y-2">
+          <textarea
+            name="emails"
+            rows="2"
+            required
+            placeholder="ana@example.com, luis@example.com"
+            aria-label="Email addresses to invite"
+            class="w-full rounded-lg border border-neutral-800 bg-black px-3 py-2 text-sm text-neutral-100 placeholder:text-neutral-600 focus:border-neutral-600 focus:outline-none"
+          ></textarea>
+          <div class="flex flex-wrap items-center gap-2">
+            <select
+              name="role"
+              aria-label="Role for the invited addresses"
+              class="rounded-lg border border-neutral-800 bg-black px-2 py-1.5 text-xs text-neutral-200"
+            >
+              <option value="reader">Can view</option>
+              <option value="editor">Can edit</option>
+            </select>
+            <button type="submit" class="hb on">
+              <Icon name="lucide:send" />
+              Send invitation
+            </button>
+          </div>
+          <p class="text-[11px] leading-relaxed text-neutral-500">
+            An address with an account gets access immediately. An address without one keeps the
+            invitation until it signs up — the role is granted the moment it does.
+          </p>
+        </form>
+      </section>
+
+      <section class="mt-6">
+        <h2 class="flex items-center gap-2 text-xs font-medium text-neutral-400">
+          <Icon name="lucide:users" size={14} />
+          People with access
+          <span class="text-neutral-600">({collaborators.length + 1})</span>
+        </h2>
+
+        <ul class="mt-3 space-y-2">
+          <li class="rounded-xl border border-neutral-800 bg-neutral-950/60 p-3">
+            <div class="flex flex-wrap items-center justify-between gap-3">
+              <div class="min-w-0">
+                <p class="text-sm text-neutral-100">
+                  {user.email ?? 'You'}
+                  <span class="ml-1 text-[11px] text-neutral-500">(you)</span>
+                </p>
+                <p class="mt-0.5 text-[11px] text-neutral-500">
+                  {ROLE_LABELS.owner} · cannot be removed
+                </p>
+              </div>
+            </div>
+          </li>
+
+          {collaborators.map((collaborator) => (
+            <li class="rounded-xl border border-neutral-800 bg-neutral-950/60 p-3">
+              <div class="flex flex-wrap items-center justify-between gap-3">
+                <div class="min-w-0">
+                  <p class="truncate text-sm text-neutral-100">{collaborator.name}</p>
+                  <p class="mt-0.5 text-[11px] text-neutral-500">
+                    @{collaborator.username} · added {formatTimestamp(collaborator.addedAt)}
+                  </p>
+                </div>
+
+                <div class="flex shrink-0 flex-wrap items-center gap-1">
+                  <form
+                    method="POST"
+                    action={`${action}/collaborator`}
+                    class="flex items-center gap-1"
+                  >
+                    <input type="hidden" name="action" value="role" />
+                    <input type="hidden" name="user" value={collaborator.userId} />
+                    <select
+                      name="role"
+                      aria-label={`Role for ${collaborator.name}`}
+                      class="rounded-lg border border-neutral-800 bg-black px-2 py-1.5 text-xs text-neutral-200"
+                    >
+                      {roleOptions.map((role) => (
+                        <option value={role} selected={collaborator.role === role}>
+                          {ROLE_LABELS[role]}
+                        </option>
+                      ))}
+                    </select>
+                    <button type="submit" class="hb">
+                      Save
+                    </button>
+                  </form>
+
+                  <form method="POST" action={`${action}/collaborator`}>
+                    <input type="hidden" name="action" value="remove" />
+                    <input type="hidden" name="user" value={collaborator.userId} />
+                    <button
+                      type="submit"
+                      class="hb danger"
+                      title="Remove access"
+                      aria-label={`Remove ${collaborator.name}`}
+                    >
+                      <Icon name="lucide:user-minus" />
+                    </button>
+                  </form>
+                </div>
+              </div>
+            </li>
+          ))}
+        </ul>
+
+        {invitations.length > 0 && (
+          <div class="mt-4">
+            <h3 class="text-[11px] font-medium text-neutral-400">Waiting for an account</h3>
+            <ul class="mt-2 space-y-2">
+              {invitations.map((invitation) => (
+                <li class="rounded-xl border border-dashed border-neutral-800 p-3">
+                  <div class="flex flex-wrap items-center justify-between gap-3">
+                    <div class="min-w-0">
+                      <p class="truncate text-sm text-neutral-200">{invitation.email}</p>
+                      <p class="mt-0.5 text-[11px] text-neutral-500">
+                        {ROLE_LABELS[invitation.role]} when they sign up · invited{' '}
+                        {formatTimestamp(invitation.createdAt)}
+                      </p>
+                    </div>
+                    <form method="POST" action={`${action}/invitation`}>
+                      <input type="hidden" name="invitation" value={invitation.id} />
+                      <button type="submit" class="hb danger">
+                        <Icon name="lucide:x" />
+                        Revoke
+                      </button>
+                    </form>
+                  </div>
+                </li>
+              ))}
+            </ul>
+          </div>
+        )}
+      </section>
+
+      <section class="mt-8 rounded-xl border border-neutral-800 bg-neutral-950/60 p-4">
+        <h2 class="flex items-center gap-2 text-xs font-medium text-neutral-300">
+          <Icon name="lucide:link" size={14} />
+          Share by link
+        </h2>
+
+        <form
+          method="POST"
+          action={`${action}/link`}
+          class="mt-3 flex flex-wrap items-center gap-2"
+        >
+          <input type="hidden" name="action" value="create" />
+          <select
+            name="role"
+            aria-label="Role granted by the link"
+            class="rounded-lg border border-neutral-800 bg-black px-2 py-1.5 text-xs text-neutral-200"
+          >
+            <option value="reader">Can view</option>
+            <option value="editor">Can edit</option>
+          </select>
+          <select
+            name="expiry"
+            aria-label="Link expiry"
+            class="rounded-lg border border-neutral-800 bg-black px-2 py-1.5 text-xs text-neutral-200"
+          >
+            {LINK_EXPIRIES.map((expiry) => (
+              <option value={String(expiry.days)}>{expiry.label}</option>
+            ))}
+          </select>
+          <button type="submit" class="hb">
+            <Icon name="lucide:plus" />
+            Create link
+          </button>
+          <p class="w-full text-[11px] leading-relaxed text-neutral-500">
+            Anyone who opens the link reads the document. Editing through a link also requires being
+            signed in — the link then becomes real access for that account.
+          </p>
+        </form>
+
+        {links.length === 0 ? (
+          <p class="mt-4 text-xs text-neutral-500">No links yet.</p>
+        ) : (
+          <ul class="mt-4 space-y-2">
+            {links.map((entry) => {
+              const active = linkIsActive(entry, now);
+              const url = shareUrl(origin, entry.token);
+              return (
+                <li class="rounded-xl border border-neutral-800 p-3">
+                  <div class="flex flex-wrap items-center justify-between gap-2">
+                    <p class="text-[11px] text-neutral-400">
+                      {ROLE_LABELS[entry.role]} ·{' '}
+                      {entry.expires_at
+                        ? `${active ? 'expires' : 'expired'} ${formatTimestamp(entry.expires_at)}`
+                        : 'never expires'}{' '}
+                      ·{' '}
+                      <span class:list={[!active && 'text-amber-400/80']}>
+                        {maskToken(entry.token)}
+                      </span>
+                    </p>
+                    <form method="POST" action={`${action}/link`}>
+                      <input type="hidden" name="action" value="revoke" />
+                      <input type="hidden" name="link" value={entry.id} />
+                      <button type="submit" class="hb danger">
+                        <Icon name="lucide:trash" />
+                        Revoke
+                      </button>
+                    </form>
+                  </div>
+
+                  <div class="mt-2 flex items-center gap-1">
+                    <input
+                      type="text"
+                      readonly
+                      value={url}
+                      aria-label="Share link"
+                      class="min-w-0 flex-1 rounded-lg border border-neutral-800 bg-black px-2 py-1.5 font-mono text-[11px] text-neutral-300"
+                    />
+                    <button
+                      type="button"
+                      class="hb"
+                      data-copy={url}
+                      title="Copy link"
+                      aria-label="Copy link"
+                    >
+                      <Icon name="lucide:copy" />
+                      Copy
+                    </button>
+                  </div>
+                </li>
+              );
+            })}
+          </ul>
+        )}
+      </section>
+
+      <section class="mt-8 rounded-xl border border-neutral-800 bg-neutral-950/60 p-4">
+        <h2 class="flex items-center gap-2 text-xs font-medium text-neutral-300">
+          <Icon name="lucide:eye" size={14} />
+          Who can reach it
+        </h2>
+
+        <form method="POST" action={`${action}/visibility`} class="mt-3 space-y-2">
+          {VISIBILITIES.map((visibility) => (
+            <label class="flex items-start gap-3 rounded-lg border border-neutral-800 p-3">
+              <input
+                type="radio"
+                name="visibility"
+                value={visibility}
+                checked={document.visibility === visibility}
+                class="mt-0.5"
+              />
+              <span class="min-w-0">
+                <span class="block text-sm text-neutral-100">
+                  {VISIBILITY_LABELS[visibility].label}
+                </span>
+                <span class="mt-0.5 block text-[11px] leading-relaxed text-neutral-500">
+                  {VISIBILITY_LABELS[visibility].hint}
+                </span>
+              </span>
+            </label>
+          ))}
+          <button type="submit" class="hb on">
+            Save
+          </button>
+        </form>
+      </section>
+
+      <p class="mt-6 text-[11px] leading-relaxed text-neutral-600">
+        Roles: {ROLE_HINTS.reader} {ROLE_HINTS.editor} Everything here is enforced by row level
+        security in Postgres, not by this page.
+      </p>
+    </>
+  )}
+</AccountLayout>
+
+<script>
+  // Copy button only — every action is a plain form POST without JS.
+  for (const button of document.querySelectorAll<HTMLButtonElement>('button[data-copy]')) {
+    button.addEventListener('click', () => {
+      const value = button.dataset.copy ?? '';
+      const label = button.textContent ?? '';
+      void navigator.clipboard
+        ?.writeText(value)
+        .then(() => {
+          button.textContent = 'Copied';
+          window.setTimeout(() => {
+            button.textContent = label;
+          }, 1500);
+        })
+        .catch(() => {
+          /* Clipboard blocked: the field next to the button still holds the URL. */
+        });
+    });
+  }
+</script>

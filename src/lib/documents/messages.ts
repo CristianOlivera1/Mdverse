@@ -7,6 +7,8 @@
  */
 
 import type { AuthNotice } from '../auth/messages';
+import type { ShareFailure } from './repository';
+import { describeInviteSummary } from './sharing';
 import type { SaveDocumentResult } from './types';
 
 export const DOCUMENT_ERROR_CODES = [
@@ -18,6 +20,12 @@ export const DOCUMENT_ERROR_CODES = [
   'delete_failed',
   'restore_failed',
   'import_failed',
+  'invite_failed',
+  'email_invalid',
+  'role_failed',
+  'remove_failed',
+  'link_failed',
+  'visibility_failed',
 ] as const;
 
 export type DocumentErrorCode = (typeof DOCUMENT_ERROR_CODES)[number];
@@ -31,6 +39,12 @@ const ERROR_MESSAGES: Record<DocumentErrorCode, string> = {
   delete_failed: 'We could not delete the document. Please try again.',
   restore_failed: 'We could not restore that version. Please try again.',
   import_failed: 'We could not import your browser drafts. Please try again.',
+  invite_failed: 'We could not invite that address. Please try again.',
+  email_invalid: 'That does not look like an email address.',
+  role_failed: 'We could not change that role. Only the owner can.',
+  remove_failed: 'We could not remove that person. Only the owner can.',
+  link_failed: 'We could not create or revoke that link. Please try again.',
+  visibility_failed: 'We could not change who can reach the document.',
 };
 
 /** Maps a failed save onto the notice that explains it. */
@@ -102,6 +116,97 @@ export function dashboardFeedbackUrl(feedback: {
 
   const query = params.toString();
   return query.length > 0 ? `/dashboard?${query}` : '/dashboard';
+}
+
+/** Maps a failed sharing action onto the notice that explains it. */
+export function shareFailureCode(
+  reason: ShareFailure,
+  fallback: DocumentErrorCode,
+): DocumentErrorCode {
+  switch (reason) {
+    case 'forbidden':
+      return 'forbidden';
+    case 'missing':
+      return 'not_found';
+    case 'invalid_email':
+      return 'email_invalid';
+    default:
+      return fallback;
+  }
+}
+
+export function sharePageUrl(
+  documentId: string,
+  feedback: {
+    error?: DocumentErrorCode;
+    invited?: number;
+    added?: number;
+    yours?: number;
+    invalid?: number;
+    roleUpdated?: boolean;
+    removed?: boolean;
+    linkCreated?: boolean;
+    linkRevoked?: boolean;
+    visibilityUpdated?: boolean;
+  } = {},
+): string {
+  const base = `/documents/${encodeURIComponent(documentId)}/share`;
+  const params = new URLSearchParams();
+  if (feedback.error) params.set('error', feedback.error);
+  if (feedback.invited) params.set('invited', String(feedback.invited));
+  if (feedback.added) params.set('added', String(feedback.added));
+  if (feedback.yours) params.set('yours', String(feedback.yours));
+  if (feedback.invalid) params.set('invalid', String(feedback.invalid));
+  if (feedback.roleUpdated) params.set('role', '1');
+  if (feedback.removed) params.set('removed', '1');
+  if (feedback.linkCreated) params.set('link', 'created');
+  if (feedback.linkRevoked) params.set('link', 'revoked');
+  if (feedback.visibilityUpdated) params.set('visibility', '1');
+
+  const query = params.toString();
+  return query.length > 0 ? `${base}?${query}` : base;
+}
+
+export interface ShareNoticeParams {
+  error?: string | null;
+  invited?: string | null;
+  added?: string | null;
+  yours?: string | null;
+  invalid?: string | null;
+  role?: string | null;
+  removed?: string | null;
+  link?: string | null;
+  visibility?: string | null;
+}
+
+/** Resolves the notice shown on the share page (reuses the dashboard catalog). */
+export function shareNotice(params: ShareNoticeParams): AuthNotice | null {
+  if (isDocumentErrorCode(params.error)) {
+    return { tone: 'error', message: ERROR_MESSAGES[params.error] };
+  }
+
+  const count = (value: string | null | undefined): number => {
+    const parsed = Number.parseInt(value ?? '', 10);
+    return Number.isFinite(parsed) && parsed > 0 ? parsed : 0;
+  };
+
+  const message = describeInviteSummary({
+    invited: count(params.invited),
+    added: count(params.added),
+    yours: count(params.yours),
+    invalid: count(params.invalid),
+  });
+  if (message !== null) return { tone: 'success', message };
+
+  if (params.role === '1') return { tone: 'success', message: 'Role updated.' };
+  if (params.removed === '1') return { tone: 'success', message: 'Access removed.' };
+  if (params.link === 'created') return { tone: 'success', message: 'Link created.' };
+  if (params.link === 'revoked') return { tone: 'success', message: 'Link revoked.' };
+  if (params.visibility === '1') {
+    return { tone: 'success', message: 'Who can reach the document has been updated.' };
+  }
+
+  return null;
 }
 
 export function documentHistoryUrl(

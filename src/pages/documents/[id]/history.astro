@@ -1,14 +1,4 @@
 ---
-/**
- * `GET /documents/:id/history` — what the document used to say.
- *
- * Restoring posts to `/documents/:id/restore` and copies the snapshot into the
- * document as a *new* revision, so nothing in the history is rewritten and a
- * restore can itself be undone.
- *
- * Snapshots are written by `public.snapshot_document_version` at most once every
- * ten minutes and only when the text changed — see the note in the migration.
- */
 
 import Icon from '@/components/ui/Icon.astro';
 import AccountLayout from '@/layouts/AccountLayout.astro';
@@ -65,6 +55,10 @@ const PREVIEW_LENGTH = 1200;
     <a href="/dashboard" class="hb">
       <Icon name="lucide:arrow-left" />
       All documents
+    </a>
+    <a href={`/documents/${encodeURIComponent(document.id)}/share`} class="hb">
+      <Icon name="lucide:user-plus" />
+      Share
     </a>
   </div>
 

@@ -20,7 +20,10 @@
 --   * `(select auth.uid())` everywhere instead of `auth.uid()`, so the function is
 --     evaluated once per statement (initplan) instead of once per row.
 --   * UPDATE policies carry USING *and* WITH CHECK: without the check a
---     collaborator could rewrite `owner_id` and take the document.
+--     collaborator could rewrite `owner_id` and take the document — or an editor
+--     could publish somebody else's draft. Both guards live here, with the rest
+--     of the table's policies, so applying this file again never weakens a
+--     database that already has `20261006140000_sharing.sql`.
 --   * Roles: reader (read), editor (read + write), admin (co-owner: manages
 --     people and links). Only the owner deletes.
 -- ============================================================================
@@ -62,9 +65,6 @@ alter table if exists public.document_versions
 
 alter table if exists public.document_collaborators
   add column if not exists updated_at timestamptz not null default now();
-
-comment on column public.document_versions.title is
-  'Title of the replaced revision, so restoring an old version restores the heading too.';
 
 -- `on conflict (document_id, revision)` needs a unique index or constraint. A
 -- constraint created by hand and a unique index are both acceptable, so this
@@ -208,6 +208,13 @@ create table if not exists public.document_versions (
 
 comment on table public.document_versions is
   'Snapshot of the state *before* an edit (content + title of the replaced revision). Restoring a row recreates that text; it never rewrites history.';
+
+-- Commented here, after the table: `comment on column` is one of the few
+-- statements in this file that cannot be guarded with `if exists`, and on a
+-- clean database it would abort the whole migration before reaching the
+-- `create table` below.
+comment on column public.document_versions.title is
+  'Title of the replaced revision, so restoring an old version restores the heading too.';
 
 -- ---------------------------------------------------------------------------
 -- Comments
@@ -506,6 +513,16 @@ as $$
          );
 $$;
 
+-- The three helpers below answer a **strict** boolean: `true` or `false`, never
+-- NULL. It is not a stylistic choice. `private.document_role()` returns NULL for
+-- anyone who is not a collaborator, and `NULL = 'editor'` is NULL, so an
+-- expression that is only `false or NULL` collapses to NULL at the end of the
+-- function. RLS survives that (a policy treats NULL as "not allowed"), but a
+-- PL/pgSQL guard does not: `if not can_manage_document(...) then raise` becomes
+-- `if NULL then`, which Postgres *skips*, and the gate disappears. That is
+-- exactly how `public.invite_collaborator` let any signed-in account hand itself
+-- an editor row on somebody else's document. Hence the `coalesce(..., false)`.
+
 /** Owner (any role) or collaborator: who may *reach* the document. */
 create or replace function private.can_read_document(p_document_id uuid, p_user_id uuid)
 returns boolean
@@ -514,15 +531,18 @@ stable
 security definer
 set search_path = ''
 as $$
-  select p_user_id is not null
-     and (
-       exists (
-         select 1 from public.documents d
-          where d.id = p_document_id
-            and (d.owner_id = p_user_id or d.visibility = 'public')
-       )
-       or private.document_role(p_document_id, p_user_id) is not null
-     );
+  select coalesce(
+    p_user_id is not null
+    and (
+      exists (
+        select 1 from public.documents d
+         where d.id = p_document_id
+           and (d.owner_id = p_user_id or d.visibility = 'public')
+      )
+      or private.document_role(p_document_id, p_user_id) is not null
+    ),
+    false
+  );
 $$;
 
 /** Owner or editor/admin: who may change the text. */
@@ -533,15 +553,18 @@ stable
 security definer
 set search_path = ''
 as $$
-  select p_user_id is not null
-     and (
-       exists (
-         select 1 from public.documents d
-          where d.id = p_document_id
-            and d.owner_id = p_user_id
-       )
-       or private.document_role(p_document_id, p_user_id) in ('editor', 'admin')
-     );
+  select coalesce(
+    p_user_id is not null
+    and (
+      exists (
+        select 1 from public.documents d
+         where d.id = p_document_id
+           and d.owner_id = p_user_id
+      )
+      or private.document_role(p_document_id, p_user_id) in ('editor', 'admin')
+    ),
+    false
+  );
 $$;
 
 /** Owner or admin: who may hand out access (invitations, links) and delete. */
@@ -552,15 +575,18 @@ stable
 security definer
 set search_path = ''
 as $$
-  select p_user_id is not null
-     and (
-       exists (
-         select 1 from public.documents d
-          where d.id = p_document_id
-            and d.owner_id = p_user_id
-       )
-       or private.document_role(p_document_id, p_user_id) = 'admin'
-     );
+  select coalesce(
+    p_user_id is not null
+    and (
+      exists (
+        select 1 from public.documents d
+         where d.id = p_document_id
+           and d.owner_id = p_user_id
+      )
+      or private.document_role(p_document_id, p_user_id) = 'admin'
+    ),
+    false
+  );
 $$;
 
 /**
@@ -583,6 +609,23 @@ as $$
   select d.owner_id from public.documents d where d.id = p_document_id;
 $$;
 
+/**
+ * Stored `visibility` of a document, for the update policy that keeps an editor
+ * from publishing.
+ *
+ * Same recursion problem as `private.document_owner`, and the same answer: a
+ * SECURITY DEFINER read. It only ever answers with the value already in the row.
+ */
+create or replace function private.document_visibility(p_document_id uuid)
+returns public.document_visibility
+language sql
+stable
+security definer
+set search_path = ''
+as $$
+  select d.visibility from public.documents d where d.id = p_document_id;
+$$;
+
 comment on function private.document_role(uuid, uuid) is
   'SECURITY DEFINER is what breaks the recursion between the documents and document_collaborators policies; the user id is a parameter, never read from the session.';
 
@@ -592,6 +635,7 @@ revoke execute on function private.is_document_owner(uuid, uuid) from public;
 revoke execute on function private.can_read_document(uuid, uuid) from public;
 revoke execute on function private.can_edit_document(uuid, uuid) from public;
 revoke execute on function private.can_manage_document(uuid, uuid) from public;
+revoke execute on function private.document_visibility(uuid) from public;
 revoke execute on function private.unique_document_slug(text, uuid) from public;
 
 -- ---------------------------------------------------------------------------
@@ -629,7 +673,11 @@ create policy documents_insert_self
   with check (owner_id = (select auth.uid()));
 
 -- USING picks the rows (member with write rights), WITH CHECK pins the result:
--- `owner_id` cannot be reassigned, and a reader cannot promote themselves.
+-- `owner_id` cannot be reassigned, a reader cannot promote themselves, and an
+-- editor cannot put somebody else's draft on the open web: changing who can
+-- reach the document is a management action, not an edit. Without this last
+-- clause an editor could flip `visibility` to `public` and RLS would allow it,
+-- because the policy only asked for edit rights.
 drop policy if exists documents_update_editor on public.documents;
 create policy documents_update_editor
   on public.documents for update
@@ -642,6 +690,10 @@ create policy documents_update_editor
     -- `documents` here makes Postgres reject the policy as recursive
     -- (42P17) and every update fails, editors included.
     and owner_id = private.document_owner(id)
+    and (
+      visibility = private.document_visibility(id)
+      or private.can_manage_document(id, (select auth.uid()))
+    )
   );
 
 drop policy if exists documents_delete_owner on public.documents;
@@ -827,6 +879,7 @@ begin
     execute 'grant execute on function private.document_role(uuid, uuid) to authenticated';
     execute 'grant execute on function private.document_owner(uuid) to authenticated';
     execute 'grant execute on function private.unique_document_slug(text, uuid) to authenticated';
+    execute 'grant execute on function private.document_visibility(uuid) to authenticated';
   end if;
 
 end

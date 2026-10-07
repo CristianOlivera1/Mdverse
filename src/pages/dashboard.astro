@@ -144,6 +144,14 @@ const editorUrl = (id: string): string => `/?doc=${encodeURIComponent(id)}`;
                       <Icon name="lucide:history" />
                       History
                     </a>
+                    <a
+                      href={`/documents/${encodeURIComponent(document.id)}/share`}
+                      class="hb"
+                      title="Who can reach this document"
+                    >
+                      <Icon name="lucide:user-plus" />
+                      Share
+                    </a>
                     <form
                       method="POST"
                       action={`/documents/${encodeURIComponent(document.id)}/delete`}
@@ -183,7 +191,8 @@ const editorUrl = (id: string): string => `/?doc=${encodeURIComponent(id)}`;
                     </button>
                   </form>
                   <p class="mt-1 text-[10px] text-neutral-600">
-                    Renaming keeps the public link (/d/{document.slug}) working.
+                    Renaming never changes the address ({document.slug}), so links you already
+                    shared keep working.
                   </p>
                 </details>
               </li>

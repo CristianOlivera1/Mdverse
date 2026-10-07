@@ -6,6 +6,11 @@ import icon from 'astro-icon';
 
 import { ICONIFY_ICONS } from './src/lib/ui/iconNames';
 
+// `ICONIFY_ICONS` is the single source of truth for which icons ship.
+const iconInclude = Object.fromEntries(
+  Object.entries(ICONIFY_ICONS).map(([set, names]) => [set, [...names]]),
+);
+
 // https://astro.build/config
 export default defineConfig({
   // Public base URL, used for canonical links and sitemaps.
@@ -23,13 +28,15 @@ export default defineConfig({
     // build time (no CDN, no client JS). The `include` filter is required with
     // `output: 'server'` — without it every icon of every installed set would be
     // bundled into the server output. The list lives in one place:
-    // `src/lib/ui/iconNames.ts`.
-    icon({
-      include: {
-        lucide: [...ICONIFY_ICONS.lucide],
-        'simple-icons': [...ICONIFY_ICONS['simple-icons']],
-      },
-    }),
+    // `src/lib/ui/iconNames.ts`, and it is spread here verbatim so that adding a
+    // set to the list is enough to have it bundled.
+    //
+    // This must never drift from the list: an icon that is filtered out here is
+    // dropped silently, and with `output: 'server'` the failed lookup aborts the
+    // render of the whole page — the visitor gets `200 OK` with an empty body,
+    // which no type check, lint or build reports. `tests/unit/icons.test.ts`
+    // guards both halves of that contract.
+    icon({ include: iconInclude }),
   ],
 
   // Tailwind CSS v4 is compiled at build time (the CDN is intentionally not used).

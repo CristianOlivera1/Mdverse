@@ -1,22 +1,3 @@
-/**
- * The Iconify icons this app ships.
- *
- * Icons come from [Iconify](https://iconify.design) through `astro-icon`: the
- * collections are npm packages (`@iconify-json/*`), so icons are inlined as SVG
- * at build time — no Iconify CDN, no client JavaScript, and nothing to fetch at
- * runtime.
- *
- * This file is the single source of truth:
- *  - `astro.config.mjs` reads it to build the `icon({ include })` filter. With
- *    `output: 'server'` the filter is required: without it astro-icon bundles
- *    *every* icon of every installed set into the server bundle.
- *  - `components/ui/Icon.astro` types its `name` prop from the union below, so a
- *    typo or an omitted entry fails `astro check` instead of rendering an empty
- *    box in production.
- *
- * Names are Iconify ids *without* the set prefix, exactly as they appear on
- * https://icon-sets.iconify.design (e.g. `lucide/bold` → `'bold'`).
- */
 export const ICONIFY_ICONS = {
   lucide: [
     'arrow-left',
@@ -26,6 +7,7 @@ export const ICONIFY_ICONS = {
     'case-sensitive',
     'chevron-down',
     'chevron-up',
+    'circle-x',
     'clock',
     'code',
     'code-xml',
@@ -42,7 +24,9 @@ export const ICONIFY_ICONS = {
     'history',
     'italic',
     'key-round',
+    'layout-dashboard',
     'link',
+    'link-2-off',
     'list',
     'list-checks',
     'list-ordered',
@@ -61,6 +45,7 @@ export const ICONIFY_ICONS = {
     'redo-2',
     'rotate-ccw',
     'search',
+    'send',
     'settings',
     'shield-check',
     'sliders-horizontal',
@@ -71,6 +56,8 @@ export const ICONIFY_ICONS = {
     'type',
     'undo-2',
     'upload',
+    'user-minus',
+    'user-plus',
     'users',
     'workflow',
     'x',
