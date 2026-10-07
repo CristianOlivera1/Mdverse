@@ -6,7 +6,6 @@ export const AUTH_ERROR_CODES = [
   'password_missing',
   'password_short',
   'password_long',
-  'password_weak',
   'password_mismatch',
   'invalid_credentials',
   'email_not_confirmed',
@@ -40,7 +39,6 @@ const ERROR_MESSAGES: Record<AuthErrorCode, string> = {
   password_missing: 'Enter your password.',
   password_short: 'That password is too short: use at least 8 characters.',
   password_long: 'That password is too long: keep it under 72 characters.',
-  password_weak: 'Add a letter and a number to make that password stronger.',
   password_mismatch: 'The two passwords do not match.',
   invalid_credentials: 'Wrong email or password. Please try again.',
   email_not_confirmed:
@@ -67,7 +65,6 @@ const PASSWORD_ERROR_CODES = {
   missing: 'password_missing',
   too_short: 'password_short',
   too_long: 'password_long',
-  too_weak: 'password_weak',
   mismatch: 'password_mismatch',
 } as const satisfies Record<PasswordProblem, AuthErrorCode>;
 

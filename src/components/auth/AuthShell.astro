@@ -25,12 +25,15 @@ const NOTICE_TONES = {
 
   <main class="min-h-screen flex items-center justify-center px-4 py-10">
     <div class="w-full max-w-sm">
-      <a href="/" class="flex items-center gap-2.5" aria-label="OpenMarkdown home">
-        <span class="w-6 h-6 rounded-md bg-white flex items-center justify-center">
-          <span class="text-black text-xs font-bold leading-none">M</span>
-        </span>
-        <span class="text-sm font-medium text-neutral-100">OpenMarkdown</span>
-      </a>
+      <div class="flex justify-center">
+        <img
+          src="/logo-calligraphy.svg"
+          alt="Mdverse"
+          width="220"
+          height="54"
+          class="h-auto w-[220px]"
+        />
+      </div>
 
       <h1 class="mt-8 text-xl font-semibold text-neutral-50">{heading}</h1>
       {subtitle && <p class="mt-2 text-sm text-neutral-400">{subtitle}</p>}
@@ -74,17 +77,35 @@ const NOTICE_TONES = {
       });
     }
 
-    // Keep the confirmation field honest: native validation reports the
-    // mismatch, so it works even if this script never runs.
+    // Keep the confirmation field honest: native validation blocks submit on
+    // mismatch, a red hint names the mismatch live, and a green hint confirms
+    // the match. All three are progressive enhancement — both hints start
+    // hidden and the server route still rejects mismatches when this script
+    // never runs.
     for (const node of document.querySelectorAll('[data-password-confirm]')) {
       if (!(node instanceof HTMLInputElement)) continue;
       const source = document.getElementById(node.dataset.passwordConfirm ?? '');
       if (!(source instanceof HTMLInputElement)) continue;
+      const matchHint = document.querySelector(
+        `[data-password-match-for="${node.id}"]`,
+      );
+      const mismatchHint = document.querySelector(
+        `[data-password-mismatch-for="${node.id}"]`,
+      );
 
       const sync = () => {
-        node.setCustomValidity(
-          node.value === source.value ? '' : 'The two passwords do not match.',
-        );
+        // Empty confirmation defers to `required`, so the browser keeps its
+        // native "fill out this field" message instead of a mismatch one.
+        if (node.value.length === 0) {
+          node.setCustomValidity('');
+          if (matchHint instanceof HTMLElement) matchHint.hidden = true;
+          if (mismatchHint instanceof HTMLElement) mismatchHint.hidden = true;
+          return;
+        }
+        const matches = node.value === source.value;
+        node.setCustomValidity(matches ? '' : 'The two passwords do not match.');
+        if (matchHint instanceof HTMLElement) matchHint.hidden = !matches;
+        if (mismatchHint instanceof HTMLElement) mismatchHint.hidden = matches;
       };
 
       source.addEventListener('input', sync);

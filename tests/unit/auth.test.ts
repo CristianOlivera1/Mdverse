@@ -14,6 +14,7 @@ import {
 import {
   PASSWORD_MAX_LENGTH,
   PASSWORD_MIN_LENGTH,
+  PASSWORD_PROBLEMS,
   checkPassword,
 } from '../../src/lib/auth/password';
 import {
@@ -305,10 +306,13 @@ describe('auth notices', () => {
   });
 
   it('gives every password problem its own message', () => {
-    const problems = ['missing', 'too_short', 'too_long', 'too_weak', 'mismatch'] as const;
-    const codes = problems.map(passwordProblemErrorCode);
+    // Derived from the source list (not hardcoded) so adding or removing a
+    // `PasswordProblem` without updating the mapping fails loudly here and at
+    // compile time (`satisfies Record<PasswordProblem, AuthErrorCode>`).
+    expect(PASSWORD_PROBLEMS).toHaveLength(4);
+    const codes = PASSWORD_PROBLEMS.map(passwordProblemErrorCode);
 
-    expect(new Set(codes).size).toBe(problems.length);
+    expect(new Set(codes).size).toBe(PASSWORD_PROBLEMS.length);
     for (const code of codes) expect(authNotice({ error: code })?.tone).toBe('error');
   });
 
@@ -357,14 +361,23 @@ describe('checkPassword', () => {
       ok: false,
       problem: 'too_long',
     });
-    expect(checkPassword('a'.repeat(20))).toEqual({ ok: false, problem: 'too_weak' });
-    expect(checkPassword('12345678')).toEqual({ ok: false, problem: 'too_weak' });
+    expect(checkPassword('abcdefgh')).toEqual({ ok: true, problem: null });
+    expect(checkPassword('123456789')).toEqual({ ok: true, problem: null });
   });
 
   it('checks the confirmation only when one is provided', () => {
     expect(checkPassword('markdown1', 'markdown2')).toEqual({ ok: false, problem: 'mismatch' });
     expect(checkPassword('markdown1', undefined).ok).toBe(true);
     expect(checkPassword('markdown1').ok).toBe(true);
+  });
+
+  it('rejects a missing confirmation from the form (form.get returns null, never undefined)', () => {
+    // Regression: the signup route reads `form.get('confirm_password')`, which
+    // is `null` — not `undefined` — when the field is absent from the POST
+    // body. That must reject as a mismatch, never slip through as valid.
+    expect(checkPassword('markdown1', 'markdown1')).toEqual({ ok: true, problem: null });
+    expect(checkPassword('markdown1', null)).toEqual({ ok: false, problem: 'mismatch' });
+    expect(checkPassword('markdown1', '')).toEqual({ ok: false, problem: 'mismatch' });
   });
 
   it('keeps the bounds and the pattern in sync with the form attributes', () => {
@@ -435,11 +448,11 @@ describe('buildAuthCallbackUrl', () => {
     expect(buildAuthCallbackUrl('http://localhost:4321/', '/settings')).toBe(
       'http://localhost:4321/auth/callback?next=%2Fsettings',
     );
-    expect(buildAuthCallbackUrl('https://openmarkdown.pages.dev')).toBe(
-      'https://openmarkdown.pages.dev/auth/callback?next=%2Fdashboard',
+    expect(buildAuthCallbackUrl('https://mdverse.pages.dev')).toBe(
+      'https://mdverse.pages.dev/auth/callback?next=%2Fdashboard',
     );
-    expect(buildAuthCallbackUrl('https://openmarkdown.pages.dev', 'https://evil.example')).toBe(
-      'https://openmarkdown.pages.dev/auth/callback?next=%2Fdashboard',
+    expect(buildAuthCallbackUrl('https://mdverse.pages.dev', 'https://evil.example')).toBe(
+      'https://mdverse.pages.dev/auth/callback?next=%2Fdashboard',
     );
   });
 });

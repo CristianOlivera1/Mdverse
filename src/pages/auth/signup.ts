@@ -43,7 +43,9 @@ export const POST: APIRoute = async (context) => {
     return fail('signup_failed');
   }
 
-  // Confirmations disabled in the project: Supabase signed the user in already.
+  // Confirmations on: Supabase sends the address a link and returns no
+  // session, so the user lands on the sign-in screen with a "check your
+  // inbox" notice. Confirmations off: Supabase signed the user in already.
   if (data.session) return context.redirect(next);
 
   return context.redirect(loginFeedbackUrl({ sent: 'confirm', next, email }));
