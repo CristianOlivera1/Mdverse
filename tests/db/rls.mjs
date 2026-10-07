@@ -18,12 +18,16 @@
  * that resolution is deliberately server-side (phase 5) and never goes through
  * the Data API with the token.
  *
- * Two of the checks exist because the project has already been bitten by them:
+ * Three of the checks exist because the project has already been bitten by them:
  * a stranger inviting themselves through the SECURITY DEFINER RPC (the guard has
- * to ask `is not true`, never `if not <null>`), and an editor publishing somebody
- * else's draft (the update policy compares the stored visibility). Both regress
- * silently if the migrations are applied in an unlucky order, so they are pinned
- * here rather than only in the plan.
+ * to ask `is not true`, never `if not <null>`), an editor publishing somebody
+ * else's draft (the update policy compares the stored visibility), and that same
+ * editor taking the document outright. The second and third regress silently:
+ * the first version of the schema was pasted from the plan, whose example update
+ * policy is *another* name with an unguarded `with check`, and permissive
+ * policies are OR-ed — so a hand-made policy kept answering yes while ours sat
+ * next to it, unread, and re-applying the migrations changed nothing. They are
+ * pinned here rather than only in the plan.
  */
 
 import { readFileSync } from 'node:fs';
@@ -372,6 +376,43 @@ async function main() {
       'the visibility survives the editor\u2019s attempt',
       Array.isArray(survived.body) && survived.body[0]?.visibility === 'private',
       `${survived.status} ${JSON.stringify(survived.body)}`,
+    );
+
+    // The editor cannot take the document either. This is not a second way of
+    // saying the same thing: the first version of the schema was pasted from the
+    // plan, whose example policy pinned `owner_id = auth.uid()` — so a hand-made
+    // policy left in the database next to ours (permissive policies are OR-ed)
+    // says yes to exactly this write. Measured on the live project: an editor
+    // took the document and published it while `documents_update_editor` sat
+    // there, unread. The migrations now drop policies they do not know.
+    const takeover = await stranger.client.rest(`documents?id=eq.${document.id}`, {
+      method: 'PATCH',
+      headers: { Prefer: 'return=representation' },
+      body: JSON.stringify({ owner_id: stranger.id }),
+    });
+    check(
+      'an editor cannot take ownership of somebody else\u2019s document',
+      takeover.status >= 400 ||
+        (Array.isArray(takeover.body) && takeover.body.every((row) => row.owner_id === owner.id)),
+      `${takeover.status} ${JSON.stringify(takeover.body)}`,
+    );
+
+    const ownerSurvived = await owner.client.rest(`documents?id=eq.${document.id}&select=owner_id`);
+    const stillOwner =
+      Array.isArray(ownerSurvived.body) && ownerSurvived.body[0]?.owner_id === owner.id;
+    if (!stillOwner) {
+      // Leave the database as found and keep the rest of the suite meaningful:
+      // the failure above is the finding, not the collateral damage it causes.
+      await admin.rest(`documents?id=eq.${document.id}`, {
+        method: 'PATCH',
+        headers: { Prefer: 'return=representation' },
+        body: JSON.stringify({ owner_id: owner.id, visibility: 'private' }),
+      });
+    }
+    check(
+      'the owner is still the owner',
+      stillOwner,
+      `${ownerSurvived.status} ${JSON.stringify(ownerSurvived.body)}`,
     );
 
     check(

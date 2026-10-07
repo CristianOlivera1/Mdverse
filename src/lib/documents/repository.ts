@@ -542,6 +542,91 @@ export async function claimShareLink(
   };
 }
 
+/* Public pages -------------------------------------------------------------- */
+
+/** What `/d/:slug` and its export files need, and nothing else. */
+export interface PublicDocument {
+  readonly id: string;
+  readonly slug: string;
+  readonly title: string;
+  readonly content: string;
+  readonly revision: number;
+  readonly createdAt: string;
+  readonly updatedAt: string;
+}
+
+export const MAX_SITEMAP_DOCUMENTS = 2000;
+
+/**
+ * The document behind `/d/:slug`: `visibility = 'public'` and nothing else.
+ *
+ * Read it with a client that has no session (`createAnonymousSupabaseClient`),
+ * so the row is fetched as `anon`: the page is the same for everybody and can be
+ * cached by a CDN. The `visibility` filter repeats what RLS already enforces —
+ * belt and braces, because *this* is the query whose result is shared with the
+ * whole internet, and it must stay true if a future policy ever widens access.
+ *
+ * A failure answers `null` (a 404), like `resolveShareToken`: an unreachable
+ * database must not publish anything.
+ */
+export async function getPublicDocument(db: Db, slug: string): Promise<PublicDocument | null> {
+  const { data, error } = await db
+    .from('documents')
+    .select('id, slug, title, content, revision, created_at, updated_at')
+    .eq('slug', slug)
+    .eq('visibility', 'public')
+    .maybeSingle();
+
+  if (error) {
+    console.warn('[documents] reading a public document failed:', error.message);
+    return null;
+  }
+
+  const row = asRow<{
+    id: string;
+    slug: string;
+    title: string;
+    content: string;
+    revision: number;
+    created_at: string;
+    updated_at: string;
+  }>(data);
+
+  if (!row) return null;
+  return {
+    id: row.id,
+    slug: row.slug,
+    title: row.title,
+    content: row.content,
+    revision: row.revision,
+    createdAt: row.created_at,
+    updatedAt: row.updated_at,
+  };
+}
+
+/** Every published address, newest first, for the sitemap. */
+export async function listPublicDocuments(
+  db: Db,
+  limit = MAX_SITEMAP_DOCUMENTS,
+): Promise<{ slug: string; updatedAt: string }[]> {
+  const { data, error } = await db
+    .from('documents')
+    .select('slug, updated_at')
+    .eq('visibility', 'public')
+    .order('updated_at', { ascending: false })
+    .limit(limit);
+
+  if (error) {
+    console.warn('[documents] listing public documents failed:', error.message);
+    return [];
+  }
+
+  return asRows<{ slug: string; updated_at: string }>(data).map((row) => ({
+    slug: row.slug,
+    updatedAt: row.updated_at,
+  }));
+}
+
 export interface DraftImportResult {
   readonly created: CloudDocument[];
   readonly failed: number;

@@ -66,6 +66,68 @@ alter table if exists public.document_versions
 alter table if exists public.document_collaborators
   add column if not exists updated_at timestamptz not null default now();
 
+-- Attribution columns must not outlive the account they point at. A hand-made
+-- schema (the plan's DDL writes a plain `references auth.users (id)`) leaves them
+-- with the default NO ACTION, and then *deleting a user* fails with 23503: an owner
+-- who had invited a collaborator could not be deleted at all, and the admin API
+-- answers 500 without saying which table is holding the row. Measured on the live
+-- project while cleaning up an account. These three columns say who touched a row,
+-- not who owns it, so losing the attribution is the right outcome — the ownership
+-- columns keep their cascade.
+do $$
+declare
+  target record;
+  found text;
+begin
+  for target in
+    select * from (values
+      ('documents'::text, 'last_edited_by'::text),
+      ('document_collaborators'::text, 'invited_by'::text),
+      ('document_versions'::text, 'created_by'::text)
+    ) as t(tbl, col)
+  loop
+    if to_regclass('public.' || target.tbl) is null then
+      continue;
+    end if;
+
+    select c.conname into found
+      from pg_constraint c
+      join pg_class rel on rel.oid = c.conrelid
+      join pg_namespace n on n.oid = rel.relnamespace
+      join pg_attribute a on a.attrelid = rel.oid and a.attnum = any (c.conkey)
+     where c.contype = 'f'
+       and n.nspname = 'public'
+       and rel.relname = target.tbl
+       and a.attname = target.col
+       and c.confdeltype <> 'n'
+     limit 1;
+
+    if found is not null then
+      execute format('alter table public.%I drop constraint %I', target.tbl, found);
+    end if;
+
+    if not exists (
+      select 1
+        from pg_constraint c
+        join pg_class rel on rel.oid = c.conrelid
+        join pg_namespace n on n.oid = rel.relnamespace
+        join pg_attribute a on a.attrelid = rel.oid and a.attnum = any (c.conkey)
+       where c.contype = 'f'
+         and n.nspname = 'public'
+         and rel.relname = target.tbl
+         and a.attname = target.col
+    ) then
+      execute format(
+        'alter table public.%I add constraint %I foreign key (%I) references auth.users (id) on delete set null',
+        target.tbl,
+        target.tbl || '_' || target.col || '_fkey',
+        target.col
+      );
+    end if;
+  end loop;
+end
+$$;
+
 -- `on conflict (document_id, revision)` needs a unique index or constraint. A
 -- constraint created by hand and a unique index are both acceptable, so this
 -- looks for either before adding one.
@@ -647,6 +709,66 @@ alter table public.document_invitations enable row level security;
 alter table public.document_versions enable row level security;
 alter table public.comments enable row level security;
 alter table public.share_links enable row level security;
+
+-- ---------------------------------------------------------------------------
+-- Reconcile policies that were created by hand
+-- ---------------------------------------------------------------------------
+-- The first version of this schema was pasted from the plan (block 6), and its
+-- example policy is called `documents_update_owner_or_editor` with a `with check`
+-- that only asks for edit rights. This file creates `documents_update_editor`
+-- instead, so the hand-made policy survived every re-apply: permissive policies
+-- are OR-ed, which left an editor free to publish — and even to take ownership
+-- of — somebody else's document while the guarded policy sat next to it doing
+-- nothing. Re-applying this file could never remove it, and the Data API does not
+-- say which policy let a write through: an editor publishing a draft looks the
+-- same whether the guard is missing or shadowed.
+--
+-- So the migrations own the policies of these six tables and anything else on
+-- them is drift, dropped here. Every policy this project creates is listed; a
+-- name missing from the list is a bug and the sweep says so, out loud.
+do $$
+declare
+  managed text[] := array[
+    'documents', 'document_collaborators', 'document_invitations',
+    'document_versions', 'comments', 'share_links'
+  ];
+  ours text[] := array[
+    'documents:documents_select_member_or_public',
+    'documents:documents_select_public_anon',
+    'documents:documents_insert_self',
+    'documents:documents_update_editor',
+    'documents:documents_delete_owner',
+    'document_collaborators:document_collaborators_select_member',
+    'document_collaborators:document_collaborators_insert_manager',
+    'document_collaborators:document_collaborators_update_manager',
+    'document_collaborators:document_collaborators_delete_manager',
+    'document_invitations:document_invitations_select_manager_or_invitee',
+    'document_invitations:document_invitations_insert_manager',
+    'document_invitations:document_invitations_delete_manager',
+    'document_versions:document_versions_select_member',
+    'document_versions:document_versions_insert_editor',
+    'comments:comments_select_member',
+    'comments:comments_insert_member',
+    'comments:comments_update_author_or_editor',
+    'comments:comments_delete_author_or_manager',
+    'share_links:share_links_select_manager',
+    'share_links:share_links_insert_manager',
+    'share_links:share_links_delete_manager'
+  ];
+  stray record;
+begin
+  for stray in
+    select tablename, policyname from pg_policies
+    where schemaname = 'public' and tablename = any (managed)
+  loop
+    if not (stray.tablename || ':' || stray.policyname::text = any (ours)) then
+      execute format('drop policy %I on public.%I', stray.policyname, stray.tablename);
+      raise notice 'mdverse: dropped %.% — not created by these migrations',
+        stray.tablename, stray.policyname;
+    end if;
+  end loop;
+end
+$$;
 
 -- documents ------------------------------------------------------------------
 drop policy if exists documents_select_member_or_public on public.documents;

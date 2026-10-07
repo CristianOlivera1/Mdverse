@@ -1,0 +1,206 @@
+---
+/**
+ * The published document: `/d/:slug`, rendered on the server so it is indexable
+ * and cacheable.
+ *
+ * Only `visibility = 'public'` answers here; `private` and `unlisted` get the
+ * same 404, so an address cannot be probed for existence. The row is read with a
+ * client that has no session (`createAnonymousSupabaseClient`), which is what
+ * makes the response identical for everybody — and therefore safe to hand to a
+ * CDN and to a crawler.
+ */
+
+import Icon from '@/components/ui/Icon.astro';
+import Layout from '@/layouts/Layout.astro';
+import { formatTimestamp } from '@/lib/documents/format';
+import { isPublicSlug } from '@/lib/documents/ids';
+import {
+  documentDescription,
+  jsonLdForDocument,
+  MISSING_CACHE_CONTROL,
+  PUBLIC_CACHE_CONTROL,
+  readingMinutes,
+  seoTags,
+} from '@/lib/documents/publicPage';
+import { getPublicDocument } from '@/lib/documents/repository';
+import { HIGHLIGHT_THEME_CSS } from '@/lib/markdown/highlightTheme';
+import { renderStaticMarkdown } from '@/lib/markdown/renderStatic';
+import { getSiteUrl } from '@/lib/supabase/env';
+import { createAnonymousSupabaseClient } from '@/lib/supabase/server';
+
+export const prerender = false;
+
+const slug = Astro.params.slug ?? '';
+const db = createAnonymousSupabaseClient();
+const published = db && isPublicSlug(slug) ? await getPublicDocument(db, slug) : null;
+
+if (!published) {
+  Astro.response.status = 404;
+  Astro.response.headers.set('Cache-Control', MISSING_CACHE_CONTROL);
+  Astro.response.headers.set('X-Robots-Tag', 'noindex, nofollow');
+} else {
+  Astro.response.headers.set('Cache-Control', PUBLIC_CACHE_CONTROL);
+}
+
+const rendered = published ? renderStaticMarkdown(published.content) : null;
+
+const meta = published
+  ? {
+      title: published.title,
+      slug: published.slug,
+      description:
+        documentDescription(published.content) ||
+        `${published.title} — a Markdown document published with Mdverse.`,
+      createdAt: published.createdAt,
+      updatedAt: published.updatedAt,
+      siteUrl: getSiteUrl(),
+    }
+  : null;
+
+const exportBase = published ? `/d/${encodeURIComponent(published.slug)}` : '';
+const headings = (rendered?.headings ?? []).filter((heading) => heading.level <= 3);
+const updated = published ? formatTimestamp(published.updatedAt) : '';
+---
+
+<Layout
+  title={published ? `${published.title} · Mdverse` : 'Document not found · Mdverse'}
+  bodyClass="min-h-screen bg-black text-neutral-200 font-sans"
+>
+  <Fragment slot="head">
+    {meta && (
+      <>
+        <Fragment set:html={seoTags(meta)} />
+        <link
+          rel="alternate"
+          type="text/markdown"
+          href={`/d/${encodeURIComponent(published?.slug ?? '')}/document.md`}
+        />
+        <script type="application/ld+json" is:inline set:html={jsonLdForDocument(meta)} />
+        <style is:inline set:html={HIGHLIGHT_THEME_CSS}></style>
+      </>
+    )}
+  </Fragment>
+
+  {!published || !rendered ? (
+    <main class="mx-auto flex min-h-screen w-full max-w-lg flex-col items-center justify-center px-6 text-center">
+      <Icon name="lucide:eye-off" size={22} class="text-neutral-600" />
+      <h1 class="mt-4 text-lg font-semibold text-neutral-100">This document is not published</h1>
+      <p class="mt-2 text-xs leading-relaxed text-neutral-500">
+        The owner may have unpublished it, or the address never existed. Documents stay private
+        until their owner publishes them.
+      </p>
+      <a href="/" class="hb mt-6">
+        <Icon name="lucide:arrow-left" />
+        Open the editor
+      </a>
+    </main>
+  ) : (
+    <div class="min-h-screen flex flex-col">
+      <header class="border-b border-neutral-800">
+        <div class="mx-auto flex w-full max-w-5xl flex-wrap items-center justify-between gap-3 px-4 py-3">
+          <a href="/" class="flex min-w-0 items-center gap-2 text-neutral-300 hover:text-white">
+            <Icon name="lucide:file-text" size={16} />
+            <span class="text-sm font-medium">Mdverse</span>
+          </a>
+          <div class="flex flex-wrap items-center gap-1.5">
+            <a href={`${exportBase}/document.md`} class="hb" download>
+              <Icon name="lucide:file-code" />
+              Markdown
+            </a>
+            <a href={`${exportBase}/document.html`} class="hb" download>
+              <Icon name="lucide:download" />
+              HTML
+            </a>
+            <a
+              href={`${exportBase}/document.html?print=1`}
+              class="hb"
+              target="_blank"
+              rel="noopener"
+            >
+              <Icon name="lucide:printer" />
+              PDF
+            </a>
+          </div>
+        </div>
+      </header>
+
+      <main class="mx-auto flex w-full max-w-5xl flex-1 gap-10 px-4 pb-16">
+        {headings.length > 1 && (
+          <nav
+            aria-label="Contents"
+            class="sticky top-6 mt-10 hidden max-h-[calc(100vh-3rem)] w-56 shrink-0 overflow-y-auto lg:block"
+          >
+            <p class="text-[11px] font-medium tracking-wide text-neutral-500 uppercase">Contents</p>
+            <ul class="mt-3 space-y-1.5 border-l border-neutral-900 pl-3">
+              {headings.map((heading) => (
+                <li>
+                  <a
+                    href={`#${heading.id}`}
+                    class:list={[
+                      'block text-xs leading-snug text-neutral-500 hover:text-neutral-200',
+                      heading.level === 3 && 'pl-3',
+                    ]}
+                  >
+                    {heading.text}
+                  </a>
+                </li>
+              ))}
+            </ul>
+          </nav>
+        )}
+
+        <div class="min-w-0 flex-1">
+          <div class="py-10">
+            <p class="text-[11px] tracking-wide text-neutral-500 uppercase">Published document</p>
+            <h1 class="mt-2 text-2xl font-semibold text-neutral-50">{published.title}</h1>
+            <p class="mt-2 flex flex-wrap items-center gap-x-2 gap-y-1 text-[11px] text-neutral-500">
+              <span class="inline-flex items-center gap-1">
+                <Icon name="lucide:clock" size={11} />
+                {updated}
+              </span>
+              <span>·</span>
+              <span>{readingMinutes(published.content)} min read</span>
+              <span>·</span>
+              <span>revision {published.revision}</span>
+              <span>·</span>
+              <a href={`${exportBase}/document.md`} class="text-sky-300/80 hover:text-sky-200">
+                source
+              </a>
+            </p>
+          </div>
+
+          <article class="prose prose-invert max-w-3xl pb-10" set:html={rendered.html} />
+        </div>
+      </main>
+
+      <footer class="border-t border-neutral-800 px-4 py-4 text-center text-[11px] text-neutral-600">
+        Published with Mdverse — rendered on the server from the owner’s Markdown, read-only for
+        everyone else.
+      </footer>
+    </div>
+  )}
+</Layout>
+
+<script>
+  // The only script on the page, and only when a diagram exists: same lazy import
+  // the editor preview uses (see block 13 of the plan).
+  const diagrams = [...document.querySelectorAll<HTMLElement>('pre > code.language-mermaid')];
+
+  if (diagrams.length > 0) {
+    void import('@/lib/markdown/mermaid').then(async ({ renderDiagram }) => {
+      for (const code of diagrams) {
+        const box = document.createElement('div');
+        box.className = 'mermaid-box not-prose';
+        try {
+          box.innerHTML = await renderDiagram(code.textContent ?? '');
+        } catch (error) {
+          box.classList.add('mermaid-err');
+          box.innerHTML = '<strong>Mermaid diagram error</strong><pre></pre>';
+          const pre = box.querySelector('pre');
+          if (pre) pre.textContent = String((error as Error).message ?? error).slice(0, 400);
+        }
+        code.parentElement?.replaceWith(box);
+      }
+    });
+  }
+</script>

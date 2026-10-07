@@ -1,17 +1,7 @@
-/**
- * Server-side Supabase client.
- *
- * Create **one per request** (never reuse it across requests) and read the
- * session early — before the response is generated — otherwise a token refresh
- * finishes too late for the updated cookies to be written.
- *
- * `setAll` forwards the library's cache headers through `onResponseHeaders`;
- * responses that set auth cookies must not be cached by Cloudflare.
- */
-
 import type { AstroCookies } from 'astro';
 import { createServerClient, parseCookieHeader } from '@supabase/ssr';
 import type { SetAllCookies } from '@supabase/ssr';
+import { createClient } from '@supabase/supabase-js';
 import type { SupabaseClient } from '@supabase/supabase-js';
 
 import { pickAuthCookieOptions } from './cookies';
@@ -48,4 +38,27 @@ export function createServerSupabaseClient(
       setAll,
     },
   });
+}
+
+let anonymous: SupabaseClient<Database> | null = null;
+
+/**
+ * Client for the pages that are the same for every visitor: the public document
+ * page (`/d/:slug`) and the files exported from it.
+ *
+ * It carries no cookies on purpose. Reading as `anon` is what makes the response
+ * cacheable by a CDN and indexable, and it is also the guarantee: a signed-in
+ * reader of a *private* document can never turn `/d/:slug` into a page that shows
+ * it, because that request never carries their token.
+ *
+ * Safe to reuse across requests: there is no session to keep or rotate.
+ */
+export function createAnonymousSupabaseClient(): SupabaseClient<Database> | null {
+  const config = readSupabaseConfig();
+  if (!config) return null;
+
+  anonymous ??= createClient<Database>(config.url, config.publishableKey, {
+    auth: { persistSession: false, autoRefreshToken: false, detectSessionInUrl: false },
+  });
+  return anonymous;
 }

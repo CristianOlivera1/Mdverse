@@ -1,12 +1,3 @@
-/**
- * Document ids are UUIDs; the editor and the API share one validator.
- *
- * Checking the shape before it reaches PostgREST turns an arbitrary path segment
- * — which would come back as `22P02 invalid input syntax for type uuid`, a server
- * error — into a plain `400 invalid_id`, and keeps the "is this a server
- * document?" question answerable in the browser.
- */
-
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 /** Any Postgres uuid in a path segment: documents and accounts share the shape. */
@@ -18,13 +9,29 @@ export function isDocumentId(value: string): boolean {
   return UUID_PATTERN.test(value);
 }
 
-/**
- * Share tokens are 24 random bytes rendered as hex by the database
- * (`encode(gen_random_bytes(24), 'hex')`). Checking the shape here keeps a junk
- * path out of the database and out of the logs.
- */
 const SHARE_TOKEN_PATTERN = /^[0-9a-f]{48}$/;
 
 export function isShareToken(value: string): boolean {
   return SHARE_TOKEN_PATTERN.test(value);
+}
+
+/**
+ * Public addresses: `private.slugify()` in the database lower-cases the title,
+ * turns spaces into dashes and drops punctuation, so a real slug never contains
+ * whitespace, a slash or a quote. Checking the shape keeps junk out of the query
+ * — and out of the logs, which is where a probing request ends up.
+ */
+const SLUG_REJECTED = /[\s/?#%&"'<>\\]/;
+
+/** Longest slug the database can produce: `left(base, 60) || '-' || suffix`. */
+export const MAX_SLUG_LENGTH = 80;
+
+export function isPublicSlug(value: string): boolean {
+  return (
+    value.length > 0 &&
+    value.length <= MAX_SLUG_LENGTH &&
+    value !== '.' &&
+    value !== '..' &&
+    !SLUG_REJECTED.test(value)
+  );
 }
