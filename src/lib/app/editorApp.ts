@@ -10,8 +10,10 @@ import { describePeers } from '../collab/presence';
 import type { Peer } from '../collab/presence';
 import { avatarAura } from '../auth/avatarAura';
 import type { CollabSession, CollabStatus, RemoteCursor, RemoteSave } from '../collab/session';
+import { canEditDocument } from '../documents/access';
 import { openCloudDocuments } from '../documents/cloudApi';
 import type { CloudSession } from '../documents/cloudApi';
+import { conflictPolicy } from '../documents/conflict';
 import { migrateLegacyDocuments } from '../documents/migrate';
 import {
   createDocument,
@@ -23,7 +25,7 @@ import {
   saveOpenDocuments,
   WELCOME_MARKDOWN,
 } from '../documents/store';
-import type { OpenDocument, SaveDocumentResult } from '../documents/types';
+import type { CloudDocument, OpenDocument, SaveDocumentResult } from '../documents/types';
 import { HIGHLIGHT_THEME_CSS } from '../markdown/highlightTheme';
 import { renderDiagram } from '../markdown/mermaid';
 import { renderMarkdown } from '../markdown/render';
@@ -73,6 +75,26 @@ const INLINE_MARKERS: Record<string, string> = {
   strike: '~~',
   code: '`',
 };
+
+/** Commands that rewrite text; a document this account may only read refuses them. */
+const EDIT_COMMANDS: ReadonlySet<string> = new Set([
+  ...Object.keys(INLINE_MARKERS),
+  'link',
+  'heading',
+  'quote',
+  'ul',
+  'ol',
+  'task',
+  'table',
+  'fence',
+  'mermaid',
+  'hr',
+  'undo',
+  'redo',
+  'clear-active',
+  'clear-all',
+  'replace-all',
+]);
 
 export function initEditorApp(): void {
   initMenus();
@@ -210,6 +232,29 @@ export function initEditorApp(): void {
     }
   }
 
+  /** Local drafts are always editable; shared rows carry the role that decides. */
+  function isReadOnly(doc: OpenDocument | undefined): boolean {
+    return doc !== undefined && !canEditDocument(doc.role ?? 'owner');
+  }
+
+  function denyEdit(): void {
+    showStatus('View only — only the owner and editors can change this document', 3500);
+  }
+
+  /** Replaces what is on screen with the newer server copy, without asking. */
+  function acceptServerVersion(doc: OpenDocument, server: CloudDocument): void {
+    doc.title = server.title;
+    doc.content = server.content;
+    lastSaved.set(doc.id, server.content);
+    const pane = panes.get(doc.id);
+    if (pane) {
+      pane.textarea.value = server.content;
+      renderPane(pane);
+      if (doc.id === activeId) updateStatus();
+    }
+    renderTabs();
+  }
+
   async function resolveConflict(doc: OpenDocument): Promise<void> {
     if (!cloud) return;
 
@@ -226,6 +271,15 @@ export function initEditorApp(): void {
       lastSaved.set(doc.id, server.content);
       conflicted.delete(doc.id);
       showStatus('Synced', 1600);
+      return;
+    }
+
+    // Only the owner is asked which version survives. An invited editor never
+    // overwrites the owner, so their copy follows the newer version quietly.
+    if (conflictPolicy(doc.role ?? 'reader') === 'follow-server') {
+      conflicted.delete(doc.id);
+      acceptServerVersion(doc, server);
+      showStatus('Loaded the newer version from the owner', 3000);
       return;
     }
 
@@ -250,15 +304,7 @@ export function initEditorApp(): void {
       return;
     }
 
-    doc.title = server.title;
-    doc.content = server.content;
-    const pane = panes.get(doc.id);
-    if (pane) {
-      pane.textarea.value = server.content;
-      renderPane(pane);
-      if (doc.id === activeId) updateStatus();
-    }
-    renderTabs();
+    acceptServerVersion(doc, server);
     showStatus('Loaded the server version', 2000);
   }
 
@@ -551,6 +597,10 @@ export function initEditorApp(): void {
   }
 
   function editWith(pane: Pane, compute: (state: TextState) => EditOp | null): void {
+    if (isReadOnly(documentById(pane.docId))) {
+      denyEdit();
+      return;
+    }
     applyEdit(pane.textarea, compute(stateOf(pane.textarea)));
   }
 
@@ -672,6 +722,10 @@ export function initEditorApp(): void {
   }
 
   function replaceAll(pane: Pane): void {
+    if (isReadOnly(documentById(pane.docId))) {
+      denyEdit();
+      return;
+    }
     const regex = buildSearchRegex({
       query: pane.findInput.value,
       caseSensitive: pane.caseSensitive,
@@ -750,6 +804,10 @@ export function initEditorApp(): void {
 
   function beginRename(doc: OpenDocument, titleElement: HTMLElement): void {
     if (renaming) return;
+    if (isReadOnly(doc)) {
+      denyEdit();
+      return;
+    }
     renaming = true;
 
     const input = document.createElement('input');
@@ -839,7 +897,12 @@ export function initEditorApp(): void {
 
     document.dispatchEvent(
       new CustomEvent('mdverse:active-document', {
-        detail: { id: doc.id, title: doc.title, collaborative: cloud !== null },
+        detail: {
+          id: doc.id,
+          title: doc.title,
+          collaborative: cloud !== null,
+          role: doc.role ?? 'owner',
+        },
       }),
     );
   }
@@ -922,6 +985,10 @@ export function initEditorApp(): void {
     const pane = currentPane();
     if (!pane) return;
     if (!pane.textarea.value) return;
+    if (isReadOnly(documentById(pane.docId))) {
+      denyEdit();
+      return;
+    }
     if (!window.confirm('Clear the active document? This cannot be undone.')) return;
     pane.textarea.value = '';
     pane.textarea.dispatchEvent(new Event('input'));
@@ -929,10 +996,16 @@ export function initEditorApp(): void {
   }
 
   function clearAll(): void {
-    const dirty = [...panes.values()].some((pane) => pane.textarea.value);
-    if (!dirty) return;
+    // Documents this account can only read keep their text; nobody clears them here.
+    const editable = [...panes.values()].filter(
+      (pane) => !isReadOnly(documentById(pane.docId)),
+    );
+    if (!editable.some((pane) => pane.textarea.value)) {
+      if (editable.length < panes.size) denyEdit();
+      return;
+    }
     if (!window.confirm('Clear every document? This cannot be undone.')) return;
-    panes.forEach((pane) => {
+    editable.forEach((pane) => {
       pane.textarea.value = '';
       pane.textarea.dispatchEvent(new Event('input'));
     });
@@ -980,6 +1053,11 @@ export function initEditorApp(): void {
   function runCommand(name: string, source: HTMLElement | null): void {
     const pane = paneFor(source);
     const doc = documentById(activeId);
+
+    if (pane && EDIT_COMMANDS.has(name) && isReadOnly(documentById(pane.docId))) {
+      denyEdit();
+      return;
+    }
 
     if (name in INLINE_MARKERS) {
       if (pane) editWith(pane, (state) => commands.wrapInline(state, INLINE_MARKERS[name]));
@@ -1146,6 +1224,11 @@ export function initEditorApp(): void {
 
     const { textarea } = pane;
     textarea.value = doc.content;
+    // A role that cannot save never gets to type: the code pane becomes a viewer.
+    const editable = !isReadOnly(doc);
+    textarea.readOnly = !editable;
+    textarea.setAttribute('aria-readonly', String(!editable));
+    root.classList.toggle('is-readonly', !editable);
     textarea.setSelectionRange(0, 0);
     textarea.scrollTop = 0;
     pane.preview.scrollTop = 0;
