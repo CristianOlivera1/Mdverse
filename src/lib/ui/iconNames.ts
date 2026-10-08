@@ -52,6 +52,7 @@ export const ICONIFY_ICONS = {
     'quote',
     'redo-2',
     'rotate-ccw',
+    'replace-all',
     'search',
     'send',
     'settings',
@@ -71,6 +72,7 @@ export const ICONIFY_ICONS = {
     'workflow',
     'x',
     'zoom-in',
+    'terminal',
   ],
   'simple-icons': ['github', 'google'],
 } as const;

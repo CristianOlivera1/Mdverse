@@ -77,21 +77,14 @@ export function confirmChoice(options: ConfirmOptions): Promise<ConfirmChoice> {
   return new Promise((resolve) => {
     pending = resolve;
     element.showModal();
-    // Focus lands on the safe choice: one Enter on a fresh dialog destroys nothing.
     cancel.focus();
   });
 }
 
-/** Resolves `false` for cancel, Escape and the backdrop - every close that is not a yes. */
 export function confirmAction(options: ConfirmOptions): Promise<boolean> {
   return confirmChoice(options).then((choice) => choice === 'confirm');
 }
 
-/**
- * Forms carrying `data-confirm` ask first and only then post. Attributes:
- * `data-confirm` (the sentence), `data-confirm-title`, `data-confirm-label`,
- * `data-confirm-cancel`, and `data-confirm-danger` for the red confirm button.
- */
 export function initConfirmForms(): void {
   document.addEventListener('submit', (event) => {
     const form = event.target;

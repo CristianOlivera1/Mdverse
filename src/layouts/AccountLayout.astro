@@ -16,7 +16,7 @@ const account = toAccountSummary(Astro.locals.user, Astro.locals.profile);
 if (!account) return Astro.redirect('/login?next=/dashboard');
 
 const nav = [
-  { id: 'editor', label: 'Editor', href: '/', icon: 'lucide:pencil-line' },
+  { id: 'editor', label: 'Editor', href: '/', icon: 'lucide:terminal' },
   { id: 'dashboard', label: 'Documents', href: '/dashboard', icon: 'lucide:file-text' },
   { id: 'settings', label: 'Profile', href: '/settings', icon: 'lucide:settings' },
 ] as const;
@@ -30,7 +30,7 @@ const nav = [
   <div class="min-h-screen flex flex-col">
     <header class="flex items-center justify-between gap-3 h-12 px-3 border-b border-neutral-800 shrink-0">
       <div class="flex items-center gap-3 min-w-0">
-        <a href="/" class="flex items-center shrink-0" aria-label="Mdverse home">
+        <a href="/dashboard" class="flex items-center shrink-0" aria-label="Mdverse home">
           <div class="flex items-center shrink-0">
             <img
               src="/svg/logo-calligraphy.svg"
