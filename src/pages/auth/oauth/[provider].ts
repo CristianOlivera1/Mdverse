@@ -1,5 +1,5 @@
 /**
- * `GET /auth/oauth/:provider` — starts an OAuth round-trip.
+ * `GET /auth/oauth/:provider` - starts an OAuth round-trip.
  *
  * The provider comes from the URL, so it is checked against an allowlist before
  * being handed to Supabase (no open-ended pass-through of user input).

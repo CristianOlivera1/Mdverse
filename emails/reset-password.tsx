@@ -31,7 +31,7 @@ export default function ResetPasswordEmail({
   return (
     <Html lang="en">
       <Head />
-      <Preview>Reset your Mdverse password — link expires in 1 hour.</Preview>
+      <Preview>Reset your Mdverse password - link expires in 1 hour.</Preview>
       <Body style={body}>
         <Container style={container}>
           {/* Header */}
@@ -53,7 +53,7 @@ export default function ResetPasswordEmail({
             </Text>
             <Text style={paragraph}>
               This link expires in <strong>1 hour</strong>. If you did not request a password
-              reset, you can safely ignore this email — your password will not change.
+              reset, you can safely ignore this email - your password will not change.
             </Text>
           </Section>
 

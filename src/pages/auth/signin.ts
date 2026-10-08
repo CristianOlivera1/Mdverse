@@ -1,5 +1,5 @@
 /**
- * `POST /auth/signin` — signs in with an email address and password.
+ * `POST /auth/signin` - signs in with an email address and password.
  *
  * Only the *presence* of a password is checked here: the policy belongs to
  * sign-up, and applying it to sign-in would reject legacy or externally-set

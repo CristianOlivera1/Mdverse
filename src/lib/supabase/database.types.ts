@@ -1,7 +1,7 @@
 /**
  * Supabase database types.
  *
- * ⚠️ This file is **generated** — do not edit it by hand.
+ * ⚠️ This file is **generated** - do not edit it by hand.
  *
  * Until the Supabase CLI can reach the project (`SUPABASE_PROJECT_REF` +
  * `SUPABASE_ACCESS_TOKEN` in `.env`), it holds a hand-written placeholder for the

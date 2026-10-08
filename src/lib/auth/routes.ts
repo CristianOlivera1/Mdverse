@@ -1,11 +1,7 @@
-/** Route access rules, shared by middleware, pages and tests. */
-
 export const PROTECTED_PREFIXES = [
   '/dashboard',
   '/settings',
   '/documents',
-  // Reached from the password-reset email: the link signs the user in first, so
-  // an anonymous visitor here is redirected to /login to start over.
   '/reset-password',
 ] as const;
 

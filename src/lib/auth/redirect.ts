@@ -1,5 +1,3 @@
-/** `next` is attacker-controlled: only same-origin paths allowed (open redirect / header splitting). */
-
 const MAX_LENGTH = 512;
 
 // eslint-disable-next-line no-control-regex

@@ -56,7 +56,7 @@ const ERROR_MESSAGES: Record<AuthErrorCode, string> = {
 
 const SENT_MESSAGES: Record<AuthSentCode, string> = {
   confirm:
-    'Account created. We sent you an email — open it to confirm your address and finish signing in.',
+    'Account created. We sent you an email - open it to confirm your address and finish signing in.',
   resent: 'If that address still needs confirming, a new link is on its way.',
   reset: 'If an account exists for that address, we sent a password reset link.',
 };
@@ -149,7 +149,7 @@ export function authNotice(params: {
 /**
  * Builds the URL an auth route redirects back to.
  *
- * `target` is the screen that shows the notice — `/login` for sign-in, sign-up
+ * `target` is the screen that shows the notice - `/login` for sign-in, sign-up
  * and password recovery (where the sign-in form already lives), or `/signup` /
  * `/reset-password` when the notice belongs to that form.
  */

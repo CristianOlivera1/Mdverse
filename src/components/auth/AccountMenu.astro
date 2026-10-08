@@ -14,7 +14,7 @@ const account = toAccountSummary(Astro.locals.user, Astro.locals.profile);
       data-menu="account"
       aria-haspopup="true"
       aria-expanded="false"
-      title={`${account.displayName} — your account`}
+      title={`${account.displayName} - your account`}
       aria-label={`Account: ${account.displayName}`}
     >
       <Avatar name={account.displayName} seed={account.toneSeed} size="sm" />

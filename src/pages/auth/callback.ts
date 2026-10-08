@@ -1,5 +1,5 @@
 /**
- * `GET /auth/callback` — completes sign-in.
+ * `GET /auth/callback` - completes sign-in.
  *
  * Handles both shapes Supabase can send:
  *  - `?code=…` (PKCE, used by magic links and OAuth),

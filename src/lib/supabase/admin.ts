@@ -1,5 +1,5 @@
 /**
- * Supabase Admin client — service-role key, server-only.
+ * Supabase Admin client - service-role key, server-only.
  *
  * Bypasses RLS. Use only for operations that require it:
  *   - auth.admin.generateLink()  (get auth magic links to send ourselves)
