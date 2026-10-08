@@ -111,7 +111,7 @@ export function insertLink(state: TextState): EditOp {
 export function cycleHeading(state: TextState): EditOp {
   return onLines(state, (lines) =>
     lines.map((line) => {
-      const current = (line.match(/^(#{1,6}) /) || [''])[0].length - 1;
+      const current = Math.max(0, (line.match(/^(#{1,6}) /) || [''])[0].length - 1);
       const prefix = current >= 3 ? '' : `${'#'.repeat(current + 1)} `;
       return prefix + line.replace(/^#{1,6} /, '');
     }),
@@ -119,7 +119,6 @@ export function cycleHeading(state: TextState): EditOp {
 }
 
 export function toggleBlockquote(state: TextState): EditOp {
-  // Strip prefix fully: capturing `>` leaves a stray marker.
   return toggleLinePrefix(state, /^\s*>/, (line) => `> ${line}`, /^(\s*)> ?/);
 }
 

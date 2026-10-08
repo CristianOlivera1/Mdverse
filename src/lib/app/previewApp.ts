@@ -185,6 +185,9 @@ export function initPreviewApp(): void {
 
       if (result.kind === 'none') {
         content.innerHTML = '<p class="text-neutral-500">No document is available.</p>';
+        navs.forEach((nav) => {
+          nav.innerHTML = buildTocHtml([]);
+        });
         if (status) status.textContent = 'No document';
         return;
       }
@@ -269,6 +272,11 @@ export function initPreviewApp(): void {
 
   document.getElementById('toc-close')?.addEventListener('click', () => setToc('closed'));
   document.getElementById('toc-open')?.addEventListener('click', () => setToc('open'));
+  // The sidebar logo reloads this exact URL (query + hash included), so a deep
+  // link like `?doc=<id>#<heading>` refreshes back onto the same section.
+  document
+    .querySelector('[data-logo-refresh]')
+    ?.addEventListener('click', () => window.location.reload());
   document
     .getElementById('toc-fab')
     ?.addEventListener('click', () => float?.classList.toggle('hidden'));

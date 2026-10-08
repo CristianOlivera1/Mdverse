@@ -14,7 +14,13 @@ import Icon from '../ui/Icon.astro';
       class="absolute inset-0 z-0 w-full h-full object-cover pointer-events-none mask-b-from-60% mask-b-to-90%"
     />
 
-    <div class="max-sm:hidden flex items-center shrink-0 z-10">
+     <button
+       type="button"
+       data-logo-refresh
+       title="Reload this page"
+       aria-label="Reload this page"
+       class="max-sm:hidden flex items-center shrink-0 z-10 cursor-pointer"
+     >
       <img
         src="/svg/logo-calligraphy.svg"
         alt="Mdverse logo"
@@ -22,11 +28,19 @@ import Icon from '../ui/Icon.astro';
         width="136"
         height="33"
       />
-    </div>
+    </button>
 
     <button type="button" class="hb z-10" id="toc-close" title="Hide index" aria-label="Hide index">
       <Icon name="lucide:panel-left-close" />
     </button>
   </div>
-  <nav class="toc flex-1 overflow-y-auto py-2" id="toc-nav"></nav>
+  <nav class="toc flex-1 overflow-y-auto py-2" id="toc-nav" aria-label="Document index">
+    <div class="space-y-2 px-3 py-1" data-toc-skeleton aria-hidden="true">
+      <div class="mskel h-3 w-3/4"></div>
+      <div class="mskel ml-4 h-3 w-1/2"></div>
+      <div class="mskel ml-4 h-3 w-2/3"></div>
+      <div class="mskel h-3 w-1/3"></div>
+      <div class="mskel ml-4 h-3 w-3/5"></div>
+    </div>
+  </nav>
 </aside>

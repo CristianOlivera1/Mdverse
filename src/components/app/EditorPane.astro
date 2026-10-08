@@ -23,5 +23,12 @@ import FormatToolbar from './FormatToolbar.astro';
   <div
     data-r="preview"
     class="pv-pane min-w-0 min-h-0 overflow-y-auto p-5 sm:p-6 prose prose-invert prose-sm max-w-none bg-[#030303]"
-  ></div>
+  >
+    <div class="space-y-3 not-prose" data-preview-skeleton aria-hidden="true">
+      <div class="mskel h-6 w-1/2"></div>
+      <div class="mskel h-3.5 w-full"></div>
+      <div class="mskel h-3.5 w-full"></div>
+      <div class="mskel h-3.5 w-2/3"></div>
+    </div>
+  </div>
 </section>

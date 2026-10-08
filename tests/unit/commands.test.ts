@@ -71,6 +71,10 @@ describe('cycleHeading', () => {
     expect(apply('## Title', commands.cycleHeading(state('## Title', 0, 8)))).toBe('### Title');
     expect(apply('### Title', commands.cycleHeading(state('### Title', 0, 9)))).toBe('Title');
   });
+
+  it('starts an empty line as H1 instead of a stray space', () => {
+    expect(apply('', commands.cycleHeading(state('', 0, 0)))).toBe('# ');
+  });
 });
 
 describe('toggleComment', () => {

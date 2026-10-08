@@ -3,21 +3,30 @@ import { escapeRegExp } from './text';
 export interface SearchOptions {
   readonly query: string;
   readonly caseSensitive: boolean;
+  readonly wholeWord?: boolean;
 }
 
-/** Build the global search expression, or `null` when there is no query. */
-export function buildSearchRegex({ query, caseSensitive }: SearchOptions): RegExp | null {
+export function buildSearchRegex({ query, caseSensitive, wholeWord }: SearchOptions): RegExp | null {
   if (!query) return null;
-  return new RegExp(escapeRegExp(query), caseSensitive ? 'g' : 'gi');
+  const pattern = (wholeWord ?? false)
+    ? `\\b${escapeRegExp(query)}\\b`
+    : escapeRegExp(query);
+  return new RegExp(pattern, caseSensitive ? 'g' : 'gi');
 }
 
 export function countMatches(value: string, regex: RegExp | null): number {
   if (!regex) return 0;
   regex.lastIndex = 0;
-  return value.match(regex)?.length ?? 0;
+
+  let count = 0;
+  let match: RegExpExecArray | null;
+  while ((match = regex.exec(value)) !== null) {
+    count += 1;
+    if (match[0] === '') regex.lastIndex += 1;
+  }
+  return count;
 }
 
-/** A function replacement keeps `$&`-style sequences in the replacement literal. */
 export function replaceAllMatches(
   value: string,
   regex: RegExp | null,

@@ -5,24 +5,86 @@ import Icon from '../ui/Icon.astro';
 <div class="fr" data-r="findbar" hidden>
   <input data-r="find-input" placeholder="Find" aria-label="Find" />
   <input data-r="replace-input" placeholder="Replace with" aria-label="Replace with" />
+
+  <!-- Match case -->
   <button
     type="button"
     class="hb"
     data-command="toggle-case"
-    title="Match case"
+    title="Match case (Alt+C)"
     aria-label="Match case"
+    aria-pressed="false"
   >
     <Icon name="lucide:case-sensitive" />
   </button>
-  <span data-r="find-count" class="text-neutral-500"></span>
+
+  <!-- Whole word (like VSCode [W] button) -->
   <button
     type="button"
-    class="hb !bg-blue-600 !text-white"
+    class="hb"
+    data-command="toggle-word"
+    title='Match whole word (Alt+W) — "texto" won&apos;t match "textos"'
+    aria-label="Match whole word"
+    aria-pressed="false"
+  >
+    <svg
+      width="14"
+      height="14"
+      viewBox="0 0 16 16"
+      fill="currentColor"
+      aria-hidden="true"
+      style="font-size:0"
+    >
+      <!-- "ab" letters -->
+      <text x="0" y="11" font-family="monospace" font-size="9" font-weight="700">
+        ab
+      </text>
+      <!-- underline = word boundary indicator, same as VSCode -->
+      <rect x="0" y="13" width="16" height="1.5" rx="0.5" />
+    </svg>
+  </button>
+
+  <!-- Regex mode -->
+  <button
+    type="button"
+    class="hb"
+    data-command="toggle-regex"
+    title="Use regular expression (Alt+R)"
+    aria-label="Use regular expression"
+    aria-pressed="false"
+  >
+    <svg
+      width="14"
+      height="14"
+      viewBox="0 0 16 16"
+      fill="currentColor"
+      aria-hidden="true"
+      style="font-size:0"
+    >
+      <text x="1" y="11" font-family="monospace" font-size="10" font-weight="700">
+        .*
+      </text>
+    </svg>
+  </button>
+
+  <span data-r="find-count" class="text-neutral-500 text-xs tabular-nums min-w-[5rem]"></span>
+
+  <button
+    type="button"
+    class="hb !bg-blue-600 !text-white transition-colors duration-300"
     data-command="replace-all"
     title="Replace all (Enter)"
+    aria-label="Replace all"
   >
-    Replace all
+    <span data-replace-spinner class="msel-spin" hidden>
+      <Icon name="lucide:loader-circle" size={14} />
+    </span>
+    <span data-replace-icon class="flex items-center gap-1">
+      <Icon name="lucide:replace-all" size={13} />
+      <span data-replace-label>Replace all</span>
+    </span>
   </button>
+
   <button type="button" class="hb" data-command="find-close" title="Close (Esc)" aria-label="Close">
     <Icon name="lucide:x" />
   </button>

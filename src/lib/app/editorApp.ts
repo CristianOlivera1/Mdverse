@@ -1,16 +1,18 @@
 import * as commands from '../editor/commands';
 import type { EditOp } from '../editor/commands';
 import { downloadMarkdown, exportDocument } from '../editor/exportDocument';
-import { buildSearchRegex, countMatches, replaceAllMatches } from '../editor/findReplace';
+import { countMatches, replaceAllMatches } from '../editor/findReplace';
+
 import { PREF_KEYS, readNumberPref, readPref, writePref } from '../editor/prefs';
-import { wordAt, type TextState } from '../editor/text';
+import { escapeRegExp, wordAt, type TextState } from '../editor/text';
+
 import { createCursorOverlay } from '../collab/overlay';
 import type { CursorOverlay } from '../collab/overlay';
 import { describePeers } from '../collab/presence';
 import type { Peer } from '../collab/presence';
 import { avatarAura } from '../auth/avatarAura';
 import type { CollabSession, CollabStatus, RemoteCursor, RemoteSave } from '../collab/session';
-import { canEditDocument } from '../documents/access';
+import { canEditDocument, canManageDocument } from '../documents/access';
 import { openCloudDocuments } from '../documents/cloudApi';
 import type { CloudSession } from '../documents/cloudApi';
 import { isDocumentId } from '../documents/ids';
@@ -26,13 +28,15 @@ import {
   saveOpenDocuments,
   WELCOME_MARKDOWN,
 } from '../documents/store';
+import { isCloudDocument } from '../documents/types';
 import type { CloudDocument, OpenDocument, SaveDocumentResult } from '../documents/types';
 import { HIGHLIGHT_THEME_CSS } from '../markdown/highlightTheme';
 import { renderDiagram } from '../markdown/mermaid';
 import { renderMarkdown } from '../markdown/render';
+import { taskToggleAt } from '../markdown/taskList';
 import { buildTocHtml, collectHeadings } from '../markdown/toc';
 import { showAccessGate } from './accessGate';
-import { confirmChoice } from './confirmDialog';
+import { confirmAction, confirmChoice } from './confirmDialog';
 import { closeMenus, initMenus } from './menus';
 
 const MIN_ZOOM = 0.7;
@@ -54,6 +58,16 @@ function focusWithoutScroll(element: HTMLElement): void {
 
 type ScrollSource = 'code' | 'preview';
 
+interface FindCache {
+  readonly key: string;
+  readonly boxes: ReadonlyArray<{
+    readonly x: number;
+    readonly y: number;
+    readonly w: number;
+    readonly h: number;
+  }>;
+}
+
 interface Pane {
   readonly docId: string;
   readonly root: HTMLElement;
@@ -64,11 +78,23 @@ interface Pane {
   readonly replaceInput: HTMLInputElement;
   readonly findCount: HTMLElement;
   readonly caseButton: HTMLElement;
+  readonly wordButton: HTMLElement | null;
+  readonly regexButton: HTMLElement | null;
+  readonly replaceButton: HTMLButtonElement;
+  readonly replaceSpinner: HTMLElement | null;
+  readonly replaceLabel: HTMLElement | null;
+  readonly replaceIcon: HTMLElement | null;
+  readonly findLayer: HTMLElement;
+  readonly findPool: HTMLElement[];
+  findCache: FindCache | null;
   readonly splitter: HTMLElement;
   caseSensitive: boolean;
+  wholeWord: boolean;
+  useRegex: boolean;
   scrollGuard: ScrollSource | null;
   hasScrolled: boolean;
   timer?: number;
+  findTimer?: number;
   savedScroll?: [number, number];
 }
 
@@ -99,6 +125,8 @@ const EDIT_COMMANDS: ReadonlySet<string> = new Set([
   'clear-active',
   'clear-all',
   'replace-all',
+  'toggle-word',
+  'toggle-regex',
 ]);
 
 export function initEditorApp(): void {
@@ -166,7 +194,10 @@ export function initEditorApp(): void {
   }
 
   function persist(): void {
-    if (!cloud) saveOpenDocuments(documents);
+    // Server documents come back from the account, never from here, and a public
+    // document opened from a link is a view rather than something to keep. Only
+    // the browser's own drafts are written back.
+    if (!cloud) saveOpenDocuments(documents.filter((doc) => doc.role === undefined));
     saveActiveDocumentId(activeId);
   }
 
@@ -681,16 +712,36 @@ export function initEditorApp(): void {
     applyEdit(pane.textarea, compute(stateOf(pane.textarea)));
   }
 
+  /** A checkbox click in the preview rewrites the marker in the source. */
+  function toggleTask(pane: Pane, index: number): void {
+    const doc = documentById(pane.docId);
+    if (!doc) return;
+    if (isReadOnly(doc)) {
+      denyEdit();
+      return;
+    }
+
+    // The textarea, not `doc.content`: the document lags behind by one debounce.
+    const toggle = taskToggleAt(pane.textarea.value, index);
+    if (!toggle) return;
+
+    pane.textarea.setRangeText(toggle.insert, toggle.from, toggle.to, 'preserve');
+    pane.textarea.dispatchEvent(new Event('input'));
+  }
+
   function renderPane(pane: Pane): void {
     const doc = documentById(pane.docId);
     if (!doc) return;
-    void renderMarkdown(pane.preview, doc.content, { renderDiagram }).then(
+    void renderMarkdown(pane.preview, doc.content, {
+      renderDiagram,
+      onToggleTask: (index) => toggleTask(pane, index),
+    }).then(
       () => {
         if (!pane.hasScrolled) pane.preview.scrollTop = 0;
         consumePendingHash(pane);
         if (pane.docId === activeId) buildEditorToc();
       },
-      () => {},
+      () => { },
     );
   }
 
@@ -845,12 +896,229 @@ export function initEditorApp(): void {
     );
   }
 
-  function updateFindCount(pane: Pane): void {
-    const regex = buildSearchRegex({
+  // ─── Find highlights ──────────────────────────────────────────────────────
+  // Uses the browser's own Range geometry for pixel-perfect placement:
+  // 1. Create a hidden mirror <div> that replicates the textarea's text and
+  //    typography exactly (including wrapping).
+  // 2. For each match, wrap the matching text nodes in a <mark> element and
+  //    call getBoundingClientRect() on it — the browser resolves the position
+  //    including padding, border, scroll offsets, zoom and font metrics.
+  // 3. Convert from viewport coords to pane-relative coords and paint a
+  //    highlight box in the overlay layer.
+  //
+  // The mirror is attached to the document only during measurement (< 1ms),
+  // then removed. Cached per (content, query, case, width) key so scrolling
+  // only re-places boxes without re-measuring.
+  const FIND_HIGHLIGHT_CAP = 500;
+  const FIND_DEBOUNCE_MS = 120;
+
+  function findOptions(pane: Pane) {
+    return {
       query: pane.findInput.value,
       caseSensitive: pane.caseSensitive,
-    });
-    pane.findCount.textContent = regex ? `${countMatches(pane.textarea.value, regex)} matches` : '';
+      wholeWord: pane.wholeWord,
+      useRegex: pane.useRegex,
+    };
+  }
+
+  function buildPaneRegex(pane: Pane): RegExp | null {
+    const { query, caseSensitive, wholeWord, useRegex } = findOptions(pane);
+    if (!query) return null;
+    try {
+      const pattern = useRegex ? query : wholeWord
+        ? `\\b${escapeRegExp(query)}\\b`
+        : escapeRegExp(query);
+      return new RegExp(pattern, caseSensitive ? 'g' : 'gi');
+    } catch {
+      return null; // invalid regex pattern
+    }
+  }
+
+  function updateFindCount(pane: Pane): void {
+    const regex = buildPaneRegex(pane);
+    if (!regex) {
+      pane.findCount.textContent = '';
+      return;
+    }
+    const count = countMatches(pane.textarea.value, regex);
+    pane.findCount.textContent = count === 0
+      ? 'No results'
+      : `${count} match${count === 1 ? '' : 'es'}`;
+  }
+
+  function ensureFindBox(pane: Pane, index: number): HTMLElement {
+    const known = pane.findPool[index];
+    if (known) return known;
+    const box = document.createElement('div');
+    box.style.position = 'absolute';
+    box.style.pointerEvents = 'none';
+    box.style.background = 'rgba(59,130,246,.28)';
+    box.style.borderRadius = '2px';
+    box.style.display = 'none';
+    pane.findLayer.append(box);
+    pane.findPool.push(box);
+    return box;
+  }
+
+  function paintFindHighlights(pane: Pane): void {
+    const regex = buildPaneRegex(pane);
+    // Hide when the bar is closed or query is empty; pooled nodes stay in the
+    // DOM (display:none) so reopening avoids reallocating them.
+    if (pane.findbar.hidden || !regex) {
+      pane.findLayer.style.display = 'none';
+      for (const box of pane.findPool) box.style.display = 'none';
+      pane.findCache = null;
+      return;
+    }
+    pane.findLayer.style.display = '';
+
+    // Cache key includes content length, query, all flags and textarea geometry.
+    // Range geometry is scroll-dependent (viewport coords), so include scroll.
+    const { textarea } = pane;
+    const style = window.getComputedStyle(textarea);
+    const value = textarea.value;
+    const taRect = textarea.getBoundingClientRect();
+    const opts = findOptions(pane);
+    const key = `${value.length}:${opts.query}:${opts.caseSensitive ? 1 : 0}:${opts.wholeWord ? 1 : 0}:${opts.useRegex ? 1 : 0}:${Math.round(taRect.width)}:${Math.round(taRect.height)}:${textarea.scrollTop}:${textarea.scrollLeft}`;
+
+    if (pane.findCache?.key !== key) {
+      const boxes = measureFindRows(pane, value, regex, style);
+      if (!boxes) {
+        for (let i = 0; i < pane.findPool.length; i++) pane.findPool[i].style.display = 'none';
+        return;
+      }
+      pane.findCache = { key, boxes };
+    }
+    placeFindBoxes(pane);
+  }
+
+  /** CSS properties cloned from textarea to the mirror so layout is identical. */
+  const MIRROR_CLONE_PROPS = [
+    'fontFamily', 'fontSize', 'fontWeight', 'fontStyle', 'fontStretch',
+    'letterSpacing', 'wordSpacing', 'textIndent', 'textTransform',
+    'lineHeight', 'paddingTop', 'paddingRight', 'paddingBottom', 'paddingLeft',
+    'borderTopWidth', 'borderRightWidth', 'borderBottomWidth', 'borderLeftWidth',
+    'boxSizing', 'tabSize', 'whiteSpace', 'overflowWrap', 'wordBreak',
+  ] as const;
+
+  /**
+   * Builds a hidden mirror <div> that replicates the textarea's typography.
+   * Caller is responsible for appending to document.body and removing it.
+   */
+  function buildMirror(
+    textarea: HTMLTextAreaElement,
+    style: CSSStyleDeclaration,
+    taRect: DOMRect,
+  ): HTMLDivElement {
+    const mirror = document.createElement('div');
+    mirror.setAttribute('aria-hidden', 'true');
+    // CRITICAL: position at the SAME viewport coords as the textarea so that
+    // Range.getClientRects() returns coords in the same space. If we use
+    // top:0/left:0 the y values are wrong for any textarea that isn't at the
+    // very top of the viewport (e.g. everything below a header).
+    mirror.style.position = 'fixed';
+    mirror.style.top = `${taRect.top}px`;
+    mirror.style.left = `${taRect.left}px`;
+    mirror.style.width = `${taRect.width}px`;
+    mirror.style.height = `${taRect.height}px`;
+    mirror.style.visibility = 'hidden';
+    mirror.style.pointerEvents = 'none';
+    mirror.style.zIndex = '-9999';
+    mirror.style.overflow = 'hidden';
+    for (const prop of MIRROR_CLONE_PROPS) mirror.style[prop] = style[prop];
+    return mirror;
+  }
+
+  function measureFindRows(
+    pane: Pane,
+    value: string,
+    regex: RegExp,
+    style: CSSStyleDeclaration,
+  ): ReadonlyArray<{ readonly x: number; readonly y: number; readonly w: number; readonly h: number }> | null {
+    // Collect all match ranges (capped).
+    regex.lastIndex = 0;
+    const ranges: Array<{ from: number; to: number }> = [];
+    let m: RegExpExecArray | null;
+    while ((m = regex.exec(value)) !== null) {
+      if (m[0] === '') { regex.lastIndex += 1; continue; }
+      ranges.push({ from: m.index, to: m.index + m[0].length });
+      if (ranges.length >= FIND_HIGHLIGHT_CAP) break;
+    }
+    if (ranges.length === 0) return [];
+
+    const { textarea } = pane;
+    const host = pane.findLayer.offsetParent as HTMLElement | null;
+    if (!host) return null; // pane not yet in layout
+
+    const hostRect = host.getBoundingClientRect();
+    const taRect = textarea.getBoundingClientRect();
+
+    // Build mirror at the SAME screen position as the textarea.
+    const mirror = buildMirror(textarea, style, taRect);
+    const textNode = document.createTextNode(value);
+    mirror.appendChild(textNode);
+    document.body.appendChild(mirror);
+
+    // We need to scroll the mirror to match the textarea's scroll position
+    // so that getBoundingClientRect() on ranges reflects the visible area.
+    mirror.scrollTop = textarea.scrollTop;
+    mirror.scrollLeft = textarea.scrollLeft;
+
+    const boxes: Array<{ x: number; y: number; w: number; h: number }> = [];
+    try {
+      const range = document.createRange();
+      for (const { from, to } of ranges) {
+        range.setStart(textNode, from);
+        range.setEnd(textNode, to);
+        const rects = range.getClientRects();
+        // A match may span visual lines (word-wrapped): paint one box per rect.
+        for (let ri = 0; ri < rects.length; ri++) {
+          const r = rects[ri];
+          if (r.width < 1) continue;
+          // Convert from viewport coords to pane-relative (offsetParent-relative).
+          const x = r.left - hostRect.left;
+          const y = r.top - hostRect.top;
+          // Only paint boxes inside the visible scroll band.
+          const bandTop = taRect.top - hostRect.top;
+          const bandBottom = bandTop + textarea.clientHeight;
+          const bandLeft = taRect.left - hostRect.left;
+          const bandRight = bandLeft + textarea.clientWidth;
+          if (y + r.height < bandTop || y > bandBottom) continue;
+          if (x + r.width < bandLeft || x > bandRight) continue;
+          boxes.push({ x, y, w: r.width, h: r.height });
+        }
+      }
+    } finally {
+      mirror.remove();
+    }
+    return boxes;
+  }
+
+  function placeFindBoxes(pane: Pane): void {
+    const cache = pane.findCache;
+    if (!cache) {
+      for (const box of pane.findPool) box.style.display = 'none';
+      return;
+    }
+    const boxes = cache.boxes;
+    let placed = 0;
+    for (const box of boxes) {
+      const node = ensureFindBox(pane, placed);
+      placed += 1;
+      node.style.display = 'block';
+      node.style.left = `${Math.round(box.x)}px`;
+      node.style.top = `${Math.round(box.y)}px`;
+      node.style.width = `${Math.round(box.w)}px`;
+      node.style.height = `${Math.round(box.h)}px`;
+    }
+    for (let i = placed; i < pane.findPool.length; i++) {
+      pane.findPool[i].style.display = 'none';
+    }
+  }
+
+  function refreshFind(pane: Pane): void {
+    updateFindCount(pane);
+    paintFindHighlights(pane);
   }
 
   function openFind(pane: Pane, replaceMode: boolean): void {
@@ -862,15 +1130,44 @@ export function initEditorApp(): void {
     }
     if (query) pane.findInput.value = query;
     pane.findbar.hidden = false;
-    updateFindCount(pane);
+    refreshFind(pane);
     const target = replaceMode && pane.findInput.value ? pane.replaceInput : pane.findInput;
     target.focus();
     target.select();
   }
 
   function closeFind(pane: Pane): void {
+    window.clearTimeout(pane.findTimer);
+    pane.findTimer = undefined;
     pane.findbar.hidden = true;
+    paintFindHighlights(pane);
     pane.textarea.focus();
+  }
+
+  function setReplaceBusy(pane: Pane, busy: boolean): void {
+    pane.replaceButton.disabled = busy;
+    pane.replaceButton.setAttribute('aria-busy', busy ? 'true' : 'false');
+    pane.replaceSpinner?.toggleAttribute('hidden', !busy);
+    // Label: only set when going busy. The idle text is restored either by
+    // flashReplaceSuccess (success path) or by the finally block (error/no-match).
+    if (busy && pane.replaceLabel) pane.replaceLabel.textContent = 'Replacing…';
+  }
+
+  /** Briefly show a success state on the Replace All button. */
+  function flashReplaceSuccess(pane: Pane, count: number): void {
+    const btn = pane.replaceButton;
+    const label = pane.replaceLabel;
+    if (!label) return;
+    label.textContent = `✓ ${count} replaced`;
+    btn.classList.add('!bg-emerald-600');
+    btn.classList.remove('!bg-blue-600');
+    // Re-enable the button during the success flash so the user can click again
+    btn.disabled = false;
+    window.setTimeout(() => {
+      label.textContent = 'Replace all';
+      btn.classList.remove('!bg-emerald-600');
+      btn.classList.add('!bg-blue-600');
+    }, 2000);
   }
 
   function replaceAll(pane: Pane): void {
@@ -878,24 +1175,42 @@ export function initEditorApp(): void {
       denyEdit();
       return;
     }
-    const regex = buildSearchRegex({
-      query: pane.findInput.value,
-      caseSensitive: pane.caseSensitive,
-    });
+    const regex = buildPaneRegex(pane);
     if (!regex) return;
-    const current = pane.textarea.value;
-    const next = replaceAllMatches(current, regex, pane.replaceInput.value);
-    if (next === current) return;
-    const caret = Math.min(pane.textarea.selectionStart, next.length);
-    applyEdit(pane.textarea, {
-      from: 0,
-      to: current.length,
-      insert: next,
-      selStart: caret,
-      selEnd: caret,
-    });
-    updateFindCount(pane);
-    toast('Replaced');
+    setReplaceBusy(pane, true);
+    try {
+      const current = pane.textarea.value;
+      const replacement = pane.replaceInput.value;
+      const next = replaceAllMatches(current, regex, replacement);
+      if (next === current) {
+        toast('No matches');
+        return;
+      }
+      const replaceCount = countMatches(current, regex);
+      const caret = Math.min(pane.textarea.selectionStart, next.length);
+      applyEdit(pane.textarea, {
+        from: 0,
+        to: current.length,
+        insert: next,
+        selStart: caret,
+        selEnd: caret,
+      });
+      refreshFind(pane);
+      flashReplaceSuccess(pane, replaceCount);
+      // Don't restore disabled here on success — flashReplaceSuccess already did it.
+      return;
+    } finally {
+      // Always hide the spinner and reset aria-busy.
+      // On the success path, flashReplaceSuccess already set the label and re-enabled the button.
+      // On the no-match / error path, we restore everything here.
+      pane.replaceSpinner?.toggleAttribute('hidden', true);
+      pane.replaceButton.setAttribute('aria-busy', 'false');
+      pane.replaceButton.disabled = false;
+      // Restore label only if flashReplaceSuccess didn't already change it (success shows "✓ …")
+      if (pane.replaceLabel && !pane.replaceLabel.textContent?.startsWith('✓')) {
+        pane.replaceLabel.textContent = 'Replace all';
+      }
+    }
   }
 
   function buildTitle(doc: OpenDocument): HTMLElement {
@@ -1040,6 +1355,7 @@ export function initEditorApp(): void {
 
     collab?.setDocument(id);
     syncOverlay();
+    if (pane) paintFindHighlights(pane);
     announceActiveDocument();
   }
 
@@ -1095,7 +1411,7 @@ export function initEditorApp(): void {
     activate(doc.id);
   }
 
-  function requestClose(id: string): void {
+  async function requestClose(id: string): Promise<void> {
     if (documents.length <= 1) {
       toast('At least one document must stay open');
       return;
@@ -1103,13 +1419,27 @@ export function initEditorApp(): void {
     const doc = documentById(id);
     if (!doc) return;
 
-    const question = cloud
-      ? `Delete “${doc.title}”? It disappears for everyone who can see it, history included.`
-      : `Close “${doc.title}”? Its content is deleted from this browser.`;
-    if (!window.confirm(question)) return;
+    // Closing a server document is a delete - but only for whoever may delete
+    // it. A reader (an invited one, or anyone reading a public document) gets a
+    // plain tab close instead: offering "Delete" for somebody else's page, and
+    // firing a request RLS is going to refuse, is a lie about what just happened.
+    const deleteOnline = cloud !== null && canManageDocument(doc.role ?? 'reader');
+
+    const confirmed = await confirmAction({
+      title: deleteOnline ? `Delete “${doc.title}”?` : `Close “${doc.title}”?`,
+      message: deleteOnline
+        ? 'It disappears for everyone who can see it, history included.'
+        : doc.role !== undefined
+          ? 'It closes the tab here. The document stays online.'
+          : 'Its content is deleted from this browser.',
+      confirmLabel: deleteOnline ? 'Delete' : 'Close',
+      danger: true,
+    });
+    if (!confirmed) return;
 
     const closing = panes.get(id);
     if (closing) flushPane(closing);
+    if (closing) window.clearTimeout(closing.findTimer);
     closing?.root.remove();
     panes.delete(id);
     window.clearTimeout(saveTimers.get(id));
@@ -1123,9 +1453,11 @@ export function initEditorApp(): void {
       const session = cloud;
       revisions.delete(id);
       lastSaved.delete(id);
-      void session.remove(id).then((removed) => {
-        if (!removed) toast(`Could not delete “${doc.title}” - it is still online`);
-      });
+      if (deleteOnline) {
+        void session.remove(id).then((removed) => {
+          if (!removed) toast(`Could not delete “${doc.title}” - it is still online`);
+        });
+      }
     }
 
     activate(activeId);
@@ -1137,7 +1469,7 @@ export function initEditorApp(): void {
     return id ? panes.get(id) : currentPane();
   }
 
-  function clearActive(): void {
+  async function clearActive(): Promise<void> {
     const pane = currentPane();
     if (!pane) return;
     if (!pane.textarea.value) return;
@@ -1145,13 +1477,19 @@ export function initEditorApp(): void {
       denyEdit();
       return;
     }
-    if (!window.confirm('Clear the active document? This cannot be undone.')) return;
+    const confirmed = await confirmAction({
+      title: 'Clear the active document?',
+      message: 'Its content is deleted and cannot be undone.',
+      confirmLabel: 'Clear',
+      danger: true,
+    });
+    if (!confirmed) return;
     pane.textarea.value = '';
     pane.textarea.dispatchEvent(new Event('input'));
     toast('Cleared');
   }
 
-  function clearAll(): void {
+  async function clearAll(): Promise<void> {
     // Documents this account can only read keep their text; nobody clears them here.
     const editable = [...panes.values()].filter(
       (pane) => !isReadOnly(documentById(pane.docId)),
@@ -1160,7 +1498,13 @@ export function initEditorApp(): void {
       if (editable.length < panes.size) denyEdit();
       return;
     }
-    if (!window.confirm('Clear every document? This cannot be undone.')) return;
+    const confirmed = await confirmAction({
+      title: 'Clear every document?',
+      message: 'Their contents are deleted and cannot be undone.',
+      confirmLabel: 'Clear all',
+      danger: true,
+    });
+    if (!confirmed) return;
     editable.forEach((pane) => {
       pane.textarea.value = '';
       pane.textarea.dispatchEvent(new Event('input'));
@@ -1303,10 +1647,10 @@ export function initEditorApp(): void {
         setZoom(1);
         return;
       case 'clear-active':
-        clearActive();
+        void clearActive();
         return;
       case 'clear-all':
-        clearAll();
+        void clearAll();
         return;
       case 'popout':
         openPreviewTab();
@@ -1324,7 +1668,26 @@ export function initEditorApp(): void {
         if (pane) {
           pane.caseSensitive = !pane.caseSensitive;
           pane.caseButton.classList.toggle('on', pane.caseSensitive);
-          updateFindCount(pane);
+          pane.caseButton.setAttribute('aria-pressed', String(pane.caseSensitive));
+          refreshFind(pane);
+        }
+        return;
+      case 'toggle-word':
+        if (pane && pane.wordButton) {
+          pane.wholeWord = !pane.wholeWord;
+          pane.wordButton.classList.toggle('on', pane.wholeWord);
+          pane.wordButton.setAttribute('aria-pressed', String(pane.wholeWord));
+          refreshFind(pane);
+        }
+        return;
+      case 'toggle-regex':
+        if (pane && pane.regexButton) {
+          pane.useRegex = !pane.useRegex;
+          pane.regexButton.classList.toggle('on', pane.useRegex);
+          pane.regexButton.setAttribute('aria-pressed', String(pane.useRegex));
+          // In regex mode whole-word doesn't apply
+          if (pane.wordButton) pane.wordButton.toggleAttribute('disabled', pane.useRegex);
+          refreshFind(pane);
         }
         return;
       case 'replace-all':
@@ -1360,11 +1723,32 @@ export function initEditorApp(): void {
       replaceInput: query<HTMLInputElement>('[data-r="replace-input"]'),
       findCount: query<HTMLElement>('[data-r="find-count"]'),
       caseButton: query<HTMLElement>('[data-command="toggle-case"]'),
+      wordButton: root.querySelector<HTMLElement>('[data-command="toggle-word"]'),
+      regexButton: root.querySelector<HTMLElement>('[data-command="toggle-regex"]'),
+      replaceButton: query<HTMLButtonElement>('[data-command="replace-all"]'),
+      replaceSpinner: root.querySelector<HTMLElement>('[data-replace-spinner]'),
+      replaceLabel: root.querySelector<HTMLElement>('[data-replace-label]'),
+      replaceIcon: root.querySelector<HTMLElement>('[data-replace-icon]'),
+      findLayer: document.createElement('div'),
+      findPool: [],
+      findCache: null,
       splitter: query<HTMLElement>('[data-r="splitter"]'),
       caseSensitive: false,
+      wholeWord: false,
+      useRegex: false,
       scrollGuard: null,
       hasScrolled: false,
     };
+    // Same host as `collab-layer` (created later in `syncOverlay`, so remote
+    // cursors keep painting above these highlights), below the floating
+    // findbar (z-index 10). `paintFindHighlights` owns its visibility.
+    pane.findLayer.className = 'find-layer';
+    pane.findLayer.style.position = 'absolute';
+    pane.findLayer.style.inset = '0';
+    pane.findLayer.style.overflow = 'hidden';
+    pane.findLayer.style.pointerEvents = 'none';
+    pane.findLayer.style.display = 'none';
+    query<HTMLElement>('.code-pane').append(pane.findLayer);
     panes.set(doc.id, pane);
 
     const formatTrigger = root.querySelector<HTMLElement>('[data-menu="format"]');
@@ -1387,6 +1771,7 @@ export function initEditorApp(): void {
     textarea.addEventListener('input', () => {
       scheduleWork(pane);
       updateStatus();
+      refreshFind(pane);
     });
     textarea.addEventListener('focusin', () => {
       if (activeId !== doc.id) activate(doc.id);
@@ -1401,14 +1786,68 @@ export function initEditorApp(): void {
       textarea.addEventListener(eventName, shareCursor),
     );
 
-    pane.findInput.addEventListener('input', () => updateFindCount(pane));
+    // Debounced (120ms): the count is an exact lazy pass and the repaint
+    // touches up to 300 pooled nodes — neither belongs on every keystroke.
+    // The replace field only moves the count line (same single pass, via
+    // `updateFindCount`), so it stays immediate.
+    pane.findInput.addEventListener('input', () => {
+      window.clearTimeout(pane.findTimer);
+      pane.findTimer = window.setTimeout(() => refreshFind(pane), FIND_DEBOUNCE_MS);
+    });
+    pane.replaceInput.addEventListener('input', () => updateFindCount(pane));
+    // Scroll repaint rides its own rAF-throttled listener (passive), mirroring
+    // how the collab overlay repaints — independent of the sync-scroll pipe.
+    let findScrollQueued = false;
+    textarea.addEventListener(
+      'scroll',
+      () => {
+        if (findScrollQueued) return;
+        findScrollQueued = true;
+        requestAnimationFrame(() => {
+          findScrollQueued = false;
+          paintFindHighlights(pane);
+        });
+      },
+      { passive: true },
+    );
     pane.findbar.addEventListener('keydown', (event) => {
+      const ctrl = event.ctrlKey || event.metaKey;
       if (event.key === 'Escape') {
         event.preventDefault();
         closeFind(pane);
       } else if (event.key === 'Enter') {
         event.preventDefault();
         replaceAll(pane);
+      } else if (event.altKey && !ctrl) {
+        // Alt+C = toggle case, Alt+W = whole word, Alt+R = regex (like VSCode)
+        switch (event.key.toLowerCase()) {
+          case 'c':
+            event.preventDefault();
+            pane.caseSensitive = !pane.caseSensitive;
+            pane.caseButton.classList.toggle('on', pane.caseSensitive);
+            pane.caseButton.setAttribute('aria-pressed', String(pane.caseSensitive));
+            refreshFind(pane);
+            break;
+          case 'w':
+            event.preventDefault();
+            if (pane.wordButton && !pane.useRegex) {
+              pane.wholeWord = !pane.wholeWord;
+              pane.wordButton.classList.toggle('on', pane.wholeWord);
+              pane.wordButton.setAttribute('aria-pressed', String(pane.wholeWord));
+              refreshFind(pane);
+            }
+            break;
+          case 'r':
+            event.preventDefault();
+            if (pane.regexButton) {
+              pane.useRegex = !pane.useRegex;
+              pane.regexButton.classList.toggle('on', pane.useRegex);
+              pane.regexButton.setAttribute('aria-pressed', String(pane.useRegex));
+              if (pane.wordButton) pane.wordButton.toggleAttribute('disabled', pane.useRegex);
+              refreshFind(pane);
+            }
+            break;
+        }
       }
     });
 
@@ -1505,13 +1944,42 @@ export function initEditorApp(): void {
             handled = true;
             break;
           case 'w':
-            requestClose(activeId);
+            void requestClose(activeId);
             handled = true;
             break;
           case 'Enter':
             editWith(pane, (value) => commands.insertLine(value, true));
             handled = true;
             break;
+          case 'c': {
+            // Ctrl+C with no selection → copy the entire current line (VSCode)
+            if (textarea.selectionStart === textarea.selectionEnd) {
+              const lineRange = commands.selectLineRange(state);
+              const lineText = textarea.value.slice(lineRange.start, lineRange.end);
+              void navigator.clipboard.writeText(lineText + '\n').catch(() =>
+                toast('Copy failed — check clipboard permissions'),
+              );
+              handled = true;
+            }
+            // With a selection, let the browser handle normal Ctrl+C.
+            break;
+          }
+          case 'd': {
+            // Ctrl+D → select next occurrence of word/selection (VSCode)
+            const curSel = textarea.value.slice(textarea.selectionStart, textarea.selectionEnd);
+            const searchWord = curSel || (() => {
+              const w = wordAt(textarea.value, textarea.selectionStart);
+              return w ? textarea.value.slice(w[0], w[1]) : '';
+            })();
+            if (searchWord) {
+              const searchFrom = curSel ? textarea.selectionEnd : textarea.selectionStart;
+              let found = textarea.value.indexOf(searchWord, searchFrom);
+              if (found === -1) found = textarea.value.indexOf(searchWord); // wrap
+              if (found !== -1) textarea.setSelectionRange(found, found + searchWord.length);
+            }
+            handled = true;
+            break;
+          }
           default:
             break;
         }
@@ -1557,7 +2025,7 @@ export function initEditorApp(): void {
 
     const closeTab = target.closest<HTMLElement>('[data-close-tab]');
     if (closeTab?.dataset.closeTab) {
-      requestClose(closeTab.dataset.closeTab);
+      void requestClose(closeTab.dataset.closeTab);
       return;
     }
 
@@ -1584,6 +2052,13 @@ export function initEditorApp(): void {
     if (pane && !pane.findbar.hidden) closeFind(pane);
   });
 
+  // One shared listener (not per-pane): repaints only the visible pane, so
+  // closed tabs leave nothing behind.
+  window.addEventListener('resize', () => {
+    const pane = currentPane();
+    if (pane) paintFindHighlights(pane);
+  });
+
   window.addEventListener('pagehide', () => {
     flushAll(true);
     collab?.close();
@@ -1599,6 +2074,50 @@ export function initEditorApp(): void {
     activate(target.id);
   }
 
+  /**
+   * Reads one document by id with whatever the caller is: signed in, or not.
+   * `/api/documents/:id` answers a `public` document even without a session, and
+   * 401 for anything else, so `null` here means "not readable from this browser".
+   */
+  async function fetchReadableDocument(id: string): Promise<CloudDocument | null> {
+    try {
+      const response = await fetch(`/api/documents/${encodeURIComponent(id)}`, {
+        headers: { Accept: 'application/json' },
+        credentials: 'same-origin',
+      });
+      if (!response.ok) return null;
+
+      const payload: unknown = await response.json();
+      const found = (payload as { document?: unknown }).document;
+      return isCloudDocument(found) ? found : null;
+    } catch {
+      return null;
+    }
+  }
+
+  /**
+   * A `?doc=<id>` that is not in this account's tabs can still be one it is
+   * allowed to *read*: a document published as `public` is visible to anyone,
+   * RLS included, but `listDocuments` keeps it out of the tab list on purpose -
+   * else "my documents" would fill up with strangers' pages. The preview already
+   * reads such a document straight from the API; this gives the editor the same
+   * reach, as a read-only tab that is never persisted to the account. A signed-out
+   * visitor gets the same tab: `role` is `reader`, so nothing here is writable.
+   */
+  async function openReadableDocument(requested: string | null): Promise<void> {
+    if (!requested || !isDocumentId(requested) || documentById(requested)) return;
+
+    const found = await fetchReadableDocument(requested);
+    if (!found) return;
+
+    revisions.set(found.id, found.revision);
+    lastSaved.set(found.id, found.content);
+    documents = [
+      ...documents,
+      { id: found.id, title: found.title, content: found.content, role: found.role },
+    ];
+  }
+
   async function boot(): Promise<void> {
     const requested = new URLSearchParams(window.location.search).get('doc');
     try {
@@ -1609,6 +2128,10 @@ export function initEditorApp(): void {
     const session = await openCloudDocuments();
 
     if (!session) {
+      // Signed out, a `?doc=` link can still be readable: a document published as
+      // `public` answers the anonymous request. Load it before seeding, so a
+      // visitor who only followed a link does not also get a welcome draft.
+      await openReadableDocument(requested);
       bootDocuments();
       booted = true;
       mountAll(requested);
@@ -1628,6 +2151,7 @@ export function initEditorApp(): void {
       role: entry.role,
     }));
     await openCollabSession(session);
+    await openReadableDocument(requested);
 
     if (documents.length === 0) {
       try {

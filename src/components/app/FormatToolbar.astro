@@ -45,9 +45,20 @@ const GROUPS: readonly FormatGroup[] = [
     ],
   ],
 ];
+
+const QUICK: readonly FormatItem[] = [
+  ['bold', 'lucide:bold', 'Bold', 'Bold (Ctrl+B)'],
+  ['italic', 'lucide:italic', 'Italic', 'Italic (Ctrl+I)'],
+  ['heading', 'lucide:heading', 'Heading', 'Heading (cycles H1 → H3 → none)'],
+];
 ---
 
 <div class="fm">
+  {QUICK.map(([command, icon, label, title]) => (
+    <button type="button" class="fm-btn" data-command={command} title={title} aria-label={label}>
+      <Icon name={icon} />
+    </button>
+  ))}
   <button
     type="button"
     class="fm-btn"
