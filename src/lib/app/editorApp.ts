@@ -27,6 +27,7 @@ import type { OpenDocument, SaveDocumentResult } from '../documents/types';
 import { HIGHLIGHT_THEME_CSS } from '../markdown/highlightTheme';
 import { renderDiagram } from '../markdown/mermaid';
 import { renderMarkdown } from '../markdown/render';
+import { confirmChoice } from './confirmDialog';
 import { closeMenus, initMenus } from './menus';
 
 const MIN_ZOOM = 0.7;
@@ -37,6 +38,14 @@ const MAX_OPEN_DOCUMENTS = 20;
 
 const AUTOSAVE_DELAY = 1200;
 const RETRY_DELAY = 5000;
+
+function focusWithoutScroll(element: HTMLElement): void {
+  try {
+    element.focus({ preventScroll: true });
+  } catch {
+    element.focus();
+  }
+}
 
 type ScrollSource = 'code' | 'preview';
 
@@ -53,6 +62,7 @@ interface Pane {
   readonly splitter: HTMLElement;
   caseSensitive: boolean;
   scrollGuard: ScrollSource | null;
+  hasScrolled: boolean;
   timer?: number;
   savedScroll?: [number, number];
 }
@@ -65,8 +75,6 @@ const INLINE_MARKERS: Record<string, string> = {
 };
 
 export function initEditorApp(): void {
-  // Menus work on every page via the shared module; bind first so the
-  // early return below (non-editor pages) never leaves them dead.
   initMenus();
 
   const panesHost = document.getElementById('editor-panes');
@@ -91,7 +99,6 @@ export function initEditorApp(): void {
   const lastSaved = new Map<string, string>();
   const saveTimers = new Map<string, number>();
   const conflicted = new Set<string>();
-  // Documents whose save is in flight, and documents asked to save again while that happened.
   const saving = new Set<string>();
   const pendingSaves = new Set<string>();
   let booted = false;
@@ -118,7 +125,6 @@ export function initEditorApp(): void {
   }
 
   function persist(): void {
-    // Cloud mode never caches documents locally: one account's text would leak to the next visitor.
     if (!cloud) saveOpenDocuments(documents);
     saveActiveDocumentId(activeId);
   }
@@ -129,9 +135,6 @@ export function initEditorApp(): void {
     window.clearTimeout(saveTimers.get(doc.id));
     saveTimers.delete(doc.id);
 
-    // A save of this document is already in flight. Sending a second write with the same
-    // base revision can only come back as a conflict — the row already moved on — so wait
-    // for the running one and save again with the revision it returns.
     if (saving.has(doc.id)) {
       pendingSaves.add(doc.id);
       return;
@@ -149,7 +152,6 @@ export function initEditorApp(): void {
     const revision = revisions.get(doc.id);
     if (!cloud || revision === undefined) return;
 
-    // Content is captured before the round trip; the textarea may move on mid-save.
     const content = doc.content;
 
     showStatus('Saving…', 900);
@@ -162,8 +164,6 @@ export function initEditorApp(): void {
         content,
         revision,
         keepalive,
-        // The title travels with every save: a rename that waits for an in-flight save
-        // is then persisted by it instead of being dropped.
         title: doc.title,
       });
     } finally {
@@ -172,7 +172,6 @@ export function initEditorApp(): void {
 
     applySaveResult(doc, result, content);
 
-    // Whoever asked to save while this one was travelling gets a fresh revision to use.
     if (pendingSaves.delete(doc.id) && !conflicted.has(doc.id)) {
       queueCloudSave(doc, true, keepalive);
     }
@@ -206,7 +205,7 @@ export function initEditorApp(): void {
         showStatus('This document no longer exists', 4000);
         return;
       default:
-        showStatus('Could not save — retrying', 2500);
+        showStatus('Could not save - retrying', 2500);
         window.setTimeout(() => queueCloudSave(doc, true), RETRY_DELAY);
     }
   }
@@ -216,17 +215,13 @@ export function initEditorApp(): void {
 
     const server = await cloud.fetch(doc.id);
     if (!server) {
-      // A failed read is not proof the document is gone; let the next save find out.
       conflicted.delete(doc.id);
-      showStatus('Could not check the other version — retrying', 3000);
+      showStatus('Could not check the other version - retrying', 3000);
       window.setTimeout(() => queueCloudSave(doc, true), RETRY_DELAY);
       return;
     }
     revisions.set(doc.id, server.revision);
 
-    // The revision moved on without the text changing — publishing the document, or another
-    // window writing the same thing — so there is nothing to decide. Asking here is what
-    // made this dialog look like it fired for no reason.
     if (server.content === doc.content && server.title === doc.title) {
       lastSaved.set(doc.id, server.content);
       conflicted.delete(doc.id);
@@ -234,15 +229,23 @@ export function initEditorApp(): void {
       return;
     }
 
-    const keepMine = window.confirm(
-      `“${doc.title}” was changed somewhere else.\n\n` +
-        'OK: keep the text open here and save it over the other version.\n' +
-        'Cancel: load the newer version from the server (your local text is replaced).',
-    );
+    const decision = await confirmChoice({
+      title: `“${doc.title}” changed somewhere else`,
+      message:
+        'Another window saved a newer version. Keep the text open here to save it over that one, or load the newer version and replace what is here.',
+      confirmLabel: 'Keep my text here',
+      cancelLabel: 'Load the newer version',
+    });
 
     conflicted.delete(doc.id);
 
-    if (keepMine) {
+    // Dismissed: nothing is decided and nothing is written; the next save asks again.
+    if (decision === 'dismiss') {
+      showStatus('Changed elsewhere — your next save will ask what to keep', 4000);
+      return;
+    }
+
+    if (decision === 'confirm') {
       queueCloudSave(doc, true);
       return;
     }
@@ -267,8 +270,6 @@ export function initEditorApp(): void {
       return;
     }
 
-    // Renaming is a write too: sending it while an autosave is in the air would make
-    // one of the two fail with a revision conflict for no reason.
     if (saving.has(doc.id)) pendingSaves.add(doc.id);
     else await runCloudSave(doc);
 
@@ -321,9 +322,6 @@ export function initEditorApp(): void {
     return el;
   }
 
-  // Framework-free dock physics: hovering avatar i lifts it and nudges
-  // neighbors. Re-bound after every render since replaceChildren drops
-  // listeners; the host mouseleave uses assignment so it never stacks.
   function bindDockPhysics(host: HTMLElement): void {
     const avatars = [...host.children] as HTMLElement[];
     avatars.forEach((node, i) => {
@@ -418,7 +416,6 @@ export function initEditorApp(): void {
     overlay?.update(remoteCursors, peers, currentPane()?.textarea.value ?? '');
   }
 
-  // Never overwrite local edits from remote; the next save surfaces the revision conflict.
   function handleRemoteSave(save: RemoteSave): void {
     const known = revisions.get(save.documentId);
     if (known === undefined || save.revision <= known) return;
@@ -427,10 +424,7 @@ export function initEditorApp(): void {
     const dirty = doc ? doc.content !== lastSaved.get(save.documentId) : false;
 
     if (dirty || conflicted.has(save.documentId)) {
-      // The revision *we* knew is kept on purpose: the save that follows comes back as a
-      // conflict and asks which text to keep, instead of quietly writing over the version
-      // that just arrived.
-      showStatus('Changed elsewhere — your next save will ask what to keep', 4000);
+      showStatus('Changed elsewhere - your next save will ask what to keep', 4000);
       return;
     }
 
@@ -529,7 +523,6 @@ export function initEditorApp(): void {
     end: textarea.selectionEnd,
   });
 
-  // execCommand keeps native undo intact; setRangeText is fallback only.
   function applyEdit(textarea: HTMLTextAreaElement, edit: EditOp | null): void {
     if (!edit) return;
     textarea.focus();
@@ -554,7 +547,12 @@ export function initEditorApp(): void {
   function renderPane(pane: Pane): void {
     const doc = documentById(pane.docId);
     if (!doc) return;
-    void renderMarkdown(pane.preview, doc.content, { renderDiagram });
+    void renderMarkdown(pane.preview, doc.content, { renderDiagram }).then(
+      () => {
+        if (!pane.hasScrolled) pane.preview.scrollTop = 0;
+      },
+      () => {},
+    );
   }
 
   function scheduleWork(pane: Pane): void {
@@ -585,8 +583,6 @@ export function initEditorApp(): void {
     persist();
     if (!cloud) return;
 
-    // Only documents that actually changed. Writing an untouched row bumps its revision,
-    // which makes every other open editor ask about a conflict that never happened.
     documents.forEach((doc) => {
       if (doc.content !== lastSaved.get(doc.id)) queueCloudSave(doc, true, keepalive);
     });
@@ -604,23 +600,34 @@ export function initEditorApp(): void {
     sourceName: ScrollSource,
     targetName: ScrollSource,
   ): void {
+    let queued = false;
     source.addEventListener(
       'scroll',
-      () => {
+      (event: Event) => {
+        if (event.isTrusted) pane.hasScrolled = true;
         if (pane.scrollGuard === sourceName) {
           pane.scrollGuard = null;
           return;
         }
-        if (!syncScroll) return;
-        const next = scrollRatio(source) * (target.scrollHeight - target.clientHeight);
-        if (Math.abs(target.scrollTop - next) < 1) return;
-        pane.scrollGuard = targetName;
-        target.scrollTop = next;
-        requestAnimationFrame(() =>
-          requestAnimationFrame(() => {
+        if (!syncScroll || queued) return;
+        queued = true;
+        requestAnimationFrame(() => {
+          queued = false;
+          if (pane.scrollGuard === sourceName) {
             pane.scrollGuard = null;
-          }),
-        );
+            return;
+          }
+          if (!syncScroll) return;
+          const next = scrollRatio(source) * (target.scrollHeight - target.clientHeight);
+          if (Math.abs(target.scrollTop - next) < 1) return;
+          pane.scrollGuard = targetName;
+          target.scrollTop = next;
+          requestAnimationFrame(() =>
+            requestAnimationFrame(() => {
+              if (pane.scrollGuard === targetName) pane.scrollGuard = null;
+            }),
+          );
+        });
       },
       { passive: true },
     );
@@ -701,7 +708,6 @@ export function initEditorApp(): void {
     return tab;
   }
 
-  // Reuse tab nodes: rebuilding swallows the dblclick that starts a rename.
   function renderTabs(): void {
     const existing = new Map(
       [...tabsHostEl.querySelectorAll<HTMLElement>('[data-tab-id]')].map((element) => [
@@ -790,11 +796,18 @@ export function initEditorApp(): void {
 
     const pane = panes.get(id);
     if (pane) {
+      if (documentById(id)?.role === 'reader') {
+        showStatus('View only — only the owner and editors can save changes', 3500);
+      }
       if (pane.savedScroll) {
         pane.textarea.scrollTop = pane.savedScroll[0];
         pane.preview.scrollTop = pane.savedScroll[1];
+      } else {
+        pane.textarea.setSelectionRange(0, 0);
+        pane.textarea.scrollTop = 0;
+        pane.preview.scrollTop = 0;
       }
-      pane.textarea.focus();
+      focusWithoutScroll(pane.textarea);
     }
 
     renderTabs();
@@ -810,6 +823,9 @@ export function initEditorApp(): void {
   function announceActiveDocument(): void {
     const doc = documentById(activeId);
     if (!doc) return;
+
+    const badge = document.getElementById('role-badge');
+    if (badge) badge.hidden = doc.role !== 'reader';
 
     document.dispatchEvent(
       new CustomEvent('mdverse:active-document', {
@@ -879,7 +895,7 @@ export function initEditorApp(): void {
       revisions.delete(id);
       lastSaved.delete(id);
       void session.remove(id).then((removed) => {
-        if (!removed) toast(`Could not delete “${doc.title}” — it is still online`);
+        if (!removed) toast(`Could not delete “${doc.title}” - it is still online`);
       });
     }
 
@@ -1108,6 +1124,7 @@ export function initEditorApp(): void {
       splitter: query<HTMLElement>('[data-r="splitter"]'),
       caseSensitive: false,
       scrollGuard: null,
+      hasScrolled: false,
     };
     panes.set(doc.id, pane);
 
@@ -1119,6 +1136,9 @@ export function initEditorApp(): void {
 
     const { textarea } = pane;
     textarea.value = doc.content;
+    textarea.setSelectionRange(0, 0);
+    textarea.scrollTop = 0;
+    pane.preview.scrollTop = 0;
 
     textarea.addEventListener('input', () => {
       scheduleWork(pane);
@@ -1354,6 +1374,7 @@ export function initEditorApp(): void {
       id: entry.id,
       title: entry.title,
       content: entry.content,
+      role: entry.role,
     }));
     await openCollabSession(session);
 
@@ -1366,7 +1387,7 @@ export function initEditorApp(): void {
       } catch {
         cloud = null;
         documents = [createDocument([], WELCOME_MARKDOWN)];
-        toast('Could not reach your documents — this session stays in the browser');
+        toast('Could not reach your documents - this session stays in the browser');
       }
     }
 
