@@ -15,6 +15,7 @@ export const ICONIFY_ICONS = {
     'copy',
     'download',
     'ellipsis',
+    'ellipsis-vertical',
     'eraser',
     'external-link',
     'eye',

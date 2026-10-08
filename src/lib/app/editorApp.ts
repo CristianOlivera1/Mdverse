@@ -350,28 +350,38 @@ export function initEditorApp(): void {
   }
 
   function renderPresence(): void {
-    const host = document.getElementById('presence-bar');
-    if (!host) return;
+    const hosts = [...document.querySelectorAll<HTMLElement>('[data-presence-root]')];
+    if (hosts.length === 0) return;
 
     const others = peers.filter((peer) => peer.id !== viewerId);
-    host.replaceChildren();
-    host.hidden = peers.length === 0;
-    host.title = peers.length > 0 ? describePeers(peers, viewerId) : '';
-
+    const empty = peers.length === 0;
+    const title = peers.length > 0 ? describePeers(peers, viewerId) : '';
     const visible = others.slice(0, PRESENCE_MAX_VISIBLE);
-    for (const peer of visible) host.append(createPresenceAvatar(peer));
+    const rest = others.slice(PRESENCE_MAX_VISIBLE);
+    const hasOverflow = others.length > PRESENCE_MAX_VISIBLE;
 
-    if (others.length > PRESENCE_MAX_VISIBLE) {
-      const rest = others.slice(PRESENCE_MAX_VISIBLE);
-      host.append(
-        createPresenceOverflow(
-          others.length - PRESENCE_MAX_VISIBLE,
-          rest.map((peer) => peer.name).join(', '),
-        ),
-      );
+    for (const host of hosts) {
+      host.replaceChildren();
+      host.hidden = empty;
+      host.title = title;
+
+      for (const peer of visible) host.append(createPresenceAvatar(peer));
+
+      if (hasOverflow) {
+        host.append(
+          createPresenceOverflow(
+            others.length - PRESENCE_MAX_VISIBLE,
+            rest.map((peer) => peer.name).join(', '),
+          ),
+        );
+      }
+
+      bindDockPhysics(host);
+
+      // The mobile copy lives in a padded wrapper; collapse it when empty.
+      const wrap = host.closest<HTMLElement>('[data-presence-wrap]');
+      if (wrap) wrap.hidden = host.hidden;
     }
-
-    bindDockPhysics(host);
   }
 
   function setCollabStatus(next: CollabStatus): void {

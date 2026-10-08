@@ -5,9 +5,10 @@ const allPanels = (): HTMLElement[] => [...document.querySelectorAll<HTMLElement
 const triggerFor = (panel: HTMLElement): HTMLElement | null =>
   document.querySelector<HTMLElement>(`[data-menu="${panel.dataset.pop}"]`);
 
-export function closeMenus(except?: HTMLElement | null): void {
+export function closeMenus(except?: HTMLElement | readonly HTMLElement[] | null): void {
+  const keep = except instanceof HTMLElement ? [except] : [...(except ?? [])];
   allPanels().forEach((panel) => {
-    if (panel === except || panel.hidden) return;
+    if (keep.includes(panel) || panel.hidden) return;
     panel.hidden = true;
     const trigger = triggerFor(panel);
     if (trigger) {
@@ -50,9 +51,21 @@ export function initMenus(): void {
       );
       if (!panel) return;
       const willOpen = panel.hidden;
-      closeMenus(panel);
-      if (willOpen) openMenu(panel, menuTrigger);
-      else closeMenus();
+      // A trigger nested inside an already-open pop (mobile overflow) keeps its
+      // ancestor pops open. Top-level triggers have no ancestor pops, so
+      // desktop behavior is unchanged.
+      const ancestors: HTMLElement[] = [];
+      let scope: HTMLElement | null = menuTrigger.parentElement;
+      while (scope) {
+        const ancestor = scope.closest<HTMLElement>('[data-pop]');
+        if (!ancestor) break;
+        ancestors.push(ancestor);
+        scope = ancestor.parentElement;
+      }
+      if (willOpen) {
+        closeMenus([panel, ...ancestors]);
+        openMenu(panel, menuTrigger);
+      } else closeMenus(ancestors.length > 0 ? ancestors : undefined);
       return;
     }
 

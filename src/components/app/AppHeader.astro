@@ -9,7 +9,15 @@ import ClearMenu from './ClearMenu.astro';
 import AccountMenu from '../auth/AccountMenu.astro';
 ---
 
-<header class="flex items-center justify-between h-12 px-2 sm:px-3 border-b border-neutral-800 shrink-0 gap-1.5 sm:gap-3 select-none">
+<header class="relative flex items-center justify-between h-12 px-2 sm:px-3 border-b border-neutral-800 shrink-0 gap-1.5 sm:gap-3 select-none">
+  <div class="absolute max-sm:inset-0 sm:right-0 sm:left-auto sm:w-48 md:w-64 h-full -z-10 overflow-hidden pointer-events-none">
+    <img
+      src="/images/bg-header.avif"
+      alt=""
+      class="w-full h-full object-cover opacity-70 sm:opacity-90 mask-b-from-80% mask-b-to-99%"
+    />
+  </div>
+
   <div class="flex items-center gap-1.5 sm:gap-3 min-w-0 z-10">
     <a href="/" class="max-sm:hidden flex items-center shrink-0" aria-label="Mdverse Home">
       <img
@@ -21,10 +29,6 @@ import AccountMenu from '../auth/AccountMenu.astro';
       />
     </a>
     <span class="sep max-sm:hidden"></span>
-
-    <!-- Tab strip scrolls internally (overflow-x-auto + no-sb in DocumentTabs);
-      the header itself must stay overflow-visible: .pop panels are
-      position:fixed and positioned by JS (see src/lib/app/menus.ts openMenu). -->
     <DocumentTabs />
 
     <div class="seg m-tabs shrink-0" role="group" aria-label="Visible panel">
@@ -39,20 +43,7 @@ import AccountMenu from '../auth/AccountMenu.astro';
     </div>
   </div>
 
-  <div class="relative flex items-center flex-nowrap h-full gap-1 sm:gap-1.5 shrink-0 z-10 pl-2 sm:pl-6">
-    <div class="absolute inset-0 -z-10 overflow-hidden pointer-events-none">
-      <img
-        src="/images/bg-header.avif"
-        alt=""
-        class="w-full h-full object-cover opacity-90 mask-b-from-80% mask-b-to-99%"
-      />
-    </div>
-
-    <!-- Tradeoff: popout/Export/View/Clear stay hidden below md to keep the
-      360px layout collision-free; the md:hidden overflow menu below
-      re-exposes the same four actions there. Desktop placement is unchanged.
-      All remaining triggers are icon-only below lg (hidden lg:inline labels),
-      and .pop panels are position:fixed so nothing here clips them. -->
+  <div class="relative flex items-center flex-nowrap h-full gap-0 sm:gap-1.5 shrink-0 z-10 pl-0 sm:pl-6">
     <div class="flex items-center gap-1 max-md:hidden">
       <button
         type="button"
@@ -67,16 +58,10 @@ import AccountMenu from '../auth/AccountMenu.astro';
       <ExportMenu />
       <ViewMenu />
       <ClearMenu />
+      <PresenceBar />
+      <CollaborateDialog />
     </div>
 
-    <!-- Mobile overflow (below md only): the popout/Export/View/Clear group
-      above is max-md:hidden, so this md:hidden trigger re-exposes the same
-      four actions. Inner menus reuse the desktop components with suffixed
-      names (export-m/view-m/clear-m) — data-menu/data-pop names must stay
-      unique because menus.ts triggerFor resolves the FIRST match in the
-      document. The popout button is a bare data-command, so duplicating it
-      is free. Opening an inner menu closes this outer panel via closeMenus:
-      one level at a time by design, not fought here. -->
     <div class="md:hidden">
       <button
         type="button"
@@ -87,7 +72,7 @@ import AccountMenu from '../auth/AccountMenu.astro';
         title="More actions"
         aria-label="More actions"
       >
-        <Icon name="lucide:ellipsis" />
+        <Icon name="lucide:ellipsis-vertical" />
       </button>
       <div class="pop" data-pop="overflow" hidden>
         <button type="button" class="mi" data-command="popout">
@@ -98,10 +83,27 @@ import AccountMenu from '../auth/AccountMenu.astro';
         <ExportMenu suffix="-m" />
         <ViewMenu suffix="-m" />
         <ClearMenu suffix="-m" />
+        <div data-collab-section hidden>
+          <div class="pop-sep"></div>
+          <p class="pop-label">Collaborators</p>
+          <div class="px-2.5 py-1" data-presence-wrap>
+            <PresenceBar id="presence-bar-m" />
+          </div>
+          <button
+            type="button"
+            class="mi"
+            data-collab-open-btn
+            title="Invite people to this document"
+            aria-haspopup="dialog"
+            hidden
+          >
+            <Icon name="lucide:user-plus" />
+            Collaborate
+          </button>
+        </div>
       </div>
     </div>
 
-    <PresenceBar />
     <span
       id="role-badge"
       class="hb role-badge"
@@ -111,7 +113,6 @@ import AccountMenu from '../auth/AccountMenu.astro';
       <Icon name="lucide:lock" />
       <span class="hidden lg:inline">View only</span>
     </span>
-    <CollaborateDialog />
 
     <span class="hidden sm:inline sep"></span>
     <AccountMenu />

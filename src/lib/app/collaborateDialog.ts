@@ -10,6 +10,7 @@ import {
 } from '../documents/collaboration';
 import { formatTimestamp } from '../documents/format';
 import { linkIsActive, maskToken, ROLE_LABELS, shareUrl } from '../documents/sharing';
+import { closeMenus } from './menus';
 import { syncMiniSelects } from './miniSelect';
 
 interface ActiveDocument {
@@ -26,11 +27,12 @@ interface ActOptions {
 
 export function initCollaborateDialog(): void {
   const found = document.querySelector<HTMLDialogElement>('[data-collab-dialog]');
-  const trigger = document.getElementById('collaborate-open');
-  if (!found || !(trigger instanceof HTMLButtonElement)) return;
+  const openButtons = [
+    ...document.querySelectorAll<HTMLButtonElement>('[data-collab-open-btn]'),
+  ];
+  if (!found || openButtons.length === 0) return;
 
   const dialog: HTMLDialogElement = found;
-  const openButton: HTMLButtonElement = trigger;
 
   const pick = <T extends Element>(selector: string): T => {
     const element = dialog.querySelector<T>(selector);
@@ -266,12 +268,13 @@ export function initCollaborateDialog(): void {
   function openDialog(): void {
     if (!active?.collaborative) return;
 
+    closeMenus();
     clearNotice();
-    dialog.showModal();
+    if (!dialog.open) dialog.showModal();
     void refresh();
   }
 
-  openButton.addEventListener('click', openDialog);
+  for (const button of openButtons) button.addEventListener('click', openDialog);
   pick<HTMLElement>('[data-collab="close"]').addEventListener('click', () => dialog.close());
 
   // Rows on the documents dashboard carry their own trigger: the dialog opens for
@@ -409,7 +412,10 @@ export function initCollaborateDialog(): void {
       title: typeof detail.title === 'string' ? detail.title : 'Untitled',
       collaborative: detail.collaborative === true,
     };
-    openButton.hidden = !active.collaborative;
+    for (const button of openButtons) button.hidden = !active.collaborative;
+    for (const section of document.querySelectorAll<HTMLElement>('[data-collab-section]')) {
+      section.hidden = !active.collaborative;
+    }
 
     if (dialog.open && state?.id !== active.id) {
       clearNotice();

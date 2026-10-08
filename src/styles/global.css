@@ -175,6 +175,13 @@ button {
   display: none;
 }
 
+/* Bare `hidden` must win everywhere: author `display` rules (e.g. .hb,
+   .mi) otherwise override the UA `[hidden]{display:none}`, leaving
+   supposedly-hidden controls visible and tappable. */
+[hidden] {
+  display: none !important;
+}
+
 .pop:not([hidden]) {
   animation: pop-in 0.12s ease-out;
 }
