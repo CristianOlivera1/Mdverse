@@ -201,6 +201,7 @@ export interface Database {
           parent_id: string | null;
           body: string;
           anchor: Json | null;
+          mentions: string[];
           resolved: boolean;
           created_at: string;
           updated_at: string;
@@ -212,6 +213,7 @@ export interface Database {
           parent_id?: string | null;
           body: string;
           anchor?: Json | null;
+          mentions?: string[];
           resolved?: boolean;
           created_at?: string;
           updated_at?: string;
@@ -223,6 +225,7 @@ export interface Database {
           parent_id?: string | null;
           body?: string;
           anchor?: Json | null;
+          mentions?: string[];
           resolved?: boolean;
           created_at?: string;
           updated_at?: string;
@@ -233,7 +236,6 @@ export interface Database {
         Row: {
           id: string;
           document_id: string;
-          /** Secret: only reachable by an owner/admin. */
           token: string;
           role: Database['public']['Enums']['collaborator_role'];
           expires_at: string | null;

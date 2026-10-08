@@ -1,4 +1,4 @@
-import { describeAccess } from '../documents/access';
+import { canManageDocument, describeAccess } from '../documents/access';
 import {
   loadCollaboration,
   runShareAction,
@@ -9,6 +9,7 @@ import {
   type ShareActionFields,
 } from '../documents/collaboration';
 import { formatTimestamp } from '../documents/format';
+import type { DocumentAccess } from '../documents/types';
 import { linkIsActive, maskToken, ROLE_LABELS, shareUrl } from '../documents/sharing';
 import { closeMenus } from './menus';
 import { syncMiniSelects } from './miniSelect';
@@ -17,6 +18,8 @@ interface ActiveDocument {
   readonly id: string;
   readonly title: string;
   readonly collaborative: boolean;
+  /** The role this account holds on `id`; invites are the owner's to hand out. */
+  readonly role?: DocumentAccess;
 }
 
 interface ActOptions {
@@ -265,8 +268,13 @@ export function initCollaborateDialog(): void {
     }
   }
 
+  /** Only the owner may invite people: everyone else never sees the entry points. */
+  function canShare(): boolean {
+    return active?.collaborative === true && canManageDocument(active.role ?? 'reader');
+  }
+
   function openDialog(): void {
-    if (!active?.collaborative) return;
+    if (!canShare()) return;
 
     closeMenus();
     clearNotice();
@@ -284,7 +292,8 @@ export function initCollaborateDialog(): void {
     const id = button?.dataset.docId;
     if (!id) return;
 
-    active = { id, title: button.dataset.docTitle || 'Untitled', collaborative: true };
+    // The dashboard only renders this trigger on documents the account owns.
+    active = { id, title: button.dataset.docTitle || 'Untitled', collaborative: true, role: 'owner' };
     openDialog();
   });
 
@@ -411,11 +420,13 @@ export function initCollaborateDialog(): void {
       id: detail.id,
       title: typeof detail.title === 'string' ? detail.title : 'Untitled',
       collaborative: detail.collaborative === true,
+      role: detail.role ?? 'reader',
     };
-    for (const button of openButtons) button.hidden = !active.collaborative;
+    for (const button of openButtons) button.hidden = !canShare();
     for (const section of document.querySelectorAll<HTMLElement>('[data-collab-section]')) {
-      section.hidden = !active.collaborative;
+      section.hidden = !canShare();
     }
+    if (!canShare() && dialog.open) dialog.close();
 
     if (dialog.open && state?.id !== active.id) {
       clearNotice();

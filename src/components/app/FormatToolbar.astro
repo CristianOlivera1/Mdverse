@@ -33,6 +33,7 @@ const GROUPS: readonly FormatGroup[] = [
       ['fence', 'lucide:braces', 'Block', 'Code block'],
       ['mermaid', 'lucide:workflow', 'Mermaid', 'Insert a Mermaid diagram'],
       ['hr', 'lucide:minus', 'Rule', 'Horizontal rule'],
+      ['insert-image', 'lucide:image', 'Image', 'Upload an image (or drag & drop)'],
     ],
   ],
   [
@@ -59,6 +60,22 @@ const GROUPS: readonly FormatGroup[] = [
     Format
     <Icon name="lucide:chevron-up" size={12} />
   </button>
+
+  <button
+    type="button"
+    class="fm-btn"
+    id="comments-toggle-btn"
+    data-command="toggle-comments"
+    title="Comments (C to add comment on selection)"
+    aria-pressed="false"
+  >
+    <Icon name="lucide:message-circle" />
+    <span
+      id="comments-badge"
+      class="hidden text-[10px] font-bold leading-none px-1.5 py-0.5 rounded-full bg-indigo-500/20 text-indigo-400"
+    ></span>
+  </button>
+
   <div class="pop fm-pop" data-pop="format" data-r="format-pop" hidden>
     {GROUPS.map(([group, items]) => (
       <>

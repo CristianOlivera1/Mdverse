@@ -3,6 +3,7 @@ import type { ReactElement } from 'react';
 import { render } from 'react-email';
 
 import CollaborationInviteEmail from '../../../emails/collaboration-invite';
+import CommentMentionEmail from '../../../emails/comment-mention';
 import ConfirmEmail from '../../../emails/confirm-email';
 import ResetPasswordEmail from '../../../emails/reset-password';
 import { getFromEmail, getReplyToEmail, getResendClient } from './resend';
@@ -10,7 +11,6 @@ import { getFromEmail, getReplyToEmail, getResendClient } from './resend';
 type SendResult = { ok: true; id: string } | { ok: false; error: string };
 
 interface EmailJob {
-  /** Short label for the server log, e.g. `collaboration invite`. */
   tag: string;
   to: string;
   subject: string;
@@ -22,7 +22,6 @@ async function sendEmail(job: EmailJob): Promise<SendResult> {
     const resend = getResendClient();
     const replyTo = getReplyToEmail();
 
-    // A text/plain alternative is what keeps a link-only HTML email out of spam folders.
     const [html, text] = await Promise.all([
       render(job.element),
       render(job.element, { plainText: true }),
@@ -57,9 +56,7 @@ export interface SendInviteOptions {
   documentTitle: string;
   inviterName: string;
   role: 'editor' | 'reader';
-  /** URL to send the invitee to - /dashboard or a share-link URL */
   inviteUrl: string;
-  /** Footer link base; falls back to DEFAULT_SITE_URL when omitted */
   siteUrl?: string;
 }
 
@@ -79,11 +76,38 @@ export async function sendCollaborationInvite(options: SendInviteOptions): Promi
   });
 }
 
+export interface SendCommentMentionOptions {
+  to: string;
+  recipientName?: string | null;
+  authorName: string;
+  documentTitle: string;
+  commentExcerpt: string;
+  documentUrl: string;
+  siteUrl?: string;
+}
+
+export async function sendCommentMentionEmail(
+  options: SendCommentMentionOptions,
+): Promise<SendResult> {
+  return sendEmail({
+    tag: 'comment mention',
+    to: options.to,
+    subject: `${options.authorName} mentioned you in "${options.documentTitle}"`,
+    element: React.createElement(CommentMentionEmail, {
+      recipientName: options.recipientName,
+      authorName: options.authorName,
+      documentTitle: options.documentTitle,
+      commentExcerpt: options.commentExcerpt,
+      documentUrl: options.documentUrl,
+      siteUrl: options.siteUrl,
+    }),
+  });
+}
+
 export interface SendConfirmEmailOptions {
   to: string;
   confirmUrl: string;
   username?: string | null;
-  /** Footer link base; falls back to DEFAULT_SITE_URL when omitted */
   siteUrl?: string;
 }
 
@@ -104,7 +128,6 @@ export interface SendResetPasswordOptions {
   to: string;
   resetUrl: string;
   username?: string | null;
-  /** Footer link base; falls back to DEFAULT_SITE_URL when omitted */
   siteUrl?: string;
 }
 
