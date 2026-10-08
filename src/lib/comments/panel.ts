@@ -76,13 +76,6 @@ function escHtml(value: string): string {
   return value.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
 }
 
-/**
- * Canonical aura avatar, mirroring `createPresenceAvatar` in editorApp.ts:
- * relative rounded-full overflow-hidden ring-1 ring-white/10 container with
- * base + softVeil aura layers and a centered initials overlay. Hash key is
- * always `seed || name` (stable id first), never the bare display name, so
- * avatar colors survive renames — same contract as `Avatar.astro`.
- */
 function renderAuraAvatar(seed: string, name: string, sizeClass: string): HTMLElement {
   const aura = avatarAura(seed || name, name, 'sm');
   const avatar = document.createElement('span');
@@ -107,7 +100,7 @@ function renderAuraAvatar(seed: string, name: string, sizeClass: string): HTMLEl
   return avatar;
 }
 
-function icon(paths: string, size = 14): string {
+function icon(paths: string, size = 20): string {
   return `<svg width="${size}" height="${size}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">${paths}</svg>`;
 }
 
@@ -447,7 +440,7 @@ export function createCommentPanel(host: HTMLElement, opts: PanelOptions = {}): 
       const quote = document.createElement('button');
       quote.type = 'button';
       quote.className = CLS.quote;
-      quote.innerHTML = `${icon('<path d="M3 21c3 0 7-1 7-8V5c0-1.25-.756-2-2-2H4c-1.25 0-2 .75-2 1.972V11c0 1.25.75 2 2 2 1 0 1 0 1 1v1c0 1-1 2-2 2s-1 .008-1 1.031V20c0 1 0 1 1 1z"/>', 12)}<span class="min-w-0 flex-1 truncate">${escHtml(thread.root.anchor.quote.slice(0, 90))}</span>`;
+      quote.innerHTML = `${icon('<path d="M3 21c3 0 7-1 7-8V5c0-1.25-.756-2-2-2H4c-1.25 0-2 .75-2 1.972V11c0 1.25.75 2 2 2 1 0 1 0 1 1v1c0 1-1 2-2 2s-1 .008-1 1.031V20c0 1 0 1 1 1z"/>', 20)}<span class="min-w-0 flex-1 truncate">${escHtml(thread.root.anchor.quote.slice(0, 90))}</span>`;
       quote.addEventListener('click', () => {
         const anchor = thread.root.anchor;
         if (anchor) opts.onHighlightAnchor?.(anchor.from, anchor.to);
@@ -670,7 +663,7 @@ export function createCommentPanel(host: HTMLElement, opts: PanelOptions = {}): 
     try {
       return await createComment(input);
     } catch {
-      return { ok: false, error: 'Could not reach the server — comment not sent' };
+      return { ok: false, error: 'Could not reach the server - comment not sent' };
     }
   }
 
@@ -794,12 +787,6 @@ export function createCommentPanel(host: HTMLElement, opts: PanelOptions = {}): 
   return api;
 }
 
-// ── Selection bubble ─────────────────────────────────────────────────────────
-
-/**
- * The floating "comment" bubble that appears when text is selected in the
- * textarea. Anchor-safe: it reads the selection range without stealing focus.
- */
 export function createSelectionBubble(
   textarea: HTMLTextAreaElement,
   onAddComment: (anchor: { from: number; to: number; quote: string }) => void,
@@ -808,7 +795,7 @@ export function createSelectionBubble(
   bubble.type = 'button';
   bubble.title = 'Add a comment to the selection (C)';
   bubble.className =
-    'fixed z-30 h-7 w-7 items-center justify-center rounded-full border border-[#1f1f1f] bg-[#141414] text-neutral-300 shadow-[0_6px_18px_#000a] transition hover:bg-[#1f1f1f] hover:text-white';
+    'fixed z-30 size-8 items-center justify-center rounded-full border border-gray-700 bg-[#141414] text-neutral-300 shadow-[0_6px_18px_#000a] transition hover:bg-[#1f1f1f] hover:text-white';
   bubble.style.display = 'none';
   bubble.innerHTML = icon(
     '<g fill="none" stroke="currentColor" stroke-linecap="round" stroke-width="2">' +
@@ -816,7 +803,7 @@ export function createSelectionBubble(
     '<path stroke-linejoin="round" d="M14 19c3.771 0 5.657 0 6.828-1.172S22 14.771 22 11s0-5.657-1.172-6.828S17.771 3 14 3h-4C6.229 3 4.343 3 3.172 4.172S2 7.229 2 11s0 5.657 1.172 6.828c.653.654 1.528.943 2.828 1.07" />' +
     '<path d="M14 19c-1.236 0-2.598.5-3.841 1.145c-1.998 1.037-2.997 1.556-3.489 1.225s-.399-1.355-.212-3.404L6.5 17.5" />' +
     '</g>',
-    14
+    18
   );
   document.body.append(bubble);
 
@@ -826,6 +813,66 @@ export function createSelectionBubble(
     bubble.style.display = 'none';
   }
 
+  const mirror = document.createElement('div');
+  const MIRROR_PROPS = [
+    'fontFamily',
+    'fontSize',
+    'fontWeight',
+    'fontStyle',
+    'letterSpacing',
+    'textTransform',
+    'wordSpacing',
+    'textIndent',
+    'lineHeight',
+    'paddingTop',
+    'paddingRight',
+    'paddingBottom',
+    'paddingLeft',
+    'borderTopWidth',
+    'borderRightWidth',
+    'borderBottomWidth',
+    'borderLeftWidth',
+    'boxSizing',
+    'tabSize',
+  ] as const;
+
+  function caretViewportPoint(): { x: number; y: number; height: number } | null {
+    const { selectionEnd, value } = textarea;
+    try {
+      const style = getComputedStyle(textarea);
+      const rect = textarea.getBoundingClientRect();
+      const wrap = style.whiteSpace !== 'pre' && style.whiteSpace !== 'nowrap';
+      mirror.style.cssText = '';
+      mirror.style.position = 'fixed';
+      mirror.style.visibility = 'hidden';
+      mirror.style.pointerEvents = 'none';
+      mirror.style.whiteSpace = wrap ? 'pre-wrap' : 'pre';
+      mirror.style.overflowWrap = wrap ? 'break-word' : 'normal';
+      mirror.style.width = wrap ? `${rect.width}px` : `${Math.max(rect.width, textarea.scrollWidth)}px`;
+      for (const prop of MIRROR_PROPS) mirror.style[prop] = style[prop];
+      mirror.textContent = value.slice(0, selectionEnd);
+      const marker = document.createElement('span');
+      // Zero-width space: forces a measurable (invisible) glyph exactly at the
+      // caret, even when the selection ends at a soft-wrap boundary.
+      marker.textContent = String.fromCharCode(8203);
+      mirror.append(marker);
+      document.body.append(mirror);
+      mirror.scrollTop = textarea.scrollTop;
+      mirror.scrollLeft = textarea.scrollLeft;
+      const markerRect = marker.getBoundingClientRect();
+      const point = {
+        x: markerRect.left,
+        y: markerRect.top,
+        height: markerRect.height || parseFloat(style.lineHeight) || 20,
+      };
+      mirror.remove();
+      return point;
+    } catch {
+      mirror.remove();
+      return null;
+    }
+  }
+
   function show(): void {
     const { selectionStart, selectionEnd, value } = textarea;
     if (selectionStart === selectionEnd || !value.slice(selectionStart, selectionEnd).trim()) {
@@ -833,20 +880,72 @@ export function createSelectionBubble(
       return;
     }
 
-    const rect = textarea.getBoundingClientRect();
-    const lineHeight = parseFloat(getComputedStyle(textarea).lineHeight) || 20;
-    const linesBefore = value.slice(0, selectionEnd).split('\n').length - 1;
-    const top = rect.top + (linesBefore + 1) * lineHeight - textarea.scrollTop + 2;
-    bubble.style.top = `${Math.min(top, rect.bottom - 30)}px`;
-    bubble.style.left = `${rect.right - 40}px`;
+    // h-7 w-7 bubble anchored over the selection end (where the pointer or
+    // caret released), flipped below when the viewport top is too close.
+    const SIZE = 28;
+    const MARGIN = 8;
+    const point = caretViewportPoint();
+    let left: number;
+    let top: number;
+    if (point) {
+      left = Math.min(Math.max(point.x - SIZE / 2, MARGIN), window.innerWidth - SIZE - MARGIN);
+      top = point.y - SIZE - 6;
+      if (top < MARGIN) top = point.y + point.height + 6;
+    } else {
+      const rect = textarea.getBoundingClientRect();
+      left = rect.right - SIZE - 12;
+      top = Math.min(rect.top + 40, rect.bottom - SIZE - 2);
+    }
+    bubble.style.left = `${Math.round(left)}px`;
+    bubble.style.top = `${Math.round(Math.max(top, MARGIN))}px`;
     bubble.style.display = 'flex';
   }
 
-  textarea.addEventListener('mouseup', () => window.setTimeout(show, 10));
-  textarea.addEventListener('keyup', (event) => {
+  // Pointer-anchored variant: a mouseup/touchend already carries the exact
+  // release coordinates, so the primary flows never depend on mirror measuring.
+  function showAt(clientX: number, clientY: number): void {
+    const { selectionStart, selectionEnd, value } = textarea;
+    if (selectionStart === selectionEnd || !value.slice(selectionStart, selectionEnd).trim()) {
+      hide();
+      return;
+    }
+    const SIZE = 28;
+    const MARGIN = 8;
+    const left = Math.min(
+      Math.max(clientX - SIZE / 2, MARGIN),
+      window.innerWidth - SIZE - MARGIN,
+    );
+    let top = clientY - SIZE - 6;
+    if (top < MARGIN) top = clientY + 6;
+    bubble.style.left = `${Math.round(left)}px`;
+    bubble.style.top = `${Math.round(Math.max(top, MARGIN))}px`;
+    bubble.style.display = 'flex';
+  }
+
+  function onPointerUp(event: MouseEvent): void {
+    // Synchronous: at mouseup the selection is already committed.
+    showAt(event.clientX, event.clientY);
+  }
+  function onTouchEnd(event: TouchEvent): void {
+    const touch = event.changedTouches[0];
+    if (!touch) {
+      hide();
+      return;
+    }
+    const { clientX, clientY } = touch;
+    window.setTimeout(() => showAt(clientX, clientY), 60);
+  }
+  function onKey(event: KeyboardEvent): void {
     if (event.shiftKey) show();
     else hide();
-  });
+  }
+  function onScroll(): void {
+    hide();
+  }
+  textarea.addEventListener('mouseup', onPointerUp);
+  textarea.addEventListener('touchend', onTouchEnd);
+  textarea.addEventListener('keyup', onKey);
+  textarea.addEventListener('scroll', onScroll, { passive: true });
   bubble.addEventListener('mouseenter', () => window.clearTimeout(hideTimer));
   bubble.addEventListener('mouseleave', () => {
     hideTimer = window.setTimeout(hide, 150);
@@ -862,6 +961,11 @@ export function createSelectionBubble(
 
   return () => {
     window.clearTimeout(hideTimer);
+    textarea.removeEventListener('mouseup', onPointerUp);
+    textarea.removeEventListener('touchend', onTouchEnd);
+    textarea.removeEventListener('keyup', onKey);
+    textarea.removeEventListener('scroll', onScroll);
+    mirror.remove();
     bubble.remove();
   };
 }
