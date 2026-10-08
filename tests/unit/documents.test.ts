@@ -11,6 +11,7 @@ import {
   MAX_IMPORTED_DRAFTS,
   parseDraftList,
 } from '../../src/lib/documents/drafts';
+import { conflictPolicy } from '../../src/lib/documents/conflict';
 import { describeSize, firstLine, formatTimestamp } from '../../src/lib/documents/format';
 import { isDocumentId } from '../../src/lib/documents/ids';
 import {
@@ -69,6 +70,18 @@ describe('access capabilities', () => {
     expect(describeAccess('admin')).toBe('Can manage');
     expect(describeAccess('editor')).toBe('Can edit');
     expect(describeAccess('reader')).toBe('Can view');
+  });
+});
+
+describe('conflictPolicy', () => {
+  it('asks only the owner which version to keep', () => {
+    expect(conflictPolicy('owner')).toBe('ask');
+  });
+
+  it('makes every invited role follow the server copy instead of overwriting it', () => {
+    expect(conflictPolicy('editor')).toBe('follow-server');
+    expect(conflictPolicy('admin')).toBe('follow-server');
+    expect(conflictPolicy('reader')).toBe('follow-server');
   });
 });
 
