@@ -1,5 +1,5 @@
 /**
- * `GET /api/documents/:id/collaboration` — everything the editor's collaboration
+ * `GET /api/documents/:id/collaboration` - everything the editor's collaboration
  * dialog shows, in one round trip.
  *
  * Reads only. Every change still goes through the form endpoints under

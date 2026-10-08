@@ -1,5 +1,5 @@
 /**
- * `POST /settings/profile` — updates the signed-in user's display name and username.
+ * `POST /settings/profile` - updates the signed-in user's display name and username.
  *
  * Validation happens here (server side); the form repeats it in the browser for
  * fast feedback only. The RLS policy on `public.profiles` is the real gate.

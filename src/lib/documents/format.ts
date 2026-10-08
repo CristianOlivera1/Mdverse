@@ -1,5 +1,5 @@
 /**
- * `6 Oct 2026, 15:22 UTC` — or an empty string when the value is not a date.
+ * `6 Oct 2026, 15:22 UTC` - or an empty string when the value is not a date.
  *
  * Rendered on the server, so the zone is pinned to UTC and shown; a date that
  * silently means "wherever the worker runs" would be worse than an explicit one.

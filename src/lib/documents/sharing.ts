@@ -146,7 +146,7 @@ export interface InviteSummary {
   readonly invalid: number;
   /** Invitation emails Resend accepted. Only the invite route knows this. */
   readonly emailsSent?: number;
-  /** Invitation emails Resend refused — access happened, the message did not leave. */
+  /** Invitation emails Resend refused - access happened, the message did not leave. */
   readonly emailsFailed?: number;
 }
 
@@ -160,7 +160,7 @@ export function describeInviteSummary(summary: InviteSummary): string | null {
   if (summary.invited > 0) {
     parts.push(
       summary.invited === 1
-        ? '1 invitation sent — it becomes access as soon as that address signs up'
+        ? '1 invitation sent - it becomes access as soon as that address signs up'
         : `${summary.invited} invitations sent`,
     );
   }

@@ -1,9 +1,5 @@
-/** One feedback response for form posts (redirect) and the editor dialog (JSON). */
-
-import type { APIContext } from 'astro';
-
 import type { DocumentErrorCode, ShareFeedback } from '../documents/messages';
-import { shareFeedbackParams, shareNotice, sharePageUrl } from '../documents/messages';
+import { shareFeedbackParams, shareNotice } from '../documents/messages';
 import { jsonResponse, readJsonObject } from './http';
 
 export interface ShareInput {
@@ -26,26 +22,17 @@ export async function readShareInput(request: Request): Promise<ShareInput | nul
   }
 }
 
-export function wantsJson(request: Request): boolean {
-  const accept = request.headers.get('Accept') ?? '';
-  return accept.includes('application/json');
-}
-
 export interface ShareActionFeedback extends ShareFeedback {
   error?: DocumentErrorCode;
 }
 
-export function shareFeedbackResponse(
-  context: Pick<APIContext, 'redirect' | 'request'>,
-  documentId: string,
-  feedback: ShareActionFeedback,
-): Response {
+/**
+ * The one answer these endpoints give: the dialog reads `notice` and shows it.
+ * There is no page to redirect to any more — the collaboration dialog is the
+ * only caller, and it always asks for JSON.
+ */
+export function shareFeedbackResponse(feedback: ShareActionFeedback): Response {
   const params = Object.fromEntries(shareFeedbackParams(feedback));
-
-  if (wantsJson(context.request)) {
-    const notice = shareNotice(params);
-    return jsonResponse({ ok: notice?.tone !== 'error', notice });
-  }
-
-  return context.redirect(sharePageUrl(documentId, feedback), 303);
+  const notice = shareNotice(params);
+  return jsonResponse({ ok: notice?.tone !== 'error', notice });
 }

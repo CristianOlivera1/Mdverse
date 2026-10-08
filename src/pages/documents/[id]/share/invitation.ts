@@ -14,19 +14,17 @@ export const POST: APIRoute = async (context) => {
   if (!isDocumentId(documentId)) return context.redirect('/dashboard?error=not_found');
 
   const input = await readShareInput(context.request);
-  if (!input) return shareFeedbackResponse(context, documentId, { error: 'remove_failed' });
+  if (!input) return shareFeedbackResponse({ error: 'remove_failed' });
 
   const invitationId = String(input.get('invitation') ?? '');
 
   if (!isUuid(invitationId)) {
-    return shareFeedbackResponse(context, documentId, { error: 'remove_failed' });
+    return shareFeedbackResponse({ error: 'remove_failed' });
   }
 
   const result = await revokeInvitation(supabase, invitationId);
 
   return shareFeedbackResponse(
-    context,
-    documentId,
     result.ok
       ? { removed: true }
       : { error: result.reason === 'forbidden' ? 'forbidden' : 'remove_failed' },

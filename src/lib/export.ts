@@ -2,17 +2,17 @@
  * Server-side export: a published document as one file that opens anywhere.
  *
  * The three ways out of the app are defined here and nowhere else:
- *   * `document.html` — this file, complete: styles inlined, no scripts, no
+ *   * `document.html` - this file, complete: styles inlined, no scripts, no
  *     network. It is what makes an export *reproducible*: the same Markdown and
  *     the same renderer give the same bytes, on a worker or on a laptop.
- *   * `document.html?print=1` — the same file plus a call to `print()` on load.
+ *   * `document.html?print=1` - the same file plus a call to `print()` on load.
  *     That is the "PDF" until a real engine lands (block 16 of the plan): the
  *     browser's print-to-PDF renders exactly the page it was given.
- *   * `document.md` — the owner's Markdown, byte for byte, never re-rendered.
+ *   * `document.md` - the owner's Markdown, byte for byte, never re-rendered.
  *
  * The HTML in `bodyHtml` is trusted by construction: it comes from
  * `renderStaticMarkdown`, which drops raw HTML from the source. Everything else
- * interpolated here — the title, the URLs, the dates — goes through `escapeHtml`.
+ * interpolated here - the title, the URLs, the dates - goes through `escapeHtml`.
  */
 
 import { HIGHLIGHT_THEME_CSS } from './markdown/highlightTheme';

@@ -169,12 +169,6 @@ export function shareFeedbackParams(feedback: ShareFeedback = {}): URLSearchPara
   return params;
 }
 
-export function sharePageUrl(documentId: string, feedback: ShareFeedback = {}): string {
-  const base = `/documents/${encodeURIComponent(documentId)}/share`;
-  const query = shareFeedbackParams(feedback).toString();
-  return query.length > 0 ? `${base}?${query}` : base;
-}
-
 export interface ShareNoticeParams {
   error?: string | null;
   invited?: string | null;

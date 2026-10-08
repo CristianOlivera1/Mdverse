@@ -18,27 +18,23 @@ export const POST: APIRoute = async (context) => {
   if (!isDocumentId(documentId)) return context.redirect('/dashboard?error=not_found');
 
   const input = await readShareInput(context.request);
-  if (!input) return shareFeedbackResponse(context, documentId, { error: 'link_failed' });
+  if (!input) return shareFeedbackResponse({ error: 'link_failed' });
 
   const action = String(input.get('action') ?? '');
 
   if (action === 'revoke') {
     const linkId = String(input.get('link') ?? '');
     if (!isUuid(linkId)) {
-      return shareFeedbackResponse(context, documentId, { error: 'link_failed' });
+      return shareFeedbackResponse({ error: 'link_failed' });
     }
 
     const result = await revokeShareLink(supabase, linkId);
-    return shareFeedbackResponse(
-      context,
-      documentId,
-      result.ok ? { linkRevoked: true } : { error: 'link_failed' },
-    );
+    return shareFeedbackResponse(result.ok ? { linkRevoked: true } : { error: 'link_failed' });
   }
 
   const role = input.get('role');
   if (action !== 'create' || !isInviteRole(role)) {
-    return shareFeedbackResponse(context, documentId, { error: 'link_failed' });
+    return shareFeedbackResponse({ error: 'link_failed' });
   }
 
   const requested = Number.parseInt(String(input.get('expiry') ?? '0'), 10);
@@ -53,8 +49,6 @@ export const POST: APIRoute = async (context) => {
   });
 
   return shareFeedbackResponse(
-    context,
-    documentId,
     result.ok
       ? { linkCreated: true }
       : { error: result.reason === 'forbidden' ? 'forbidden' : 'link_failed' },

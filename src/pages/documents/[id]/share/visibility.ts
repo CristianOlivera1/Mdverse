@@ -15,18 +15,16 @@ export const POST: APIRoute = async (context) => {
   if (!isDocumentId(documentId)) return context.redirect('/dashboard?error=not_found');
 
   const input = await readShareInput(context.request);
-  if (!input) return shareFeedbackResponse(context, documentId, { error: 'visibility_failed' });
+  if (!input) return shareFeedbackResponse({ error: 'visibility_failed' });
 
   const visibility = input.get('visibility');
   if (!isVisibility(visibility)) {
-    return shareFeedbackResponse(context, documentId, { error: 'visibility_failed' });
+    return shareFeedbackResponse({ error: 'visibility_failed' });
   }
 
   const result = await setVisibility(supabase, { documentId, visibility });
 
   return shareFeedbackResponse(
-    context,
-    documentId,
     result.ok
       ? { visibilityUpdated: true }
       : { error: result.reason === 'forbidden' ? 'forbidden' : 'visibility_failed' },

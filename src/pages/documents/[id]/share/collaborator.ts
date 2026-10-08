@@ -17,25 +17,23 @@ export const POST: APIRoute = async (context) => {
   if (!isDocumentId(documentId)) return context.redirect('/dashboard?error=not_found');
 
   const input = await readShareInput(context.request);
-  if (!input) return shareFeedbackResponse(context, documentId, { error: 'role_failed' });
+  if (!input) return shareFeedbackResponse({ error: 'role_failed' });
 
   const action = String(input.get('action') ?? '');
   const collaborator = String(input.get('user') ?? '');
 
   if (!isUuid(collaborator)) {
-    return shareFeedbackResponse(context, documentId, { error: 'role_failed' });
+    return shareFeedbackResponse({ error: 'role_failed' });
   }
 
   // Block self-removal: owner would lock themselves out.
   if (collaborator === user.id) {
-    return shareFeedbackResponse(context, documentId, { error: 'forbidden' });
+    return shareFeedbackResponse({ error: 'forbidden' });
   }
 
   if (action === 'remove') {
     const result = await removeCollaborator(supabase, { documentId, userId: collaborator });
     return shareFeedbackResponse(
-      context,
-      documentId,
       result.ok
         ? { removed: true }
         : { error: result.reason === 'forbidden' ? 'forbidden' : 'remove_failed' },
@@ -44,13 +42,11 @@ export const POST: APIRoute = async (context) => {
 
   const role = input.get('role');
   if (action !== 'role' || !isInviteRole(role)) {
-    return shareFeedbackResponse(context, documentId, { error: 'role_failed' });
+    return shareFeedbackResponse({ error: 'role_failed' });
   }
 
   const result = await setCollaboratorRole(supabase, { documentId, userId: collaborator, role });
   return shareFeedbackResponse(
-    context,
-    documentId,
     result.ok
       ? { roleUpdated: true }
       : { error: result.reason === 'forbidden' ? 'forbidden' : 'role_failed' },

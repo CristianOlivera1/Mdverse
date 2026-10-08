@@ -1,5 +1,4 @@
 ---
-
 import Icon from '@/components/ui/Icon.astro';
 import AccountLayout from '@/layouts/AccountLayout.astro';
 import { canManageDocument, describeAccess } from '@/lib/documents/access';
@@ -52,7 +51,7 @@ const notice = shareNotice({
 const action = `/documents/${encodeURIComponent(document.id)}/share`;
 const now = new Date();
 
-// Non-managers skip these queries entirely — RLS would reject them anyway.
+// Non-managers skip these queries entirely - RLS would reject them anyway.
 const collaborators = manageable
   ? sortCollaborators(await listCollaborators(supabase, document.id))
   : [];
@@ -105,7 +104,7 @@ const roleOptions = ['reader', 'editor'] as const;
       </h2>
       <p class="mx-auto mt-1 max-w-md text-xs leading-relaxed text-neutral-500">
         Your role here is {describeAccess(document.role).toLowerCase()}. You can read the document
-        and its history, and keep editing if that is your role — sharing stays with the owner.
+        and its history, and keep editing if that is your role - sharing stays with the owner.
       </p>
     </section>
   ) : (
@@ -140,7 +139,7 @@ const roleOptions = ['reader', 'editor'] as const;
           </div>
           <p class="text-[11px] leading-relaxed text-neutral-500">
             An address with an account gets access immediately. An address without one keeps the
-            invitation until it signs up — the role is granted the moment it does.
+            invitation until it signs up - the role is granted the moment it does.
           </p>
         </form>
       </section>
@@ -196,9 +195,11 @@ const roleOptions = ['reader', 'editor'] as const;
                         </option>
                       ))}
                     </select>
-                    <button type="submit" class="hb">
-                      Save
-                    </button>
+                    <div class="flex justify-end pt-1">
+                      <button type="submit" class="hb">
+                        Save
+                      </button>
+                    </div>
                   </form>
 
                   <form method="POST" action={`${action}/collaborator`}>
@@ -283,7 +284,7 @@ const roleOptions = ['reader', 'editor'] as const;
           </button>
           <p class="w-full text-[11px] leading-relaxed text-neutral-500">
             Anyone who opens the link reads the document. Editing through a link also requires being
-            signed in — the link then becomes real access for that account.
+            signed in - the link then becomes real access for that account.
           </p>
         </form>
 
@@ -369,9 +370,11 @@ const roleOptions = ['reader', 'editor'] as const;
               </span>
             </label>
           ))}
-          <button type="submit" class="hb on">
-            Save
-          </button>
+          <div class="flex justify-end pt-1">
+            <button type="submit" class="hb on">
+              Save
+            </button>
+          </div>
         </form>
       </section>
 
@@ -384,7 +387,7 @@ const roleOptions = ['reader', 'editor'] as const;
 </AccountLayout>
 
 <script>
-  // Copy button only — every action is a plain form POST without JS.
+  // Copy button only - every action is a plain form POST without JS.
   for (const button of document.querySelectorAll<HTMLButtonElement>('button[data-copy]')) {
     button.addEventListener('click', () => {
       const value = button.dataset.copy ?? '';

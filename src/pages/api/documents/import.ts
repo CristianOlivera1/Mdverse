@@ -1,5 +1,5 @@
 /**
- * `POST /api/documents/import` — moves the drafts this browser kept in
+ * `POST /api/documents/import` - moves the drafts this browser kept in
  * `localStorage` into the account.
  *
  * The drafts only exist in the browser, so the dashboard reads them and sends

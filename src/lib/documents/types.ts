@@ -4,6 +4,8 @@ export interface OpenDocument {
   readonly id: string;
   title: string;
   content: string;
+  /** Absent for drafts that never reached the server. */
+  readonly role?: DocumentAccess;
 }
 
 // Owner is implicit via `documents.owner_id`, never in `document_collaborators`.

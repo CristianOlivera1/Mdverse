@@ -6,7 +6,7 @@
  *   /d/:slug/document.html?print=1   the same file, opening the print dialog
  *
  * Both are read as `anon` (`createAnonymousSupabaseClient`), so they follow the
- * same rule as the page they belong to: published, or 404 — never "you can see it
+ * same rule as the page they belong to: published, or 404 - never "you can see it
  * because of who you are", which is what makes them safe to cache and to link.
  */
 
@@ -77,7 +77,7 @@ export const GET: APIRoute = async ({ params, url }) => {
       markdownUrl: `${pageUrl}/document.md`,
       description:
         documentDescription(document.content) ||
-        `${document.title} — a Markdown document published with Mdverse.`,
+        `${document.title} - a Markdown document published with Mdverse.`,
       updatedLabel: formatTimestamp(document.updatedAt) || document.updatedAt,
       revision: document.revision,
       bodyHtml: rendered.html,

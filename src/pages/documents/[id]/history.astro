@@ -1,5 +1,5 @@
 ---
-
+import CollaborateDialog from '@/components/app/CollaborateDialog.astro';
 import Icon from '@/components/ui/Icon.astro';
 import AccountLayout from '@/layouts/AccountLayout.astro';
 import { canEditDocument, describeAccess } from '@/lib/documents/access';
@@ -56,10 +56,18 @@ const PREVIEW_LENGTH = 1200;
       <Icon name="lucide:arrow-left" />
       All documents
     </a>
-    <a href={`/documents/${encodeURIComponent(document.id)}/share`} class="hb">
+    <button
+      type="button"
+      class="hb"
+      title="Who can reach this document"
+      aria-haspopup="dialog"
+      data-collab-open
+      data-doc-id={document.id}
+      data-doc-title={document.title}
+    >
       <Icon name="lucide:user-plus" />
       Share
-    </a>
+    </button>
   </div>
 
   <p class="mb-4 text-[11px] leading-relaxed text-neutral-500">
@@ -117,4 +125,6 @@ const PREVIEW_LENGTH = 1200;
       ))}
     </ol>
   )}
+
+  <CollaborateDialog />
 </AccountLayout>

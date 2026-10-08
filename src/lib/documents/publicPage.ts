@@ -11,7 +11,7 @@ export function publicDocumentUrl(siteUrl: string, slug: string): string {
 
 /**
  * One line for `<meta name="description">` and Open Graph, from the Markdown
- * source — never from the rendered HTML, so no tag in the document can end up
+ * source - never from the rendered HTML, so no tag in the document can end up
  * inside the tag.
  */
 export function documentDescription(markdown: string, max = 160): string {

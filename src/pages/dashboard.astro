@@ -1,4 +1,5 @@
 ---
+import CollaborateDialog from '@/components/app/CollaborateDialog.astro';
 import Icon from '@/components/ui/Icon.astro';
 import AccountLayout from '@/layouts/AccountLayout.astro';
 import { toAccountSummary } from '@/lib/auth/account';
@@ -139,17 +140,25 @@ const editorUrl = (id: string): string => `/?doc=${encodeURIComponent(id)}`;
                       <Icon name="lucide:history" />
                       History
                     </a>
-                    <a
-                      href={`/documents/${encodeURIComponent(document.id)}/share`}
+                    <button
+                      type="button"
                       class="hb"
                       title="Who can reach this document"
+                      aria-haspopup="dialog"
+                      data-collab-open
+                      data-doc-id={document.id}
+                      data-doc-title={document.title}
                     >
                       <Icon name="lucide:user-plus" />
                       Share
-                    </a>
+                    </button>
                     <form
                       method="POST"
                       action={`/documents/${encodeURIComponent(document.id)}/delete`}
+                      data-confirm={`Delete “${document.title}”? The document and its version history are gone for everyone you shared it with.`}
+                      data-confirm-title="Delete this document?"
+                      data-confirm-label="Delete"
+                      data-confirm-danger
                     >
                       <button
                         type="submit"
@@ -253,10 +262,14 @@ const editorUrl = (id: string): string => `/?doc=${encodeURIComponent(id)}`;
     </>
   )}
 
+  <CollaborateDialog />
 </AccountLayout>
 
 <script>
+  import { initConfirmForms } from '@/lib/app/confirmDialog';
   import { countLocalDrafts, importLocalDrafts } from '@/lib/documents/importDrafts';
+
+  initConfirmForms();
 
   const button = document.getElementById('import-local-drafts');
   const label = document.getElementById('import-local-drafts-label');

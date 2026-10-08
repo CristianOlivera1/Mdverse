@@ -562,7 +562,7 @@ export const MAX_SITEMAP_DOCUMENTS = 2000;
  *
  * Read it with a client that has no session (`createAnonymousSupabaseClient`),
  * so the row is fetched as `anon`: the page is the same for everybody and can be
- * cached by a CDN. The `visibility` filter repeats what RLS already enforces —
+ * cached by a CDN. The `visibility` filter repeats what RLS already enforces -
  * belt and braces, because *this* is the query whose result is shared with the
  * whole internet, and it must stay true if a future policy ever widens access.
  *

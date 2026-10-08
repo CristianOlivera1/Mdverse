@@ -37,7 +37,7 @@ export function initPreviewApp(): void {
   /**
    * A tab the editor keeps locally is in `localStorage`; a tab of a signed-in
    * account is a row in Postgres, so the popout asks the API for it. The popout
-   * shows that server snapshot — live syncing arrives with phase 4's realtime
+   * shows that server snapshot - live syncing arrives with phase 4's realtime
    * channel.
    */
   async function loadDocument(): Promise<OpenDocument | undefined> {

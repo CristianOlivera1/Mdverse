@@ -6,7 +6,7 @@
  * Only `visibility = 'public'` answers here; `private` and `unlisted` get the
  * same 404, so an address cannot be probed for existence. The row is read with a
  * client that has no session (`createAnonymousSupabaseClient`), which is what
- * makes the response identical for everybody — and therefore safe to hand to a
+ * makes the response identical for everybody - and therefore safe to hand to a
  * CDN and to a crawler.
  */
 
@@ -50,7 +50,7 @@ const meta = published
       slug: published.slug,
       description:
         documentDescription(published.content) ||
-        `${published.title} — a Markdown document published with Mdverse.`,
+        `${published.title} - a Markdown document published with Mdverse.`,
       createdAt: published.createdAt,
       updatedAt: published.updatedAt,
       siteUrl: getSiteUrl(),
@@ -174,7 +174,7 @@ const updated = published ? formatTimestamp(published.updatedAt) : '';
       </main>
 
       <footer class="border-t border-neutral-800 px-4 py-4 text-center text-[11px] text-neutral-600">
-        Published with Mdverse — rendered on the server from the owner’s Markdown, read-only for
+        Published with Mdverse - rendered on the server from the owner’s Markdown, read-only for
         everyone else.
       </footer>
     </div>

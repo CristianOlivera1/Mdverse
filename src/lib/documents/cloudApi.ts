@@ -30,7 +30,7 @@ function documentUrl(id: string): string {
   return `/api/documents/${encodeURIComponent(id)}`;
 }
 
-/** `null` when signed out — or Supabase unconfigured, which also answers 401. */
+/** `null` when signed out - or Supabase unconfigured, which also answers 401. */
 export async function openCloudDocuments(): Promise<CloudSession | null> {
   let response: Response;
   try {

@@ -23,7 +23,7 @@ export function writePref(key: string, value: string): void {
   try {
     localStorage.setItem(key, value);
   } catch {
-    /* storage unavailable (private mode / quota) — preferences are best-effort */
+    /* storage unavailable (private mode / quota) - preferences are best-effort */
   }
 }
 
