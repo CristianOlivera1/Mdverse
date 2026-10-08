@@ -10,7 +10,6 @@ interface Props {
 
 const { name, seed, size = 'md', class: className = '' } = Astro.props;
 
-// Hash key is `seed ?? name`, never name alone, so avatar colors survive renames.
 const aura = avatarAura(seed, name, size);
 const { baseLayer, softVeil, veilA, veilB } = aura;
 const isLarge = size === 'lg';

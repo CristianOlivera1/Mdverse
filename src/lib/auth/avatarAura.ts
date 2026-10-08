@@ -5,12 +5,28 @@ export interface AuraFamily {
   colors: [string, string, string];
 }
 
-export const AVATAR_AURA_FAMILIES: AuraFamily[] = [
-  { base: '#fff7ed', colors: ['#fb923c', '#f43f5e', '#c026d3'] },
-  { base: '#ecfeff', colors: ['#38bdf8', '#2563eb', '#22d3ee'] },
-  { base: '#faf5ff', colors: ['#a855f7', '#ec4899', '#6366f1'] },
-  { base: '#ecfdf5', colors: ['#2dd4bf', '#10b981', '#a3e635'] },
-];
+function familyForHue(hue: number): AuraFamily {
+  const h = ((Math.round(hue) % 360) + 360) % 360;
+  const second = (h + 40) % 360;
+  const third = (h + 80) % 360;
+  return {
+    base: `hsl(${h}, 85%, 94%)`,
+    colors: [`hsl(${h}, 85%, 62%)`, `hsl(${second}, 80%, 58%)`, `hsl(${third}, 78%, 62%)`],
+  };
+}
+
+export const AVATAR_AURA_FAMILIES: AuraFamily[] = Array.from({ length: 26 }, (_, index) =>
+  familyForHue((index * 360) / 26),
+);
+
+export function auraLetterIndex(name: string | null | undefined): number {
+  const first = (name ?? '').trim().replace(/\s+/g, ' ').charAt(0);
+  if (!first) return -1;
+  const folded = first.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toUpperCase();
+  const code = folded.charCodeAt(0);
+  if (code < 65 || code > 90) return -1;
+  return code - 65;
+}
 
 export function hashAvatarKey(value: string): number {
   let hash = 0;
@@ -35,7 +51,11 @@ export function avatarAura(
 ): AvatarAura {
   const key = seed ?? name ?? '';
   const h = hashAvatarKey(key);
-  const family = AVATAR_AURA_FAMILIES[h % AVATAR_AURA_FAMILIES.length] ?? AVATAR_AURA_FAMILIES[0]!;
+  const letter = auraLetterIndex(name ?? seed ?? '');
+  const family =
+    letter >= 0
+      ? (AVATAR_AURA_FAMILIES[letter] ?? AVATAR_AURA_FAMILIES[0]!)
+      : familyForHue(h % 360);
   const ci = Math.floor(h / 4) % 3;
   const c1 = family.colors[ci]!;
   const c2 = family.colors[(ci + 1) % 3]!;
