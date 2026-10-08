@@ -19,7 +19,12 @@ const menuName = `export${suffix}`;
   >
     <Icon name="lucide:download" />
     <span class="hidden lg:inline">Export</span>
-    <Icon name="lucide:chevron-down" size={12} class="opacity-60" />
+    <span data-export-chevron class="inline-flex opacity-60">
+      <Icon name="lucide:chevron-down" size={12} />
+    </span>
+    <span data-export-spinner class="msel-spin" hidden>
+      <Icon name="lucide:loader-circle" size={14} />
+    </span>
   </button>
   <div class="pop" data-pop={menuName} hidden>
     <button type="button" class="mi" data-command="copy">

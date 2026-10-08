@@ -5,12 +5,14 @@ import type { OpenDocument } from '../documents/types';
 import { renderDiagram } from '../markdown/mermaid';
 import { renderMarkdown } from '../markdown/render';
 import { buildTocHtml, collectHeadings } from '../markdown/toc';
+import { showAccessGate } from './accessGate';
 
 export function initPreviewApp(): void {
   const rootElement = document.getElementById('preview-root');
   const contentElement = document.getElementById('preview-content');
   const scrollElement = document.getElementById('preview-scroll');
   const statusElement = document.getElementById('preview-status');
+  const shareButton = document.querySelector<HTMLButtonElement>('#preview-share');
   if (!rootElement || !contentElement || !scrollElement) return;
 
   const root: HTMLElement = rootElement;
@@ -29,30 +31,77 @@ export function initPreviewApp(): void {
   let frame = 0;
   let renderTimer: number | undefined;
   let hashConsumed = false;
+  // The cloud id of what is on screen, or null for a draft that only exists in
+  // this browser. Only a cloud document has a preview link worth sharing.
+  let shareId: string | null = null;
+
+  /**
+   * Copies the deep link to the document on screen (`/preview?doc=<id>`, keeping
+   * the current heading). It opens for anyone the document already reaches - the
+   * people you invited. For anyone else the owner hands out a link from the
+   * Collaborate dialog, because knowing a document id is not the same as having
+   * access: row level security decides, not the address.
+   */
+  function copyPreviewLink(): void {
+    const id = shareId;
+    if (!id || !isDocumentId(id)) return;
+
+    const url = new URL(window.location.href);
+    url.searchParams.set('doc', id);
+
+    void navigator.clipboard
+      ?.writeText(url.toString())
+      .then(() => {
+        if (!shareButton) return;
+        shareButton.classList.add('text-emerald-400');
+        shareButton.title = 'Link copied';
+        window.setTimeout(() => {
+          shareButton.classList.remove('text-emerald-400');
+          shareButton.title = 'Copy a link to this preview';
+        }, 1500);
+      })
+      .catch(() => {
+        /* Clipboard blocked: the address bar still holds the same URL. */
+      });
+  }
+
+  shareButton?.addEventListener('click', copyPreviewLink);
 
   const readDocuments = (): OpenDocument[] =>
     readJsonPref<OpenDocument[]>(PREF_KEYS.openDocuments, []);
 
-  async function loadDocument(): Promise<OpenDocument | undefined> {
+  /**
+   * A `?doc=<id>` that will not open is one of three things and they look alike:
+   * signed out, hidden by RLS, or gone. The distinction is kept, because the
+   * screen that follows is different for the first one.
+   */
+  type LoadResult =
+    | { kind: 'loaded'; doc: OpenDocument }
+    | { kind: 'signed-out'; documentId: string }
+    | { kind: 'unavailable'; documentId: string }
+    | { kind: 'none' };
+
+  async function loadDocument(): Promise<LoadResult> {
     const list = readDocuments();
     const local = requestedId ? list.find((doc) => doc.id === requestedId) : list[0];
-    if (local) return local;
-    if (!requestedId || !isDocumentId(requestedId)) return undefined;
+    if (local) return { kind: 'loaded', doc: local };
+    if (!requestedId || !isDocumentId(requestedId)) return { kind: 'none' };
 
     try {
       const response = await fetch(`/api/documents/${encodeURIComponent(requestedId)}`, {
         headers: { Accept: 'application/json' },
         credentials: 'same-origin',
       });
-      if (!response.ok) return undefined;
+      if (response.status === 401) return { kind: 'signed-out', documentId: requestedId };
+      if (!response.ok) return { kind: 'unavailable', documentId: requestedId };
 
       const payload: unknown = await response.json();
       const found = (payload as { document?: unknown }).document;
       return isCloudDocument(found)
-        ? { id: found.id, title: found.title, content: found.content }
-        : undefined;
+        ? { kind: 'loaded', doc: { id: found.id, title: found.title, content: found.content } }
+        : { kind: 'unavailable', documentId: requestedId };
     } catch {
-      return undefined;
+      return { kind: 'unavailable', documentId: requestedId };
     }
   }
 
@@ -128,15 +177,32 @@ export function initPreviewApp(): void {
   }
 
   async function render(): Promise<void> {
-    const doc = await loadDocument();
-    if (!doc) {
-      content.innerHTML = '<p class="text-neutral-500">No document is available.</p>';
-      if (status) status.textContent = 'No document';
+    const result = await loadDocument();
+
+    if (result.kind !== 'loaded') {
+      shareId = null;
+      if (shareButton) shareButton.hidden = true;
+
+      if (result.kind === 'none') {
+        content.innerHTML = '<p class="text-neutral-500">No document is available.</p>';
+        if (status) status.textContent = 'No document';
+        return;
+      }
+
+      showAccessGate({
+        documentId: result.documentId,
+        signedIn: result.kind !== 'signed-out',
+        host: content,
+      });
+      if (status) status.textContent = 'No access';
       return;
     }
 
+    const doc = result.doc;
     const applied = await renderMarkdown(content, doc.content, { renderDiagram });
     if (!applied) return;
+    shareId = doc.id;
+    if (shareButton) shareButton.hidden = !isDocumentId(doc.id);
     buildToc();
     honorInitialHash();
     document.title = `${doc.title} · Mdverse`;

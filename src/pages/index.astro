@@ -3,6 +3,7 @@ import AppHeader from '../components/app/AppHeader.astro';
 import EditorPane from '../components/app/EditorPane.astro';
 import StatusBar from '../components/app/StatusBar.astro';
 import Icon from '../components/ui/Icon.astro';
+import Toast from '../components/ui/Toast.astro';
 import Layout from '../layouts/Layout.astro';
 ---
 
@@ -30,13 +31,14 @@ import Layout from '../layouts/Layout.astro';
     >
       <nav class="toc max-h-[60vh] overflow-y-auto py-2"></nav>
     </div>
+    <Toast />
   </div>
 
   <template id="editor-pane-template">
     <EditorPane />
   </template>
 
-  {/* Host element for the slide-in comments panel — rendered into body so it
+  {/* Host element for the slide-in comments panel - rendered into body so it
       can overlay everything without clipping. The panel.ts module populates it. */}
   <div id="comment-panel-host" aria-live="polite"></div>
 

@@ -13,6 +13,7 @@ import type { CollabSession, CollabStatus, RemoteCursor, RemoteSave } from '../c
 import { canEditDocument } from '../documents/access';
 import { openCloudDocuments } from '../documents/cloudApi';
 import type { CloudSession } from '../documents/cloudApi';
+import { isDocumentId } from '../documents/ids';
 import { conflictPolicy } from '../documents/conflict';
 import { migrateLegacyDocuments } from '../documents/migrate';
 import {
@@ -30,6 +31,7 @@ import { HIGHLIGHT_THEME_CSS } from '../markdown/highlightTheme';
 import { renderDiagram } from '../markdown/mermaid';
 import { renderMarkdown } from '../markdown/render';
 import { buildTocHtml, collectHeadings } from '../markdown/toc';
+import { showAccessGate } from './accessGate';
 import { confirmChoice } from './confirmDialog';
 import { closeMenus, initMenus } from './menus';
 
@@ -78,7 +80,7 @@ const INLINE_MARKERS: Record<string, string> = {
 };
 
 /** Shown whenever someone without write access reaches for the text. */
-const READ_ONLY_STATUS = 'View only — only the owner and editors can change this document';
+const READ_ONLY_STATUS = 'View only - only the owner and editors can change this document';
 
 const EDIT_COMMANDS: ReadonlySet<string> = new Set([
   ...Object.keys(INLINE_MARKERS),
@@ -331,7 +333,7 @@ export function initEditorApp(): void {
 
     // Dismissed: nothing is decided and nothing is written; the next save asks again.
     if (decision === 'dismiss') {
-      showStatus('Changed elsewhere — your next save will ask what to keep', 4000);
+      showStatus('Changed elsewhere - your next save will ask what to keep', 4000);
       return;
     }
 
@@ -588,6 +590,45 @@ export function initEditorApp(): void {
 
   function toast(message: string): void {
     showStatus(message);
+  }
+
+  // Export busy state: the three exports render async (HTML/mermaid, pdfmake,
+  // server round-trip + image downloads for DOCX), so both menu triggers and
+  // their slow options go disabled with a spinner until the file settles.
+  // Instant actions (`copy`, `download`) intentionally skip this.
+  function setExportBusy(busy: boolean): void {
+    for (const trigger of document.querySelectorAll<HTMLElement>(
+      '[data-menu="export"], [data-menu="export-m"]',
+    )) {
+      if (trigger instanceof HTMLButtonElement) trigger.disabled = busy;
+      trigger.setAttribute('aria-busy', busy ? 'true' : 'false');
+      trigger.querySelector('[data-export-spinner]')?.toggleAttribute('hidden', !busy);
+      trigger.querySelector('[data-export-chevron]')?.toggleAttribute('hidden', busy);
+    }
+    for (const option of document.querySelectorAll<HTMLButtonElement>(
+      '[data-pop="export"] [data-command^="export-"], [data-pop="export-m"] [data-command^="export-"]',
+    )) {
+      option.disabled = busy;
+    }
+  }
+
+  function runExport(
+    kind: 'html' | 'pdf' | 'docx',
+    pane: Pane,
+    doc: OpenDocument,
+    workingMessage: string,
+    failureMessage: string,
+  ): void {
+    showStatus(workingMessage, 4000);
+    setExportBusy(true);
+    const settle = (result: { ok: boolean; reason?: string }): void => {
+      setExportBusy(false);
+      if (!result.ok && result.reason !== 'empty') toast(failureMessage);
+    };
+    void exportDocument({ kind, markdown: pane.textarea.value, fallbackName: doc.title }).then(
+      settle,
+      () => settle({ ok: false }),
+    );
   }
 
   function updateStatus(): void {
@@ -1233,38 +1274,15 @@ export function initEditorApp(): void {
         if (pane && doc) downloadMarkdown(pane.textarea.value, doc.title);
         return;
       case 'export-html':
-        if (pane && doc)
-          void exportDocument({
-            kind: 'html',
-            markdown: pane.textarea.value,
-            fallbackName: doc.title,
-          });
+        if (pane && doc) runExport('html', pane, doc, 'Building HTML…', 'Could not export the HTML - try again');
         return;
       case 'export-pdf':
         if (!pane || !doc) return;
-        showStatus('Rendering PDF…', 4000);
-        void exportDocument({
-          kind: 'pdf',
-          markdown: pane.textarea.value,
-          fallbackName: doc.title,
-        }).then((result) => {
-          if (!result.ok && result.reason !== 'empty') {
-            toast('Could not render the PDF - try again');
-          }
-        });
+        runExport('pdf', pane, doc, 'Rendering PDF…', 'Could not render the PDF - try again');
         return;
       case 'export-docx':
         if (!pane || !doc) return;
-        showStatus('Building Word document…', 4000);
-        void exportDocument({
-          kind: 'docx',
-          markdown: pane.textarea.value,
-          fallbackName: doc.title,
-        }).then((result) => {
-          if (!result.ok && result.reason !== 'empty') {
-            toast('Could not build the Word document - try again');
-          }
-        });
+        runExport('docx', pane, doc, 'Building Word document…', 'Could not build the Word document - try again');
         return;
       case 'toggle-comments':
         // Handled entirely by commentsIntegration.ts via DOM event delegation
@@ -1574,12 +1592,6 @@ export function initEditorApp(): void {
     if (document.hidden) flushAll(true);
   });
 
-  // Bridge toast events from imageUploadIntegration / commentsIntegration
-  document.addEventListener('mdverse:toast', (event) => {
-    const msg = (event as CustomEvent<string>).detail;
-    if (msg) showStatus(msg, 3000);
-  });
-
   function mountAll(preferred?: string | null): void {
     documents.forEach(mountPane);
     const remembered = documentById(loadActiveDocumentId() ?? '');
@@ -1600,6 +1612,7 @@ export function initEditorApp(): void {
       bootDocuments();
       booted = true;
       mountAll(requested);
+      gateForMissingDocument(requested, false);
       return;
     }
 
@@ -1631,6 +1644,26 @@ export function initEditorApp(): void {
 
     booted = true;
     mountAll(requested);
+    gateForMissingDocument(requested, true);
+  }
+
+  /**
+   * A `?doc=<id>` that is not among the documents this account can open means one
+   * of two things, and they look identical from here: RLS hid it, or it is gone.
+   * Either way the fallback used to be silent - the editor quietly showed a
+   * different document. The gate says what happened and offers the one action
+   * that can change it.
+   */
+  function gateForMissingDocument(requested: string | null, signedIn: boolean): void {
+    if (!requested || !isDocumentId(requested)) return;
+    if (documentById(requested)) return;
+
+    // Put the address back. `mountAll` fell back to another document and
+    // `syncDocParam` rewrote `?doc=` to it; left that way, the gate would talk
+    // about a document the URL no longer names, and reloading would land on the
+    // wrong one.
+    syncDocParam(requested);
+    showAccessGate({ documentId: requested, signedIn });
   }
 
   setSplit(readNumberPref(PREF_KEYS.split, 50));

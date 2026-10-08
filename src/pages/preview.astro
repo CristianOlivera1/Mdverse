@@ -22,9 +22,19 @@ import Layout from '../layouts/Layout.astro';
         Index
       </button>
 
-      <div class="fixed top-3 right-4 z-10 flex items-center gap-2 text-[11px] text-neutral-500 bg-black/80 border border-neutral-800 rounded-full px-3 py-1">
+      <div class="fixed top-3 right-4 z-10 flex items-center gap-2 text-[11px] text-neutral-500 bg-black/80 border border-neutral-800 rounded-full pl-3 pr-1.5 py-1">
         <span class="w-1.5 h-1.5 rounded-full bg-gray-400"></span>
         <span id="preview-status">Loading…</span>
+        <button
+          type="button"
+          id="preview-share"
+          class="inline-flex h-6 w-6 shrink-0 items-center justify-center rounded-full text-neutral-500 transition-colors hover:bg-neutral-800 hover:text-neutral-100 focus-visible:outline focus-visible:outline-1 focus-visible:outline-blue-500"
+          title="Copy a link to this preview"
+          aria-label="Copy a link to this preview"
+          hidden
+        >
+          <Icon name="lucide:link" size={13} />
+        </button>
       </div>
 
       <article
