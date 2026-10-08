@@ -45,7 +45,6 @@ export function initCollaborateDialog(): void {
   };
 
   const subtitle = pick<HTMLElement>('[data-collab="subtitle"]');
-  const fullPage = pick<HTMLAnchorElement>('[data-collab="full-page"]');
   const notice = pick<HTMLElement>('[data-collab="notice"]');
   const skeleton = pick<HTMLElement>('[data-collab="skeleton"]');
   const unavailable = pick<HTMLElement>('[data-collab="unavailable"]');
@@ -191,7 +190,6 @@ export function initCollaborateDialog(): void {
   function render(next: CollaborationState): void {
     state = next;
     subtitle.textContent = next.title;
-    fullPage.href = `/documents/${encodeURIComponent(next.id)}/share`;
     roleLine.textContent = `Your role here is ${describeAccess(next.role).toLowerCase()}.`;
 
     readonlyBlock.hidden = next.canManage;
@@ -275,6 +273,17 @@ export function initCollaborateDialog(): void {
 
   openButton.addEventListener('click', openDialog);
   pick<HTMLElement>('[data-collab="close"]').addEventListener('click', () => dialog.close());
+
+  // Rows on the documents dashboard carry their own trigger: the dialog opens for
+  // the document that button belongs to, not for whatever the editor has open.
+  document.addEventListener('click', (event) => {
+    const button = (event.target as HTMLElement).closest<HTMLButtonElement>('[data-collab-open]');
+    const id = button?.dataset.docId;
+    if (!id) return;
+
+    active = { id, title: button.dataset.docTitle || 'Untitled', collaborative: true };
+    openDialog();
+  });
 
   dialog.addEventListener('click', (event) => {
     if (event.target === dialog) dialog.close();
