@@ -1,7 +1,7 @@
 import type { APIRoute } from 'astro';
 
 import { apiSession, jsonError, readJsonObject } from '@/lib/api/http';
-import { buildDocxBlob } from '@/lib/export/docxDocument';
+import { buildDocxBlob, fetchDocxImages } from '@/lib/export/docxDocument';
 
 const CONTENT_TYPE = 'application/vnd.openxmlformats-officedocument.wordprocessingml.document';
 const MAX_MARKDOWN_BYTES = 2 * 1024 * 1024;
@@ -20,7 +20,14 @@ export const POST: APIRoute = async (context) => {
   if (markdown.length > MAX_MARKDOWN_BYTES) return jsonError(413, 'too_large');
 
   try {
-    const blob = await buildDocxBlob(markdown, { title });
+    // Image fetch failures degrade to hyperlink fallbacks; they must never 502 the export.
+    let images;
+    try {
+      images = await fetchDocxImages(markdown);
+    } catch {
+      images = undefined;
+    }
+    const blob = await buildDocxBlob(markdown, { title }, images);
     const filename = `${safeFilename(title)}.docx`;
 
     return new Response(blob, {

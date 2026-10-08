@@ -39,15 +39,6 @@ function localName(title: string, extension: string): string {
   return `${slugifyHeading(title) || 'document'}.${extension}`;
 }
 
-/**
- * Exports the current document through the interface the user asked for:
- *   * `html` — a single self-contained file, built in the browser.
- *   * `pdf`  — a real vector PDF from the pdfmake engine (no print dialog).
- *   * `docx` — a real Word document from the server route.
- *
- * Every branch reports a structured result instead of failing silently or
- * quietly degrading to a different format.
- */
 export async function exportDocument({
   kind,
   markdown,
