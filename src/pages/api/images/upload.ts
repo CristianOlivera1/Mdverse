@@ -2,8 +2,7 @@ import type { APIRoute } from 'astro';
 
 import { apiSession, jsonError, jsonResponse, type ApiSession } from '@/lib/api/http';
 import { isDocumentId } from '@/lib/documents/ids';
-
-const MAX_BYTES = 5 * 1024 * 1024; 
+import { MAX_IMAGE_BYTES } from '@/lib/editor/imageUpload';
 
 const ALLOWED_MIME = new Set([
   'image/jpeg',
@@ -36,7 +35,7 @@ export const POST: APIRoute = async (context) => {
     if (!isDocumentId(documentId)) return jsonError(400, 'invalid_document_id');
 
     if (!ALLOWED_MIME.has(file.type)) return jsonError(415, 'unsupported_format');
-    if (file.size > MAX_BYTES) return jsonError(413, 'file_too_large');
+    if (file.size > MAX_IMAGE_BYTES) return jsonError(413, 'file_too_large');
 
     const hasAccess = await checkEditAccess(supabase, documentId, userId);
     if (!hasAccess) return jsonError(403, 'forbidden');

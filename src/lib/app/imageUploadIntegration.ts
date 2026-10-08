@@ -2,8 +2,8 @@ import { imageUploadErrorText, uploadImage } from '../editor/imageUpload';
 
 let activeDocumentId = '';
 
-function toast(msg: string): void {
-  document.dispatchEvent(new CustomEvent('mdverse:toast', { detail: msg }));
+function toast(msg: string, tone: 'info' | 'error' = 'info'): void {
+  document.dispatchEvent(new CustomEvent('mdverse:toast', { detail: { msg, tone } }));
 }
 
 function activeTextarea(): HTMLTextAreaElement | null {
@@ -69,7 +69,7 @@ async function handleFile(file: File, textarea: HTMLTextAreaElement): Promise<vo
     toast('Image uploaded');
   } else {
     if (!replaceOccurrence(textarea, inserted, '')) replaceOccurrence(textarea, placeholder, '');
-    toast(imageUploadErrorText(result.reason));
+    toast(imageUploadErrorText(result.reason), 'error');
   }
 }
 

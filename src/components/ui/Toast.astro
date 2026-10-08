@@ -1,0 +1,120 @@
+---
+/**
+ * Floating toast host — the single visible surface for `mdverse:toast` events.
+ *
+ * Anyone dispatches `new CustomEvent('mdverse:toast', { detail })` where detail
+ * is a plain string (info) or `{ msg, tone }` with tone `info` | `error` |
+ * `success`. Errors persist longer and cannot be clobbered by routine traffic.
+ * Render `<Toast />` once per page that needs user-facing feedback.
+ */
+---
+
+<div
+  id="toast-host"
+  class="pointer-events-none fixed bottom-20 right-4 z-[70] flex w-[min(22rem,calc(100vw-2rem))] flex-col gap-2 sm:bottom-6 sm:right-6"
+  aria-live="polite"
+></div>
+
+<script>
+  type Tone = 'info' | 'error' | 'success';
+
+  const host = document.getElementById('toast-host');
+
+  const HOLD: Record<Tone, number> = { info: 4000, success: 4000, error: 6000 };
+  const MAX_STACK = 3;
+
+  const CARD =
+    'toast-card pointer-events-auto flex items-start gap-2.5 rounded-xl border px-3.5 py-2.5 text-[13px] leading-snug shadow-2xl backdrop-blur';
+  const TONE_CARD: Record<Tone, string> = {
+    info: 'border-neutral-800 bg-neutral-950/95 text-neutral-200',
+    success: 'border-emerald-900/60 bg-[#0a1410]/95 text-neutral-200',
+    error: 'border-red-900/70 bg-[#140b0b]/95 text-neutral-100',
+  };
+  const TONE_ICON: Record<Tone, string> = {
+    info: 'text-neutral-500',
+    success: 'text-emerald-400',
+    error: 'text-red-400',
+  };
+  const ICONS: Record<Tone, string> = {
+    info: '',
+    success:
+      '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="20 6 9 17 4 12"/></svg>',
+    error:
+      '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3"/><path d="M12 9v4"/><path d="M12 17h.01"/></svg>',
+  };
+
+  function dismiss(card: HTMLElement): void {
+    window.clearTimeout(Number(card.dataset.timer));
+    card.remove();
+  }
+
+  function show(msg: string, tone: Tone): void {
+    if (!host || !msg) return;
+    while (host.children.length >= MAX_STACK) host.firstElementChild?.remove();
+
+    const card = document.createElement('div');
+    card.className = `${CARD} ${TONE_CARD[tone]}`;
+    card.setAttribute('role', tone === 'error' ? 'alert' : 'status');
+
+    if (ICONS[tone]) {
+      const icon = document.createElement('span');
+      icon.className = `mt-0.5 shrink-0 ${TONE_ICON[tone]}`;
+      icon.innerHTML = ICONS[tone];
+      card.append(icon);
+    }
+
+    const text = document.createElement('span');
+    text.className = 'min-w-0 flex-1';
+    // textContent on purpose: messages carry user filenames, never markup.
+    text.textContent = msg;
+    card.append(text);
+
+    const close = document.createElement('button');
+    close.type = 'button';
+    close.className = 'shrink-0 text-neutral-600 transition hover:text-neutral-200';
+    close.setAttribute('aria-label', 'Dismiss notification');
+    close.innerHTML =
+      '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg>';
+    close.addEventListener('click', () => dismiss(card));
+    card.append(close);
+
+    host.append(card);
+    card.dataset.timer = String(
+      window.setTimeout(() => dismiss(card), HOLD[tone]),
+    );
+  }
+
+  document.addEventListener('mdverse:toast', (event) => {
+    const detail = (event as CustomEvent<string | { msg: string; tone?: Tone }>).detail;
+    if (typeof detail === 'string') {
+      show(detail, 'info');
+    } else if (detail?.msg) {
+      show(detail.msg, detail.tone === 'error' || detail.tone === 'success' ? detail.tone : 'info');
+    }
+  });
+
+  document.addEventListener('keydown', (event) => {
+    if (event.key === 'Escape' && host?.lastElementChild instanceof HTMLElement) {
+      dismiss(host.lastElementChild);
+    }
+  });
+</script>
+
+<style>
+  .toast-card {
+    animation: toast-in 0.16s ease-out;
+  }
+
+  @keyframes toast-in {
+    from {
+      opacity: 0;
+      transform: translateY(8px);
+    }
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .toast-card {
+      animation: none;
+    }
+  }
+</style>
