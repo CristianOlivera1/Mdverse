@@ -1,12 +1,23 @@
 ---
 import Icon from '../ui/Icon.astro';
+
+// Optional name suffix for the trigger/panel pair. menus.ts resolves
+// `[data-menu="<name>"]` with first-match querySelector, so two triggers
+// sharing a name would break each other — mobile copies render with a suffix
+// (e.g. "-m") to keep every name unique. Default keeps desktop names unchanged.
+interface Props {
+  suffix?: string;
+}
+
+const { suffix = '' } = Astro.props as Props;
+const menuName = `export${suffix}`;
 ---
 
 <div>
   <button
     type="button"
     class="hb"
-    data-menu="export"
+    data-menu={menuName}
     aria-haspopup="true"
     aria-expanded="false"
     title="Copy and export"
@@ -15,7 +26,7 @@ import Icon from '../ui/Icon.astro';
     <span class="hidden lg:inline">Export</span>
     <Icon name="lucide:chevron-down" size={12} class="opacity-60" />
   </button>
-  <div class="pop" data-pop="export" hidden>
+  <div class="pop" data-pop={menuName} hidden>
     <button type="button" class="mi" data-command="copy">
       <Icon name="lucide:copy" />
       Copy Markdown

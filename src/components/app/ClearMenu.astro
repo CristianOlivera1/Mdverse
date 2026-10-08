@@ -1,12 +1,19 @@
 ---
 import Icon from '../ui/Icon.astro';
+
+interface Props {
+  suffix?: string;
+}
+
+const { suffix = '' } = Astro.props as Props;
+const menuName = `clear${suffix}`;
 ---
 
 <div>
   <button
     type="button"
     class="hb danger"
-    data-menu="clear"
+    data-menu={menuName}
     aria-haspopup="true"
     aria-expanded="false"
     title="Clear"
@@ -14,7 +21,7 @@ import Icon from '../ui/Icon.astro';
   >
     <Icon name="lucide:eraser" />
   </button>
-  <div class="pop" data-pop="clear" hidden>
+  <div class="pop" data-pop={menuName} hidden>
     <button type="button" class="mi danger" data-command="clear-active">
       <Icon name="lucide:eraser" />
       Clear active document

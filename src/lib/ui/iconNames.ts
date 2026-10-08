@@ -14,6 +14,7 @@ export const ICONIFY_ICONS = {
     'code-xml',
     'copy',
     'download',
+    'ellipsis',
     'eraser',
     'external-link',
     'eye',

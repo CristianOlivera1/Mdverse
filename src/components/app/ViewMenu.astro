@@ -1,19 +1,27 @@
 ---
 import Icon from '../ui/Icon.astro';
+
+interface Props {
+  suffix?: string;
+}
+
+const { suffix = '' } = Astro.props as Props;
+const menuName = `view${suffix}`;
+const zoomId = `zoom-value${suffix}`;
 ---
 
 <div>
   <button
     type="button"
     class="hb"
-    data-menu="view"
+    data-menu={menuName}
     aria-haspopup="true"
     aria-expanded="false"
     title="View settings"
   >
     <Icon name="lucide:sliders-horizontal" />
   </button>
-  <div class="pop" data-pop="view" hidden>
+  <div class="pop" data-pop={menuName} hidden>
     <button
       type="button"
       class="mi"
@@ -43,7 +51,7 @@ import Icon from '../ui/Icon.astro';
           class="hb tabular-nums min-w-[46px]"
           data-command="zoom-reset"
           data-keep
-          id="zoom-value"
+          id={zoomId}
           title="Reset zoom"
         >
           100%
