@@ -1,17 +1,17 @@
 ---
-import AccountMenu from '../auth/AccountMenu.astro';
-import ClearMenu from './ClearMenu.astro';
-import CollaborateDialog from './CollaborateDialog.astro';
-import DocumentTabs from './DocumentTabs.astro';
-import ExportMenu from './ExportMenu.astro';
 import Icon from '../ui/Icon.astro';
+import DocumentTabs from './DocumentTabs.astro';
+import CollaborateDialog from './CollaborateDialog.astro';
 import PresenceBar from './PresenceBar.astro';
+import ExportMenu from './ExportMenu.astro';
 import ViewMenu from './ViewMenu.astro';
+import ClearMenu from './ClearMenu.astro';
+import AccountMenu from '../auth/AccountMenu.astro';
 ---
 
-<header class="flex items-center justify-between h-12 px-3 border-b border-neutral-800 shrink-0 gap-2 sm:gap-3">
-  <div class="flex items-center gap-2 sm:gap-3 min-w-0 z-10">
-    <div class="max-sm:hidden flex items-center shrink-0">
+<header class="flex items-center justify-between h-12 px-3 border-b border-neutral-800 shrink-0 gap-3 select-none">
+  <div class="flex items-center gap-3 min-w-0 z-10">
+    <a href="/" class="max-sm:hidden flex items-center shrink-0" aria-label="Mdverse Home">
       <img
         src="/logo-calligraphy.svg"
         alt="Mdverse logo"
@@ -19,9 +19,11 @@ import ViewMenu from './ViewMenu.astro';
         width="136"
         height="33"
       />
-    </div>
+    </a>
     <span class="sep max-sm:hidden"></span>
+
     <DocumentTabs />
+
     <div class="seg m-tabs" role="group" aria-label="Visible panel">
       <button type="button" class="hb" data-command="panel-code" title="Code">
         <Icon name="lucide:code-xml" />
@@ -34,7 +36,7 @@ import ViewMenu from './ViewMenu.astro';
     </div>
   </div>
 
-  <div class="relative flex items-center h-full gap-1 shrink-0 z-10">
+  <div class="relative flex items-center h-full gap-1.5 shrink-0 z-10 pl-6">
     <div class="absolute inset-0 -z-10 overflow-hidden pointer-events-none">
       <img
         src="/images/bg-header.avif"
@@ -43,22 +45,26 @@ import ViewMenu from './ViewMenu.astro';
       />
     </div>
 
-    <button
-      type="button"
-      class="hb max-sm:hidden"
-      data-command="popout"
-      title="Open the preview in another tab (with index)"
-      aria-label="Open preview in another tab"
-    >
-      <Icon name="lucide:external-link" />
-      <span class="hidden lg:inline">Preview</span>
-    </button>
-    <ExportMenu />
-    <ViewMenu />
+    <div class="flex items-center gap-1 max-md:hidden">
+      <button
+        type="button"
+        class="hb"
+        data-command="popout"
+        title="Open the preview in another tab"
+        aria-label="Open preview in another tab"
+      >
+        <Icon name="lucide:external-link" />
+        <span class="hidden lg:inline">Preview</span>
+      </button>
+      <ExportMenu />
+      <ViewMenu />
+      <ClearMenu />
+    </div>
+
     <PresenceBar />
     <CollaborateDialog />
-    <span class="sep"></span>
-    <ClearMenu />
+
+    <span class="hidden sm:inline sep"></span>
     <AccountMenu />
   </div>
 </header>

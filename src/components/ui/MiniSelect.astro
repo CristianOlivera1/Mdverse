@@ -1,0 +1,68 @@
+---
+import Icon from '@/components/ui/Icon.astro';
+
+export interface MiniOption {
+  value: string;
+  label: string;
+  hint?: string;
+}
+
+interface Props {
+  name: string;
+  options: readonly MiniOption[];
+  value?: string;
+  ariaLabel?: string;
+  dataField?: string;
+}
+
+const { name, options, value, ariaLabel, dataField } = Astro.props;
+const current = value ?? options[0]?.value ?? '';
+const selected = options.find((option) => option.value === current);
+---
+
+<div class="msel" data-msel>
+  <input
+    type="hidden"
+    name={name}
+    value={current}
+    data-msel-default={current}
+    data-msel-value
+    data-field={dataField}
+  />
+  <button
+    type="button"
+    class="msel-btn"
+    data-msel-btn
+    aria-haspopup="listbox"
+    aria-expanded="false"
+    aria-label={ariaLabel}
+  >
+    <span data-msel-label>{selected?.label ?? current}</span>
+    <Icon name="lucide:chevron-down" size={14} class="msel-chev" />
+  </button>
+  <div class="pop msel-pop" role="listbox" data-msel-pop hidden>
+    {options.map((option) => (
+      <button
+        type="button"
+        class="mi"
+        role="option"
+        aria-selected={option.value === current ? 'true' : 'false'}
+        data-msel-option={option.value}
+      >
+        <span class="msel-check">
+          <Icon name="lucide:check" size={14} />
+        </span>
+        <span class="min-w-0">
+          <span class="block" data-msel-text>
+            {option.label}
+          </span>
+          {option.hint && (
+            <span class="mt-0.5 block text-[11px] leading-snug text-neutral-500">
+              {option.hint}
+            </span>
+          )}
+        </span>
+      </button>
+    ))}
+  </div>
+</div>

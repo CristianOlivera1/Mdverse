@@ -1,12 +1,3 @@
-/**
- * The editor header's collaboration dialog.
- *
- * It follows whichever tab is on screen (the editor announces it), reads the
- * current state once per document, and sends every change to the same endpoints the
- * share page posts to — which answer JSON when asked. Nothing here decides who may
- * do what: Postgres does, and a refused action comes back as a notice.
- */
-
 import { describeAccess } from '../documents/access';
 import {
   loadCollaboration,
@@ -19,11 +10,18 @@ import {
 } from '../documents/collaboration';
 import { formatTimestamp } from '../documents/format';
 import { linkIsActive, maskToken, ROLE_LABELS, shareUrl } from '../documents/sharing';
+import { syncMiniSelects } from './miniSelect';
 
 interface ActiveDocument {
   readonly id: string;
   readonly title: string;
   readonly collaborative: boolean;
+}
+
+interface ActOptions {
+  form?: HTMLFormElement;
+  disable?: readonly HTMLButtonElement[];
+  revert?: () => void;
 }
 
 export function initCollaborateDialog(): void {
@@ -49,7 +47,7 @@ export function initCollaborateDialog(): void {
   const subtitle = pick<HTMLElement>('[data-collab="subtitle"]');
   const fullPage = pick<HTMLAnchorElement>('[data-collab="full-page"]');
   const notice = pick<HTMLElement>('[data-collab="notice"]');
-  const loading = pick<HTMLElement>('[data-collab="loading"]');
+  const skeleton = pick<HTMLElement>('[data-collab="skeleton"]');
   const unavailable = pick<HTMLElement>('[data-collab="unavailable"]');
   const readonlyBlock = pick<HTMLElement>('[data-collab="readonly"]');
   const manageBlock = pick<HTMLElement>('[data-collab="manage"]');
@@ -72,14 +70,20 @@ export function initCollaborateDialog(): void {
   let state: CollaborationState | null = null;
   let busy = false;
 
-  function showNotice(tone: 'success' | 'error', message: string): void {
+  function showNotice(tone: 'success' | 'error' | 'info', message: string): void {
     notice.textContent = message;
-    notice.classList.toggle('border-red-900', tone === 'error');
-    notice.classList.toggle('bg-red-950/40', tone === 'error');
-    notice.classList.toggle('text-red-300', tone === 'error');
-    notice.classList.toggle('border-emerald-900', tone === 'success');
-    notice.classList.toggle('bg-emerald-950/30', tone === 'success');
-    notice.classList.toggle('text-emerald-300', tone === 'success');
+
+    const tones: Record<typeof tone, readonly string[]> = {
+      error: ['border-red-900', 'bg-red-950/40', 'text-red-300'],
+      success: ['border-emerald-900', 'bg-emerald-950/30', 'text-emerald-300'],
+      info: ['border-neutral-700', 'bg-neutral-900', 'text-neutral-300'],
+    };
+    const active = tones[tone];
+
+    for (const classes of Object.values(tones)) {
+      const on = classes === active;
+      for (const cls of classes) notice.classList.toggle(cls, on);
+    }
     notice.hidden = false;
   }
 
@@ -94,7 +98,6 @@ export function initCollaborateDialog(): void {
     for (const [field, value] of Object.entries(values)) {
       const target = root.querySelector<HTMLElement>(`[data-field="${field}"]`);
       if (!target) continue;
-      // A <select> is not an <input>: writing textContent there would eat its options.
       if (
         target instanceof HTMLInputElement ||
         target instanceof HTMLSelectElement ||
@@ -106,6 +109,15 @@ export function initCollaborateDialog(): void {
       }
     }
     return root;
+  }
+
+  function setPending(button: HTMLButtonElement, pending: boolean): void {
+    const label = button.querySelector<HTMLElement>('[data-collab-submit-label]');
+    const spinner = button.querySelector<HTMLElement>('[data-collab-spinner]');
+    button.disabled = pending;
+    button.setAttribute('aria-busy', pending ? 'true' : 'false');
+    if (label) label.hidden = pending;
+    if (spinner) spinner.hidden = !pending;
   }
 
   function renderPeople(people: readonly CollaborationPerson[]): void {
@@ -120,10 +132,15 @@ export function initCollaborateDialog(): void {
         });
 
         row.dataset.user = person.userId;
-        const select = row.querySelector<HTMLSelectElement>('[data-field="role"]');
-        if (select) select.setAttribute('aria-label', `Role for ${person.name}`);
+        row.dataset.role = person.role;
+
+        const input = row.querySelector<HTMLInputElement>('[data-field="role"]');
+        if (input) input.setAttribute('aria-label', `Role for ${person.name}`);
         const remove = row.querySelector<HTMLButtonElement>('[data-action="remove"]');
         if (remove) remove.setAttribute('aria-label', `Remove ${person.name}`);
+
+        const root = row.querySelector<HTMLElement>('[data-msel]');
+        if (root) syncMiniSelects(root);
 
         return row;
       }),
@@ -195,15 +212,15 @@ export function initCollaborateDialog(): void {
     const document_ = active;
     if (!document_) return;
 
-    loading.hidden = false;
+    skeleton.hidden = false;
     unavailable.hidden = true;
+    readonlyBlock.hidden = true;
+    manageBlock.hidden = true;
     const next = await loadCollaboration(document_.id);
-    loading.hidden = true;
+    skeleton.hidden = true;
 
     if (!next) {
       state = null;
-      readonlyBlock.hidden = true;
-      manageBlock.hidden = true;
       unavailable.hidden = false;
       return;
     }
@@ -214,23 +231,37 @@ export function initCollaborateDialog(): void {
   async function act(
     action: ManagedAction,
     fields: ShareActionFields,
-    form?: HTMLFormElement,
+    options: ActOptions = {},
   ): Promise<void> {
     const document_ = active;
     if (!document_ || busy) return;
 
     busy = true;
-    const submit = form?.querySelector<HTMLButtonElement>('button[type="submit"]');
-    if (submit) submit.disabled = true;
+    const submit = options.form?.querySelector<HTMLButtonElement>('button[type="submit"]');
+    if (submit) setPending(submit, true);
+    for (const button of options.disable ?? []) {
+      button.disabled = true;
+      button.setAttribute('aria-busy', 'true');
+    }
 
     try {
       const feedback = await runShareAction(document_.id, action, fields);
-      if (feedback.ok) form?.reset();
-      showNotice(feedback.ok ? 'success' : 'error', feedback.message);
-      if (feedback.ok) await refresh();
+      if (feedback.ok) {
+        options.form?.reset();
+        if (options.form) syncMiniSelects(options.form);
+        showNotice(feedback.tone ?? 'success', feedback.message);
+        await refresh();
+      } else {
+        showNotice('error', feedback.message);
+        options.revert?.();
+      }
     } finally {
       busy = false;
-      if (submit) submit.disabled = false;
+      if (submit) setPending(submit, false);
+      for (const button of options.disable ?? []) {
+        button.disabled = false;
+        button.removeAttribute('aria-busy');
+      }
     }
   }
 
@@ -239,15 +270,12 @@ export function initCollaborateDialog(): void {
 
     clearNotice();
     dialog.showModal();
-    // Always read again: the last look may be minutes old, and someone may have been
-    // added or removed in another window since.
     void refresh();
   }
 
   openButton.addEventListener('click', openDialog);
   pick<HTMLElement>('[data-collab="close"]').addEventListener('click', () => dialog.close());
 
-  // Clicking the backdrop lands on the dialog itself; the panel is a child of it.
   dialog.addEventListener('click', (event) => {
     if (event.target === dialog) dialog.close();
   });
@@ -261,7 +289,7 @@ export function initCollaborateDialog(): void {
         emails: String(data.get('emails') ?? ''),
         role: String(data.get('role') ?? 'reader'),
       },
-      inviteForm,
+      { form: inviteForm },
     );
   });
 
@@ -275,39 +303,59 @@ export function initCollaborateDialog(): void {
         role: String(data.get('role') ?? 'reader'),
         expiry: String(data.get('expiry') ?? '0'),
       },
-      linkForm,
+      { form: linkForm },
     );
   });
 
   visibilityForm.addEventListener('submit', (event) => {
     event.preventDefault();
     const data = new FormData(visibilityForm);
-    void act('visibility', { visibility: String(data.get('visibility') ?? '') });
+    void act('visibility', { visibility: String(data.get('visibility') ?? '') }, {
+      form: visibilityForm,
+    });
   });
 
   peopleList.addEventListener('change', (event) => {
-    const select = (event.target as HTMLElement).closest<HTMLSelectElement>('[data-field="role"]');
-    const row = select?.closest<HTMLElement>('[data-user]');
-    if (!select || !row?.dataset.user) return;
+    const input = (event.target as HTMLElement).closest<HTMLInputElement>('[data-field="role"]');
+    const row = input?.closest<HTMLElement>('[data-user]');
+    if (!input || !row?.dataset.user) return;
 
-    void act('collaborator', { action: 'role', user: row.dataset.user, role: select.value });
+    const msel = input.closest<HTMLElement>('[data-msel]');
+    const trigger = msel?.querySelector<HTMLButtonElement>('[data-msel-btn]');
+    const original = row.dataset.role ?? input.value;
+
+    void act(
+      'collaborator',
+      { action: 'role', user: row.dataset.user, role: input.value },
+      {
+        disable: trigger ? [trigger] : [],
+        revert: () => {
+          input.value = original;
+          if (msel) syncMiniSelects(msel);
+        },
+      },
+    );
   });
 
   peopleList.addEventListener('click', (event) => {
-    const button = (event.target as HTMLElement).closest<HTMLElement>('[data-action="remove"]');
+    const button = (event.target as HTMLElement).closest<HTMLButtonElement>(
+      '[data-action="remove"]',
+    );
     const row = button?.closest<HTMLElement>('[data-user]');
-    if (!row?.dataset.user) return;
+    if (!button || !row?.dataset.user) return;
     if (!window.confirm('Remove this person from the document?')) return;
 
-    void act('collaborator', { action: 'remove', user: row.dataset.user });
+    void act('collaborator', { action: 'remove', user: row.dataset.user }, { disable: [button] });
   });
 
   invitationsList.addEventListener('click', (event) => {
-    const button = (event.target as HTMLElement).closest<HTMLElement>('[data-action="revoke"]');
+    const button = (event.target as HTMLElement).closest<HTMLButtonElement>(
+      '[data-action="revoke"]',
+    );
     const row = button?.closest<HTMLElement>('[data-invitation]');
-    if (!row?.dataset.invitation) return;
+    if (!button || !row?.dataset.invitation) return;
 
-    void act('invitation', { invitation: row.dataset.invitation });
+    void act('invitation', { invitation: row.dataset.invitation }, { disable: [button] });
   });
 
   linksList.addEventListener('click', (event) => {
@@ -317,19 +365,24 @@ export function initCollaborateDialog(): void {
     if (!button || !row?.dataset.link) return;
 
     if (button.dataset.action === 'revoke') {
-      void act('link', { action: 'revoke', link: row.dataset.link });
+      void act(
+        'link',
+        { action: 'revoke', link: row.dataset.link },
+        { disable: button instanceof HTMLButtonElement ? [button] : [] },
+      );
       return;
     }
 
     const field = row.querySelector<HTMLInputElement>('[data-field="url"]');
     if (!field) return;
 
+    const label = button.querySelector<HTMLElement>('[data-copy-label]');
     void navigator.clipboard
       ?.writeText(field.value)
       .then(() => {
-        button.textContent = 'Copied';
+        if (label) label.textContent = 'Copied';
         window.setTimeout(() => {
-          button.textContent = 'Copy';
+          if (label) label.textContent = 'Copy';
         }, 1500);
       })
       .catch(() => {

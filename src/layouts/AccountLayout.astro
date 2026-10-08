@@ -1,20 +1,17 @@
 ---
-import Avatar from '@/components/ui/Avatar.astro';
 import Icon from '@/components/ui/Icon.astro';
 import { toAccountSummary } from '@/lib/auth/account';
 import Layout from '@/layouts/Layout.astro';
+import AccountMenu from '@/components/auth/AccountMenu.astro';
 
 interface Props {
   title: string;
   description?: string;
-  /** Which nav entry to highlight. */
   current?: 'editor' | 'dashboard' | 'settings';
 }
 
 const { title, description, current } = Astro.props;
 
-// The middleware already guards these routes; this is a second line of defence
-// for anyone reusing the layout somewhere else.
 const account = toAccountSummary(Astro.locals.user, Astro.locals.profile);
 if (!account) return Astro.redirect('/login?next=/dashboard');
 
@@ -33,68 +30,53 @@ const nav = [
   <div class="min-h-screen flex flex-col">
     <header class="flex items-center justify-between gap-3 h-12 px-3 border-b border-neutral-800 shrink-0">
       <div class="flex items-center gap-3 min-w-0">
-        <a href="/" class="flex items-center gap-2.5 shrink-0" aria-label="Mdverse home">
-          <span class="w-5 h-5 rounded-[5px] bg-white flex items-center justify-center">
-            <span class="text-black text-[11px] font-bold leading-none">M</span>
-          </span>
-          <span class="hidden lg:inline text-sm font-medium text-neutral-100">Mdverse</span>
+        <a href="/" class="flex items-center shrink-0" aria-label="Mdverse home">
+          <div class="max-sm:hidden flex items-center shrink-0">
+            <img
+              src="/logo-calligraphy.svg"
+              alt="Mdverse logo"
+              class="h-7 w-auto"
+              width="136"
+              height="33"
+            />
+          </div>
         </a>
-        <nav class="flex items-center gap-1 sm:hidden" aria-label="Account">
-          {nav.map((item) => (
-            <a
-              href={item.href}
-              class:list={['hb', current === item.id && 'on']}
-              aria-current={current === item.id ? 'page' : undefined}
-            >
-              {item.label}
-            </a>
-          ))}
-        </nav>
       </div>
 
-      <div class="flex items-center gap-2 shrink-0">
-        <a
-          href="/settings"
-          class="flex items-center gap-2 rounded-lg px-1.5 py-1 hover:bg-neutral-900"
-        >
-          <Avatar name={account.displayName} seed={account.toneSeed} size="sm" />
-          <span class="hidden sm:flex flex-col leading-tight text-left">
-            <span class="text-xs text-neutral-100">{account.displayName}</span>
-            <span class="text-[11px] text-neutral-500">@{account.username}</span>
-          </span>
-        </a>
-        <form method="POST" action="/auth/signout">
-          <input type="hidden" name="next" value="/" />
-          <button type="submit" class="hb" title="Sign out" aria-label="Sign out">
-            <Icon name="lucide:log-out" />
-            <span class="hidden lg:inline">Sign out</span>
-          </button>
-        </form>
+      <div class="relative flex items-center justify-end h-full w-48 sm:w-70">
+        <div class="absolute inset-0 -z-10 overflow-hidden pointer-events-none">
+          <img
+            src="/images/bg-header.avif"
+            alt=""
+            class="w-full h-full object-cover opacity-80 mask-b-from-80% mask-b-to-99%"
+          />
+        </div>
+        <AccountMenu />
       </div>
     </header>
 
-    <div class="flex flex-1 min-h-0">
-      <nav
-        class="max-sm:hidden flex w-[210px] shrink-0 flex-col gap-1 border-r border-neutral-800 p-3"
-        aria-label="Account"
-      >
-        {nav.map((item) => (
-          <a
-            href={item.href}
-            class:list={['sb-item', current === item.id && 'on']}
-            aria-current={current === item.id ? 'page' : undefined}
-          >
-            <Icon name={item.icon} />
-            {item.label}
-          </a>
-        ))}
-      </nav>
-
-      <main class="flex-1 w-full min-w-0 max-w-3xl mx-auto px-4 sm:px-6 py-8 sm:py-12">
-        <h1 class="text-xl sm:text-2xl font-semibold text-neutral-50">{title}</h1>
-        {description && <p class="mt-2 text-sm text-neutral-400">{description}</p>}
-        <div class="mt-8">
-          <slot />
+    <div class="flex flex-1 min-h-0 flex-col">
+      <main class="flex-1 w-full min-w-0 max-w-4xl mx-auto px-4 sm:px-6 py-8 sm:py-12">
+        <div class="flex flex-col gap-6 sm:flex-row sm:items-start sm:gap-10 mb-20">
+          <nav class="flex shrink-0 flex-wrap gap-1 sm:w-52 sm:flex-col" aria-label="Account">
+            {nav.map((item) => (
+              <a
+                href={item.href}
+                class:list={['sb-item', current === item.id && 'on']}
+                aria-current={current === item.id ? 'page' : undefined}
+              >
+                <Icon name={item.icon} />
+                {item.label}
+              </a>
+            ))}
+          </nav>
+          <div class="min-w-0 flex-1">
+            <h1 class="text-xl sm:text-2xl font-semibold text-neutral-50">{title}</h1>
+            {description && <p class="mt-2 text-sm text-neutral-400">{description}</p>}
+            <div class="mt-8">
+              <slot />
+            </div>
+          </div>
         </div>
       </main>
     </div>

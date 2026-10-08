@@ -1,13 +1,12 @@
 ---
 import Icon from '@/components/ui/Icon.astro';
+import MiniSelect from '@/components/ui/MiniSelect.astro';
 import {
   LINK_EXPIRIES,
   ROLE_HINTS,
   VISIBILITY_LABELS,
   VISIBILITIES,
 } from '@/lib/documents/sharing';
-
-// The button stays hidden until the editor says there is a saved document behind it.
 ---
 
 <button
@@ -61,9 +60,22 @@ import {
       hidden
     ></p>
 
-    <p class="text-xs text-neutral-500" data-collab="loading">
-      Loading who has access…
-    </p>
+    <section class="space-y-5" data-collab="skeleton" aria-hidden="true">
+      <div class="space-y-2">
+        <div class="mskel h-3 w-24"></div>
+        <div class="mskel h-16 w-full rounded-lg"></div>
+        <div class="mskel h-8 w-40 rounded-lg"></div>
+      </div>
+      <div class="space-y-2">
+        <div class="mskel h-3 w-32"></div>
+        <div class="mskel h-[58px] w-full rounded-xl"></div>
+        <div class="mskel h-[58px] w-full rounded-xl"></div>
+      </div>
+      <div class="space-y-2">
+        <div class="mskel h-3 w-20"></div>
+        <div class="mskel h-8 w-full rounded-lg"></div>
+      </div>
+    </section>
 
     <p
       class="rounded-xl border border-dashed border-neutral-800 p-4 text-xs leading-relaxed text-neutral-500"
@@ -102,17 +114,26 @@ import {
             class="w-full rounded-lg border border-neutral-800 bg-black px-3 py-2 text-sm text-neutral-100 placeholder:text-neutral-600 focus:border-neutral-600 focus:outline-none"
           ></textarea>
           <div class="flex flex-wrap items-center gap-2">
-            <select
+            <MiniSelect
               name="role"
-              aria-label="Role for the invited addresses"
-              class="rounded-lg border border-neutral-800 bg-black px-2 py-1.5 text-xs text-neutral-200"
-            >
-              <option value="reader">Can view</option>
-              <option value="editor">Can edit</option>
-            </select>
-            <button type="submit" class="hb on">
-              <Icon name="lucide:send" />
-              Send invitation
+              ariaLabel="Role for the invited addresses"
+              options={[
+                {
+                  value: 'reader',
+                  label: 'Can view',
+                  hint: ROLE_HINTS.reader,
+                },
+                { value: 'editor', label: 'Can edit', hint: ROLE_HINTS.editor },
+              ]}
+            />
+            <button type="submit" class="hb on" data-collab-submit>
+              <span data-collab-submit-label>
+                <Icon name="lucide:send" />
+                Send invitation
+              </span>
+              <span class="msel-spin" data-collab-spinner hidden>
+                <Icon name="lucide:loader-circle" size={14} />
+              </span>
             </button>
           </div>
           <p class="text-[11px] leading-relaxed text-neutral-500">
@@ -146,26 +167,30 @@ import {
         </h3>
         <form class="mt-2 flex flex-wrap items-center gap-2" data-collab-form="link">
           <input type="hidden" name="action" value="create" />
-          <select
+          <MiniSelect
             name="role"
-            aria-label="Role granted by the link"
-            class="rounded-lg border border-neutral-800 bg-black px-2 py-1.5 text-xs text-neutral-200"
-          >
-            <option value="reader">Can view</option>
-            <option value="editor">Can edit</option>
-          </select>
-          <select
+            ariaLabel="Role granted by the link"
+            options={[
+              { value: 'reader', label: 'Can view' },
+              { value: 'editor', label: 'Can edit' },
+            ]}
+          />
+          <MiniSelect
             name="expiry"
-            aria-label="Link expiry"
-            class="rounded-lg border border-neutral-800 bg-black px-2 py-1.5 text-xs text-neutral-200"
-          >
-            {LINK_EXPIRIES.map((expiry) => (
-              <option value={String(expiry.days)}>{expiry.label}</option>
-            ))}
-          </select>
-          <button type="submit" class="hb">
-            <Icon name="lucide:plus" />
-            Create link
+            ariaLabel="Link expiry"
+            options={LINK_EXPIRIES.map((expiry) => ({
+              value: String(expiry.days),
+              label: expiry.label,
+            }))}
+          />
+          <button type="submit" class="hb" data-collab-submit>
+            <span data-collab-submit-label>
+              <Icon name="lucide:plus" />
+              Create link
+            </span>
+            <span class="msel-spin" data-collab-spinner hidden>
+              <Icon name="lucide:loader-circle" size={14} />
+            </span>
           </button>
         </form>
         <ul class="mt-2 space-y-2" data-collab="links"></ul>
@@ -199,8 +224,11 @@ import {
               </span>
             </label>
           ))}
-          <button type="submit" class="hb on">
-            Save
+          <button type="submit" class="hb on" data-collab-submit>
+            <span data-collab-submit-label>Save</span>
+            <span class="msel-spin" data-collab-spinner hidden>
+              <Icon name="lucide:loader-circle" size={14} />
+            </span>
           </button>
         </form>
         <p class="mt-3 text-[11px] leading-relaxed text-neutral-600">
@@ -220,14 +248,33 @@ import {
         <p class="mt-0.5 truncate text-[11px] text-neutral-500" data-field="meta"></p>
       </div>
       <div class="flex shrink-0 items-center gap-1">
-        <select
-          class="rounded-lg border border-neutral-800 bg-black px-2 py-1.5 text-xs text-neutral-200"
-          data-field="role"
-          aria-label="Role"
-        >
-          <option value="reader">Can view</option>
-          <option value="editor">Can edit</option>
-        </select>
+        <div class="msel" data-msel>
+          <input type="hidden" name="role" value="reader" data-field="role" data-msel-value />
+          <button
+            type="button"
+            class="msel-btn"
+            data-msel-btn
+            aria-haspopup="listbox"
+            aria-expanded="false"
+          >
+            <span data-msel-label>Can view</span>
+            <Icon name="lucide:chevron-down" size={14} class="msel-chev" />
+          </button>
+          <div class="pop msel-pop" role="listbox" data-msel-pop hidden>
+            <button type="button" class="mi" role="option" data-msel-option="reader">
+              <span class="msel-check">
+                <Icon name="lucide:check" size={14} />
+              </span>
+              <span>Can view</span>
+            </button>
+            <button type="button" class="mi" role="option" data-msel-option="editor">
+              <span class="msel-check">
+                <Icon name="lucide:check" size={14} />
+              </span>
+              <span>Can edit</span>
+            </button>
+          </div>
+        </div>
         <button type="button" class="hb danger" data-action="remove" title="Remove access">
           <Icon name="lucide:user-minus" />
         </button>
@@ -270,7 +317,7 @@ import {
       />
       <button type="button" class="hb" data-action="copy" title="Copy link">
         <Icon name="lucide:copy" />
-        Copy
+        <span data-copy-label>Copy</span>
       </button>
     </div>
   </li>
@@ -318,6 +365,8 @@ import {
 
 <script>
   import { initCollaborateDialog } from '@/lib/app/collaborateDialog';
+  import { initMiniSelects } from '@/lib/app/miniSelect';
 
+  initMiniSelects();
   initCollaborateDialog();
 </script>

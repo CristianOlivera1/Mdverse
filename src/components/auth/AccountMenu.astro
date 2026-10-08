@@ -19,6 +19,7 @@ const account = toAccountSummary(Astro.locals.user, Astro.locals.profile);
     >
       <Avatar name={account.displayName} seed={account.toneSeed} size="sm" />
       <span class="hidden lg:inline max-w-[120px] truncate">{account.displayName}</span>
+      <Icon name="lucide:chevron-down" class="size-4 opacity-70" />
     </button>
 
     <div class="pop" data-pop="account" hidden>
@@ -53,3 +54,9 @@ const account = toAccountSummary(Astro.locals.user, Astro.locals.profile);
     <span class="hidden lg:inline">Sign in</span>
   </a>
 )}
+
+<script>
+  import { initMenus } from '../../lib/app/menus';
+
+  initMenus();
+</script>

@@ -8,6 +8,7 @@ import { createCursorOverlay } from '../collab/overlay';
 import type { CursorOverlay } from '../collab/overlay';
 import { describePeers } from '../collab/presence';
 import type { Peer } from '../collab/presence';
+import { avatarAura } from '../auth/avatarAura';
 import type { CollabSession, CollabStatus, RemoteCursor, RemoteSave } from '../collab/session';
 import { openCloudDocuments } from '../documents/cloudApi';
 import type { CloudSession } from '../documents/cloudApi';
@@ -26,6 +27,7 @@ import type { OpenDocument, SaveDocumentResult } from '../documents/types';
 import { HIGHLIGHT_THEME_CSS } from '../markdown/highlightTheme';
 import { renderDiagram } from '../markdown/mermaid';
 import { renderMarkdown } from '../markdown/render';
+import { closeMenus, initMenus } from './menus';
 
 const MIN_ZOOM = 0.7;
 const MAX_ZOOM = 1.8;
@@ -63,6 +65,10 @@ const INLINE_MARKERS: Record<string, string> = {
 };
 
 export function initEditorApp(): void {
+  // Menus work on every page via the shared module; bind first so the
+  // early return below (non-editor pages) never leaves them dead.
+  initMenus();
+
   const panesHost = document.getElementById('editor-panes');
   const tabsHost = document.getElementById('editor-tabs');
   const template = document.getElementById('editor-pane-template') as HTMLTemplateElement | null;
@@ -269,6 +275,82 @@ export function initEditorApp(): void {
     announceActiveDocument();
   }
 
+  const PRESENCE_MAX_VISIBLE = 3;
+
+  function createPresenceAvatar(peer: Peer): HTMLElement {
+    const aura = avatarAura(peer.id || peer.name, peer.name, 'sm');
+    const el = document.createElement('div');
+    el.className =
+      'relative h-6 w-6 rounded-full overflow-hidden transition-all duration-200 ease-out dock-avatar';
+    el.style.zIndex = '1';
+    el.title = peer.name;
+
+    const base = document.createElement('div');
+    base.className = 'absolute inset-0 pointer-events-none';
+    base.setAttribute('aria-hidden', 'true');
+    base.style.cssText = aura.baseLayer;
+
+    const veil = document.createElement('div');
+    veil.className = 'absolute inset-0 pointer-events-none';
+    veil.setAttribute('aria-hidden', 'true');
+    veil.style.cssText = aura.softVeil;
+
+    const label = document.createElement('span');
+    label.className =
+      'relative z-10 flex h-full w-full items-center justify-center text-[10px] font-semibold text-white';
+    label.style.textShadow = '0 1px 2px rgba(0,0,0,0.65)';
+    label.textContent = peer.initials;
+
+    el.append(base, veil, label);
+    return el;
+  }
+
+  function createPresenceOverflow(count: number, names: string): HTMLElement {
+    const el = document.createElement('div');
+    el.className =
+      'relative h-6 w-6 rounded-full overflow-hidden ring-1 ring-white/10 border-2 border-neutral-950 bg-neutral-800 transition-all duration-200 ease-out dock-avatar';
+    el.style.zIndex = '1';
+    el.title = names;
+
+    const label = document.createElement('span');
+    label.className =
+      'relative z-10 flex h-full w-full items-center justify-center text-[10px] font-semibold text-neutral-200';
+    label.textContent = `+${count}`;
+
+    el.append(label);
+    return el;
+  }
+
+  // Framework-free dock physics: hovering avatar i lifts it and nudges
+  // neighbors. Re-bound after every render since replaceChildren drops
+  // listeners; the host mouseleave uses assignment so it never stacks.
+  function bindDockPhysics(host: HTMLElement): void {
+    const avatars = [...host.children] as HTMLElement[];
+    avatars.forEach((node, i) => {
+      node.addEventListener('mouseenter', () => {
+        avatars.forEach((other, j) => {
+          const distance = Math.abs(i - j);
+          if (distance === 0) {
+            other.style.transform = 'scale(1.18) translateY(-4px)';
+            other.style.zIndex = '20';
+          } else if (distance === 1) {
+            other.style.transform = 'scale(1.04) translateY(-1px)';
+            other.style.zIndex = '10';
+          } else {
+            other.style.transform = 'scale(1)';
+            other.style.zIndex = '1';
+          }
+        });
+      });
+    });
+    host.onmouseleave = () => {
+      for (const node of avatars) {
+        node.style.transform = 'scale(1) translateY(0)';
+        node.style.zIndex = '1';
+      }
+    };
+  }
+
   function renderPresence(): void {
     const host = document.getElementById('presence-bar');
     if (!host) return;
@@ -278,33 +360,20 @@ export function initEditorApp(): void {
     host.hidden = peers.length === 0;
     host.title = peers.length > 0 ? describePeers(peers, viewerId) : '';
 
-    for (const peer of others.slice(0, 4)) {
-      const chip = document.createElement('span');
-      chip.className =
-        'flex h-6 w-6 items-center justify-center rounded-full text-[10px] font-semibold text-black';
-      chip.style.background = peer.color;
-      chip.textContent = peer.initials;
-      chip.title = peer.name;
-      host.append(chip);
+    const visible = others.slice(0, PRESENCE_MAX_VISIBLE);
+    for (const peer of visible) host.append(createPresenceAvatar(peer));
+
+    if (others.length > PRESENCE_MAX_VISIBLE) {
+      const rest = others.slice(PRESENCE_MAX_VISIBLE);
+      host.append(
+        createPresenceOverflow(
+          others.length - PRESENCE_MAX_VISIBLE,
+          rest.map((peer) => peer.name).join(', '),
+        ),
+      );
     }
 
-    if (others.length > 4) {
-      const more = document.createElement('span');
-      more.className = 'text-[11px] text-neutral-500';
-      more.textContent = `+${others.length - 4}`;
-      more.title = others
-        .slice(4)
-        .map((peer) => peer.name)
-        .join(', ');
-      host.append(more);
-    }
-
-    if (others.length > 0) {
-      const label = document.createElement('span');
-      label.className = 'hidden lg:inline text-[11px] text-neutral-500 max-w-[14rem] truncate';
-      label.textContent = describePeers(peers, viewerId);
-      host.append(label);
-    }
+    bindDockPhysics(host);
   }
 
   function setCollabStatus(next: CollabStatus): void {
@@ -1014,42 +1083,6 @@ export function initEditorApp(): void {
     }
   }
 
-  const allPanels = (): HTMLElement[] => [...document.querySelectorAll<HTMLElement>('[data-pop]')];
-
-  const triggerFor = (panel: HTMLElement): HTMLElement | null =>
-    document.querySelector<HTMLElement>(`[data-menu="${panel.dataset.pop}"]`);
-
-  function closeMenus(except?: HTMLElement | null): void {
-    allPanels().forEach((panel) => {
-      if (panel === except || panel.hidden) return;
-      panel.hidden = true;
-      const trigger = triggerFor(panel);
-      if (trigger) {
-        trigger.classList.remove('on');
-        trigger.setAttribute('aria-expanded', 'false');
-      }
-    });
-  }
-
-  function openMenu(panel: HTMLElement, trigger: HTMLElement): void {
-    panel.hidden = false;
-    const bounds = trigger.getBoundingClientRect();
-    const width = panel.offsetWidth;
-    const height = panel.offsetHeight;
-    const viewportWidth = window.innerWidth;
-    const viewportHeight = window.innerHeight;
-    const below = viewportHeight - bounds.bottom - 8;
-    const above = bounds.top - 8;
-    const prefersUp = panel.classList.contains('fm-pop');
-    const openBelow = prefersUp
-      ? above < height && below >= height
-      : below >= height || below >= above;
-    panel.style.left = `${Math.max(8, Math.min(bounds.right - width, viewportWidth - width - 8))}px`;
-    panel.style.top = `${Math.max(8, openBelow ? bounds.bottom + 8 : bounds.top - height - 8)}px`;
-    trigger.classList.add('on');
-    trigger.setAttribute('aria-expanded', 'true');
-  }
-
   function mountPane(doc: OpenDocument): Pane {
     const fragment = paneTemplate.content.cloneNode(true) as DocumentFragment;
     const root = fragment.firstElementChild as HTMLElement;
@@ -1264,17 +1297,6 @@ export function initEditorApp(): void {
       return;
     }
 
-    const menuTrigger = target.closest<HTMLElement>('[data-menu]');
-    if (menuTrigger) {
-      const panel = document.querySelector<HTMLElement>(`[data-pop="${menuTrigger.dataset.menu}"]`);
-      if (!panel) return;
-      const willOpen = panel.hidden;
-      closeMenus(panel);
-      if (willOpen) openMenu(panel, menuTrigger);
-      else closeMenus();
-      return;
-    }
-
     const tab = target.closest<HTMLElement>('[data-tab-id]');
     if (tab?.dataset.tabId) {
       if (tab.dataset.tabId !== activeId) activate(tab.dataset.tabId);
@@ -1288,8 +1310,6 @@ export function initEditorApp(): void {
         closeMenus();
       return;
     }
-
-    if (!target.closest('[data-pop]')) closeMenus();
   });
 
   document.addEventListener('keydown', (event) => {
@@ -1299,7 +1319,6 @@ export function initEditorApp(): void {
     if (pane && !pane.findbar.hidden) closeFind(pane);
   });
 
-  window.addEventListener('resize', () => closeMenus());
   window.addEventListener('pagehide', () => {
     flushAll(true);
     collab?.close();
