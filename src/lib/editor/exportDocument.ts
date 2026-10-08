@@ -18,7 +18,7 @@ export interface ExportRequest {
 
 export async function buildExportHtml(markdown: string, title: string): Promise<string> {
   const host = document.createElement('div');
-  await renderMarkdown(host, markdown, { renderDiagram });
+  await renderMarkdown(host, markdown, { renderDiagram, interactive: false, math: false });
   const documentTitle = (host.querySelector('h1, h2')?.textContent ?? title).trim();
   return (
     '<!doctype html><html lang="en"><head><meta charset="utf-8">' +
@@ -31,7 +31,6 @@ export async function buildExportHtml(markdown: string, title: string): Promise<
 
 export interface ExportResult {
   readonly ok: boolean;
-  /** Why it failed, when it did. `engine` covers a document that could not render. */
   readonly reason?: 'empty' | 'engine' | 'network';
 }
 

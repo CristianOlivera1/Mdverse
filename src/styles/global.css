@@ -488,6 +488,13 @@ button.mi.danger:hover svg {
   border-color: #3b82f6;
 }
 
+.find-layer {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+  pointer-events: none;
+}
+
 [data-password-toggle] .pw-hide {
   display: none;
 }
@@ -647,7 +654,7 @@ button.mi:hover > .msel-check svg {
   }
 }
 
-/* ── Skeleton shimmer (collaboration dialog) ────────────────────────────────── */
+/* ── Shared skeleton shimmer ──────────────────────────────────────────────── */
 
 .mskel {
   background: linear-gradient(90deg, #1a1a1a 25%, #242424 45%, #1a1a1a 65%);
