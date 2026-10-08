@@ -1,4 +1,5 @@
 ---
+import Icon from '@/components/ui/Icon.astro'; // Se importa tu componente de iconos
 import Layout from '@/layouts/Layout.astro';
 import type { AuthNotice } from '@/lib/auth/messages';
 
@@ -23,8 +24,23 @@ const NOTICE_TONES = {
     <meta name="robots" content="noindex" />
   </Fragment>
 
-  <main class="min-h-screen flex items-center justify-center px-4 py-10">
-    <div class="w-full max-w-sm">
+  <main class="min-h-screen flex flex-col justify-center px-4 sm:px-8 py-10 relative">
+    <!-- BOTÓN DE VOLVER: Arriba y pegado al extremo izquierdo de la pantalla -->
+    <div class="absolute top-6 left-4 sm:left-8">
+      <button
+        type="button"
+        class="hb flex items-center gap-1.5 px-2 py-1 text-xs text-neutral-400 hover:text-neutral-100 transition-colors"
+        data-auth-back
+        title="Go back"
+        aria-label="Go back to the previous page"
+      >
+        <Icon name="lucide:arrow-left" size={14} />
+        <span>Back</span>
+      </button>
+    </div>
+
+    <!-- TARJETA DEL FORMULARIO: Centrada perfectamente en el espacio restante -->
+    <div class="w-full max-w-sm mx-auto">
       <div class="flex justify-center">
         <img
           src="/logo-calligraphy.svg"
@@ -61,8 +77,17 @@ const NOTICE_TONES = {
   </main>
 
   <script>
-    // Reveal / hide a password. The two icons live in the button and CSS shows
-    // the one matching `data-visible`, so nothing is rebuilt and nothing jumps.
+    const backBtn = document.querySelector('[data-auth-back]');
+    if (backBtn instanceof HTMLButtonElement) {
+      backBtn.addEventListener('click', () => {
+        if (document.referrer && document.referrer.includes(window.location.host)) {
+          window.history.back();
+        } else {
+          window.location.href = '/'; // Redirección segura si se entra directo
+        }
+      });
+    }
+
     for (const node of document.querySelectorAll('[data-password-toggle]')) {
       if (!(node instanceof HTMLButtonElement)) continue;
       const field = document.getElementById(node.dataset.passwordToggle ?? '');
@@ -77,25 +102,14 @@ const NOTICE_TONES = {
       });
     }
 
-    // Keep the confirmation field honest: native validation blocks submit on
-    // mismatch, a red hint names the mismatch live, and a green hint confirms
-    // the match. All three are progressive enhancement - both hints start
-    // hidden and the server route still rejects mismatches when this script
-    // never runs.
     for (const node of document.querySelectorAll('[data-password-confirm]')) {
       if (!(node instanceof HTMLInputElement)) continue;
       const source = document.getElementById(node.dataset.passwordConfirm ?? '');
       if (!(source instanceof HTMLInputElement)) continue;
-      const matchHint = document.querySelector(
-        `[data-password-match-for="${node.id}"]`,
-      );
-      const mismatchHint = document.querySelector(
-        `[data-password-mismatch-for="${node.id}"]`,
-      );
+      const matchHint = document.querySelector(`[data-password-match-for="${node.id}"]`);
+      const mismatchHint = document.querySelector(`[data-password-mismatch-for="${node.id}"]`);
 
       const sync = () => {
-        // Empty confirmation defers to `required`, so the browser keeps its
-        // native "fill out this field" message instead of a mismatch one.
         if (node.value.length === 0) {
           node.setCustomValidity('');
           if (matchHint instanceof HTMLElement) matchHint.hidden = true;

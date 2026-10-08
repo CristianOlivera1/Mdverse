@@ -7,21 +7,33 @@ import Layout from '../layouts/Layout.astro';
 <Layout title="Preview · Mdverse" bodyClass="h-full bg-black text-neutral-200">
   <div id="preview-root" class="flex h-full" data-toc="open">
     <TocPanel />
+
     <div id="preview-scroll" class="flex-1 min-w-0 h-full overflow-y-auto relative">
-      <button type="button" class="hb" id="toc-open" title="Show index">
+      <div class="absolute top-0 left-0 w-full h-72 -z-10 overflow-hidden pointer-events-none">
+        <img
+          src="/images/bg-preview.avif"
+          alt=""
+          class="w-full h-full max-sm:object-left-top sm:object-cover opacity-60 mask-b-from-50% mask-b-to-90%"
+        />
+      </div>
+
+      <button type="button" class="hb mt-3 ml-3 relative z-10" id="toc-open" title="Show index">
         <Icon name="lucide:list-tree" />
         Index
       </button>
+
       <div class="fixed top-3 right-4 z-10 flex items-center gap-2 text-[11px] text-neutral-500 bg-black/80 border border-neutral-800 rounded-full px-3 py-1">
         <span class="w-1.5 h-1.5 rounded-full bg-gray-400"></span>
         <span id="preview-status">Loading…</span>
       </div>
+
       <article
         id="preview-content"
-        class="prose prose-invert max-w-3xl mx-auto px-6 py-14"
+        class="prose prose-invert max-w-3xl mx-auto px-6 py-14 relative z-10"
         style="font-size:calc(1rem*var(--z))"
       ></article>
     </div>
+
     <button
       type="button"
       id="toc-fab"
