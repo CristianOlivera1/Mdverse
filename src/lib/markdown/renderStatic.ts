@@ -4,6 +4,9 @@ import type { Renderer, RendererObject, Tokens } from 'marked';
 import { highlightCode } from './highlight';
 import { slugifyHeading } from './slug';
 import { escapeHtml } from './toc';
+import { safeHref } from './url';
+
+export { safeHref };
 
 export interface StaticHeading {
   readonly id: string;
@@ -16,35 +19,7 @@ export interface StaticHtml {
   readonly headings: readonly StaticHeading[];
 }
 
-const ALLOWED_SCHEMES = new Set(['http', 'https', 'mailto']);
-
-/** Prefixes that mean "somewhere inside this site", never "another protocol". */
-const RELATIVE_PREFIXES = ['#', '/', './', '../', '?'];
-
-/** A URL that is safe to put in `href`/`src`, or `#` when it is not. */
-export function safeHref(href: string): string {
-  const value = href.trim();
-  if (!value) return '';
-
-  // Control characters are dropped, not trimmed around: `java\nscript:` is a
-  // scheme once a browser has ignored the newline, so it has to be one for us too.
-  const normalised = [...value]
-    .filter((character) => {
-      const code = character.charCodeAt(0);
-      return code > 31 && code !== 127;
-    })
-    .join('');
-  if (RELATIVE_PREFIXES.some((prefix) => normalised.startsWith(prefix))) return normalised;
-
-  const scheme = /^([a-z][a-z0-9+.-]*):/i.exec(normalised);
-  // No scheme at all: `notes/today.md` is a relative path.
-  if (!scheme) return normalised;
-
-  return ALLOWED_SCHEMES.has(scheme[1].toLowerCase()) ? normalised : '#';
-}
-
 export interface StaticRenderOptions {
-  /** Shown when the document is empty, so the page never renders a bare shell. */
   readonly emptyMessage?: string;
 }
 
@@ -56,7 +31,6 @@ export function renderStaticMarkdown(
   const headings: StaticHeading[] = [];
 
   const renderer: RendererObject = {
-    /** Raw HTML from the author is dropped, not sanitized: nothing to get wrong. */
     html: () => '',
 
     heading(this: Renderer, { tokens, depth }: Tokens.Heading) {
@@ -72,7 +46,6 @@ export function renderStaticMarkdown(
 
     code({ text, lang }: Tokens.Code) {
       const language = (lang ?? '').trim().split(/\s+/)[0]?.toLowerCase() ?? '';
-      // Mermaid keeps its plain code block; the page decides whether to hydrate it.
       const highlighted = language && language !== 'mermaid' ? highlightCode(text, language) : null;
       if (highlighted === null) return false;
       return `<pre><code class="hljs language-${escapeHtml(language)}">${highlighted}</code></pre>\n`;

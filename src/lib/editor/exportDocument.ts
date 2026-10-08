@@ -1,3 +1,4 @@
+import { downloadBlob } from '../export/download';
 import { EXPORT_CSS } from '../markdown/exportTheme';
 import { HIGHLIGHT_THEME_CSS } from '../markdown/highlightTheme';
 import { escapeHtml } from '../markdown/toc';
@@ -5,9 +6,9 @@ import { renderMarkdown } from '../markdown/render';
 import { renderDiagram } from '../markdown/mermaid';
 import { slugifyHeading } from '../markdown/slug';
 
-export { EXPORT_CSS };
+export { EXPORT_CSS, downloadBlob };
 
-export type ExportKind = 'html' | 'pdf';
+export type ExportKind = 'html' | 'pdf' | 'docx';
 
 export interface ExportRequest {
   readonly kind: ExportKind;
@@ -30,10 +31,23 @@ export async function buildExportHtml(markdown: string, title: string): Promise<
 
 export interface ExportResult {
   readonly ok: boolean;
-  readonly reason?: 'empty' | 'popup-blocked' | 'aborted';
+  /** Why it failed, when it did. `engine` covers a document that could not render. */
+  readonly reason?: 'empty' | 'engine' | 'network';
 }
 
-/** Print window (PDF) or `.html` download; structured result instead of `alert()`. */
+function localName(title: string, extension: string): string {
+  return `${slugifyHeading(title) || 'document'}.${extension}`;
+}
+
+/**
+ * Exports the current document through the interface the user asked for:
+ *   * `html` — a single self-contained file, built in the browser.
+ *   * `pdf`  — a real vector PDF from the pdfmake engine (no print dialog).
+ *   * `docx` — a real Word document from the server route.
+ *
+ * Every branch reports a structured result instead of failing silently or
+ * quietly degrading to a different format.
+ */
 export async function exportDocument({
   kind,
   markdown,
@@ -41,44 +55,53 @@ export async function exportDocument({
 }: ExportRequest): Promise<ExportResult> {
   if (!markdown.trim()) return { ok: false, reason: 'empty' };
 
-  const printWindow = kind === 'pdf' ? window.open('', '_blank') : null;
-  if (kind === 'pdf' && !printWindow) return { ok: false, reason: 'popup-blocked' };
+  if (kind === 'pdf') return exportPdf(markdown, fallbackName);
+  if (kind === 'docx') return exportDocx(markdown, fallbackName);
 
   const html = await buildExportHtml(markdown, fallbackName);
-  const printable = printWindow
-    ? html.replace(
-        '</body>',
-        '<script>addEventListener("load",()=>setTimeout(()=>print(),400))</script></body>',
-      )
-    : html;
+  downloadBlob(new Blob([html], { type: 'text/html;charset=utf-8' }), localName(fallbackName, 'html'));
+  return { ok: true };
+}
 
-  if (printWindow) {
-    printWindow.document.open();
-    printWindow.document.write(printable);
-    printWindow.document.close();
+async function exportPdf(markdown: string, title: string): Promise<ExportResult> {
+  try {
+    const { renderPdf } = await import('../export/pdf');
+    const blob = await renderPdf(markdown, {
+      title,
+      brand: 'Mdverse',
+      url: typeof window !== 'undefined' ? window.location.host : undefined,
+    });
+
+    downloadBlob(blob, localName(title, 'pdf'));
     return { ok: true };
+  } catch (error) {
+    console.warn('[export] PDF generation failed:', error);
+    return { ok: false, reason: 'engine' };
+  }
+}
+
+async function exportDocx(markdown: string, title: string): Promise<ExportResult> {
+  let response: Response;
+  try {
+    response = await fetch('/api/export/docx', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ markdown, title }),
+    });
+  } catch {
+    return { ok: false, reason: 'network' };
   }
 
-  const url = URL.createObjectURL(new Blob([printable], { type: 'text/html;charset=utf-8' }));
-  const anchor = Object.assign(document.createElement('a'), {
-    href: url,
-    download: `${slugifyHeading(fallbackName) || 'document'}.html`,
-  });
-  document.body.appendChild(anchor);
-  anchor.click();
-  anchor.remove();
-  URL.revokeObjectURL(url);
+  if (!response.ok) {
+    console.warn('[export] DOCX server returned', response.status);
+    return { ok: false, reason: 'engine' };
+  }
+
+  const blob = await response.blob();
+  downloadBlob(blob, localName(title, 'docx'));
   return { ok: true };
 }
 
 export function downloadMarkdown(markdown: string, fileName: string): void {
-  const url = URL.createObjectURL(new Blob([markdown], { type: 'text/markdown;charset=utf-8' }));
-  const anchor = Object.assign(document.createElement('a'), {
-    href: url,
-    download: `${slugifyHeading(fileName) || 'document'}.md`,
-  });
-  document.body.appendChild(anchor);
-  anchor.click();
-  anchor.remove();
-  URL.revokeObjectURL(url);
+  downloadBlob(new Blob([markdown], { type: 'text/markdown;charset=utf-8' }), localName(fileName, 'md'));
 }
