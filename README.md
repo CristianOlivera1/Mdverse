@@ -40,7 +40,7 @@ Everything from the classic viewer, now with real accounts and history:
 - **Recover with confidence:** browse version history and restore any earlier content.
 - **Navigate long docs:** find and replace with match case, plus an auto-generated TOC.
 - **Ship anywhere:** copy, download `.md`, export clean HTML, or print to PDF.
-- **Publish it:** give a document a public, indexable page — with metadata for search and social, a sitemap entry, and one-file HTML or Markdown exports.
+- **Publish it:** give a document a public, indexable page - with metadata for search and social, a sitemap entry, and one-file HTML or Markdown exports.
 - **Start instantly:** work as a guest with local drafts, no signup required.
 - **Keep it all:** sign in with email, GitHub, or Google and import drafts in one click.
 
@@ -86,8 +86,8 @@ pnpm dev # http://localhost:4321
 
 ## Status
 
-- **Done:** Phases 0–4 — foundations, componentized editor, auth, documents with history, realtime collaboration and sharing.
-- **In progress:** Phase 5 — public pages (`/d/:slug`) with SEO, sitemap and reproducible exports are live; comments are next.
+- **Done:** Phases 0–4 - foundations, componentized editor, auth, documents with history, realtime collaboration and sharing.
+- **In progress:** Phase 5 - public pages (`/d/:slug`) with SEO, sitemap and reproducible exports are live; comments are next.
 
 ## Try it now
 

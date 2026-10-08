@@ -69,7 +69,7 @@ export default defineConfig({
 
 ### Creating a Basic Page
 
-Add a file to `src/pages/` — the filename becomes the route:
+Add a file to `src/pages/` - the filename becomes the route:
 
 ```astro
 ---

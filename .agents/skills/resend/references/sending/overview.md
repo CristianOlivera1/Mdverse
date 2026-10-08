@@ -23,9 +23,9 @@ Resend provides two endpoints for sending emails:
 ## Quick Start
 
 1. **Detect project language** from config files (package.json, requirements.txt, go.mod, etc.)
-2. **Install SDK** (preferred) or use cURL — See [../installation.md](../installation.md)
+2. **Install SDK** (preferred) or use cURL - See [../installation.md](../installation.md)
 3. **Choose single or batch** based on the decision matrix above
-4. **Implement best practices** — Idempotency keys, error handling, retries. See [best-practices.md](best-practices.md)
+4. **Implement best practices** - Idempotency keys, error handling, retries. See [best-practices.md](best-practices.md)
 
 ## Single Email
 
@@ -51,7 +51,7 @@ Resend provides two endpoints for sending emails:
 | `attachments` | array | File attachments (max 40MB total) |
 | `tags` | array | Key/value pairs for tracking (see [Tags](#tags)) |
 | `headers` | object | Custom headers |
-| `topic_id`* | string | Scope email to a topic — if the recipient contact has opted out of this topic, the email is silently skipped |
+| `topic_id`* | string | Scope email to a topic - if the recipient contact has opted out of this topic, the email is silently skipped |
 
 *Parameter naming varies by SDK (e.g., `replyTo` in Node.js, `reply_to` in Python).
 
@@ -63,9 +63,9 @@ See [single-email-examples.md](single-email-examples.md) for full SDK implementa
 
 ### Limitations
 
-- **No attachments** — Use single sends for emails with attachments
-- **No scheduling** — Use single sends for scheduled emails
-- **Atomic** — If one email fails validation, the entire batch fails
+- **No attachments** - Use single sends for emails with attachments
+- **No scheduling** - Use single sends for scheduled emails
+- **Atomic** - If one email fails validation, the entire batch fails
 - **Max 100 emails** per request
 - **Max 50 recipients** per individual email in the batch
 
@@ -100,16 +100,16 @@ For more help with deliverability, install the email-best-practices skill with `
 | Practice | Why |
 |----------|-----|
 | **Valid SPF, DKIM, DMARC record** | Authenticate the email and prevent spoofing |
-| **Links match sending domain** | If sending from `@acme.com`, link to `https://acme.com` — mismatched domains trigger spam filters |
+| **Links match sending domain** | If sending from `@acme.com`, link to `https://acme.com` - mismatched domains trigger spam filters |
 | **Include plain text version** | Use both `html` and `text` parameters for accessibility and deliverability |
-| **Avoid "no-reply" addresses** | Use real addresses (e.g., `support@`) — improves trust signals |
+| **Avoid "no-reply" addresses** | Use real addresses (e.g., `support@`) - improves trust signals |
 | **Keep body under 102KB** | Gmail clips larger messages |
 
 ### Recommended
 
 | Practice | Why |
 |----------|-----|
-| **Use subdomains** | Send transactional from `notifications.acme.com`, marketing from `mail.acme.com` — protects reputation |
+| **Use subdomains** | Send transactional from `notifications.acme.com`, marketing from `mail.acme.com` - protects reputation |
 | **Disable tracking for transactional** | Open/click tracking can trigger spam filters for password resets, receipts, etc. |
 
 ## Tracking (Opens & Clicks)
@@ -156,11 +156,11 @@ const { data, error } = await resend.emails.send({
 });
 ```
 
-Cannot combine `template` with `html`, `text`, or `react` — mutually exclusive. See [../templates.md](../templates.md) for full template management.
+Cannot combine `template` with `html`, `text`, or `react` - mutually exclusive. See [../templates.md](../templates.md) for full template management.
 
 ## Testing
 
-**Avoid testing with fake addresses at real email providers** — they bounce and destroy sender reputation.
+**Avoid testing with fake addresses at real email providers** - they bounce and destroy sender reputation.
 
 | Method | Address | Result |
 |--------|---------|--------|
@@ -199,11 +199,11 @@ Monitor: bounce rate < 4%, spam complaint rate < 0.08%.
 
 ## Suppression List
 
-Resend automatically manages a suppression list. Addresses are added when emails hard bounce or recipients mark as spam. Resend won't attempt delivery to suppressed addresses — the `email.suppressed` webhook event fires instead. Manage in Dashboard → Suppressions.
+Resend automatically manages a suppression list. Addresses are added when emails hard bounce or recipients mark as spam. Resend won't attempt delivery to suppressed addresses - the `email.suppressed` webhook event fires instead. Manage in Dashboard → Suppressions.
 
 ## Notes
 
 - The `from` address must use a verified domain
 - If the sending address cannot receive replies, set the `reply_to` parameter
 - Node.js SDK supports `react` parameter for React Email components
-- Resend returns `{ error, data }` — data is `{ id: "email-id" }` on success (single) or array of IDs (batch)
+- Resend returns `{ error, data }` - data is `{ id: "email-id" }` on success (single) or array of IDs (batch)

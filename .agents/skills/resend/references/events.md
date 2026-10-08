@@ -19,11 +19,11 @@ Events are named signals that can trigger automations and track contact activity
 
 ### Python
 
-`resend.Events.create/get/list/update/remove/send` — same operations with snake_case params.
+`resend.Events.create/get/list/update/remove/send` - same operations with snake_case params.
 
 ## Event Schema
 
-Events can have an optional schema — a flat key/type map that defines the expected payload structure.
+Events can have an optional schema - a flat key/type map that defines the expected payload structure.
 
 Supported types: `string`, `number`, `boolean`, `date`
 
@@ -51,11 +51,11 @@ event = resend.Events.create({
 })
 ```
 
-Schema is optional — events without a schema accept any payload.
+Schema is optional - events without a schema accept any payload.
 
 ## Sending Events
 
-Send an event to associate it with a contact. Provide either `contactId` (Node.js) / `contact_id` (Python) or `email` — exactly one, mutually exclusive.
+Send an event to associate it with a contact. Provide either `contactId` (Node.js) / `contact_id` (Python) or `email` - exactly one, mutually exclusive.
 
 ```typescript
 const { data, error } = await resend.events.send({
@@ -83,7 +83,7 @@ resend.Events.send({
 })
 ```
 
-Returns `202 Accepted` — the event is processed asynchronously.
+Returns `202 Accepted` - the event is processed asynchronously.
 
 ## Update and Delete
 
@@ -111,9 +111,9 @@ const { data, error } = await resend.events.remove('order.completed');
 | Mistake | Fix |
 |---------|-----|
 | Event name starting with `resend:` | The `resend:` prefix is reserved for system events |
-| Providing both `contactId`/`contact_id` and `email` on send | Provide exactly one — not both |
+| Providing both `contactId`/`contact_id` and `email` on send | Provide exactly one - not both |
 | Providing neither `contactId`/`contact_id` nor `email` on send | Exactly one is required to associate the event with a contact |
-| Expecting synchronous response from send | Send returns `202 Accepted` — processing is async |
-| Trying to update the event name | Only `schema` can be updated — delete and recreate for name changes |
+| Expecting synchronous response from send | Send returns `202 Accepted` - processing is async |
+| Trying to update the event name | Only `schema` can be updated - delete and recreate for name changes |
 | Schema type mismatch in payload | Payload values should match the schema types (`string`, `number`, `boolean`, `date`) |
-| Not checking `error` in Node.js | SDK returns `{ data, error }`, does not throw — always destructure and check |
+| Not checking `error` in Node.js | SDK returns `{ data, error }`, does not throw - always destructure and check |

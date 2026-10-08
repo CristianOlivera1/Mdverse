@@ -6,7 +6,7 @@ import { defineConfig } from 'vitest/config';
  *
  *   pnpm test:db
  *
- * Kept out of the default `pnpm test` run on purpose — the unit suite stays
+ * Kept out of the default `pnpm test` run on purpose - the unit suite stays
  * hermetic and fast, and a machine with no network never reports a false failure.
  */
 export default defineConfig({

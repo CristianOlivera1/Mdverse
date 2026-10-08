@@ -93,16 +93,16 @@ export function MyEditor() {
 
 | Prop | Type | Default | Description |
 |------|------|---------|-------------|
-| `content` | `Content` | — | Initial editor content (HTML string or TipTap JSON) |
-| `onChange` | `(editor: Editor) => void` | — | Called on every content change |
-| `onUploadImage` | `UploadImageHandler` | — | Handler for pasted/dropped images |
-| `onReady` | `(editor: Editor) => void` | — | Called when editor is initialized |
+| `content` | `Content` | - | Initial editor content (HTML string or TipTap JSON) |
+| `onChange` | `(editor: Editor) => void` | - | Called on every content change |
+| `onUploadImage` | `UploadImageHandler` | - | Handler for pasted/dropped images |
+| `onReady` | `(editor: Editor) => void` | - | Called when editor is initialized |
 | `theme` | `'basic' \| 'minimal'` | `'basic'` | Built-in email theme |
 | `editable` | `boolean` | `true` | Whether content is editable |
-| `placeholder` | `string` | — | Placeholder text for empty editor |
-| `bubbleMenu` | `{ hideWhenActiveNodes?: string[], hideWhenActiveMarks?: string[] }` | — | Configure bubble menu visibility |
-| `extensions` | `Extensions` | — | Override the default extensions entirely |
-| `className` | `string` | — | CSS class for the editor container |
+| `placeholder` | `string` | - | Placeholder text for empty editor |
+| `bubbleMenu` | `{ hideWhenActiveNodes?: string[], hideWhenActiveMarks?: string[] }` | - | Configure bubble menu visibility |
+| `extensions` | `Extensions` | - | Override the default extensions entirely |
+| `className` | `string` | - | CSS class for the editor container |
 
 ### Ref Methods (`EmailEditorRef`)
 
@@ -267,7 +267,7 @@ const extensions = [StarterKit, EmailTheming.configure({ theme: 'basic' })];
 | Theme | Description |
 |-------|-------------|
 | `'basic'` | Full styling: typography, spacing, borders, visual hierarchy. **Default.** |
-| `'minimal'` | Essentially no styles — blank slate for custom themes. |
+| `'minimal'` | Essentially no styles - blank slate for custom themes. |
 
 ### Switching Themes Dynamically
 
@@ -313,7 +313,7 @@ function ExportPanel() {
 }
 ```
 
-The `preview` parameter is optional — when provided, it sets the inbox preview text in the exported HTML.
+The `preview` parameter is optional - when provided, it sets the inbox preview text in the exported HTML.
 
 The export pipeline:
 1. Reads the editor's JSON document
@@ -363,4 +363,4 @@ const Callout = EmailNode.create({
 const extensions = [StarterKit, Callout];
 ```
 
-For custom marks (inline formatting), use `EmailMark` from `@react-email/editor/core` — same pattern but for inline elements.
+For custom marks (inline formatting), use `EmailMark` from `@react-email/editor/core` - same pattern but for inline elements.

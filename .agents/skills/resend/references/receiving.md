@@ -2,13 +2,13 @@
 
 ## Overview
 
-Resend processes incoming emails for your domain and sends webhook events to your endpoint. **Webhooks contain metadata only** — you must call separate APIs to retrieve email body and attachments.
+Resend processes incoming emails for your domain and sends webhook events to your endpoint. **Webhooks contain metadata only** - you must call separate APIs to retrieve email body and attachments.
 
 ## Quick Start
 
-1. **Configure receiving domain** — Use Resend's `.resend.app` domain or add MX record for custom domain
-2. **Set up webhook** — Subscribe to `email.received` event
-3. **Retrieve content** — Call Receiving API for body, Attachments API for files
+1. **Configure receiving domain** - Use Resend's `.resend.app` domain or add MX record for custom domain
+2. **Set up webhook** - Subscribe to `email.received` event
+3. **Retrieve content** - Call Receiving API for body, Attachments API for files
 
 ## Domain Setup
 
@@ -117,7 +117,7 @@ export async function POST(req: Request) {
 
 ## Listing Received Emails
 
-List all received emails with cursor-based pagination — useful for polling or backfilling without webhooks.
+List all received emails with cursor-based pagination - useful for polling or backfilling without webhooks.
 
 ```typescript
 const { data: emails } = await resend.emails.receiving.list({
@@ -129,7 +129,7 @@ for (const email of emails.data) {
   console.log(email.from, email.subject, email.created_at);
   console.log(email.attachments); // metadata only (id, filename, content_type, size)
 }
-// emails.has_more — true if more pages exist
+// emails.has_more - true if more pages exist
 ```
 
 ```python
@@ -138,7 +138,7 @@ for email in emails["data"]:
     print(email["from"], email["subject"])
 ```
 
-Pagination uses `after` (forward) or `before` (backward) cursors — mutually exclusive.
+Pagination uses `after` (forward) or `before` (backward) cursors - mutually exclusive.
 
 ## Retrieving Email Content
 
@@ -248,7 +248,7 @@ export async function POST(req: Request) {
       })
     );
 
-    // 4. Forward the email (single send — batch doesn't support attachments)
+    // 4. Forward the email (single send - batch doesn't support attachments)
     const { error: sendError } = await resend.emails.send({
       from: 'Support System <system@acme.com>',
       to: ['team@acme.com'],
@@ -290,11 +290,11 @@ if (event.type === 'email.received') {
 
 | Mistake | Fix |
 |---------|-----|
-| Expecting body in webhook payload | Webhook has metadata only — call `resend.emails.receiving.get()` for body |
+| Expecting body in webhook payload | Webhook has metadata only - call `resend.emails.receiving.get()` for body |
 | MX record not lowest priority | Ensure Resend's MX has lowest number (highest priority) |
 | Adding MX to root domain with existing email | Use subdomain to avoid breaking existing email service |
-| Using expired download_url | URLs expire (see `expires_at` field) — call attachments API again for a fresh URL |
-| Not verifying webhook signatures | Always verify — unverified events can't be trusted |
+| Using expired download_url | URLs expire (see `expires_at` field) - call attachments API again for a fresh URL |
+| Not verifying webhook signatures | Always verify - unverified events can't be trusted |
 | Forgetting to return 200 OK | Resend retries on non-200 responses |
 
 ## Storage Note

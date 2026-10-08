@@ -2,7 +2,7 @@
 
 ### Phase 2: Run coverage-led hunting waves
 
-The parent assigns `planned` ledger units to `general` agents. Use enough focused hunters to cover the units without combining unrelated boundaries. One hunter may own closely related units in one subsystem; no unit may be silently unassigned because of an agent-count limit — a unit the budget cannot reach is explicitly `deferred` with reason `budget_cannot_reserve_critics_and_validation`.
+The parent assigns `planned` ledger units to `general` agents. Use enough focused hunters to cover the units without combining unrelated boundaries. One hunter may own closely related units in one subsystem; no unit may be silently unassigned because of an agent-count limit - a unit the budget cannot reach is explicitly `deferred` with reason `budget_cannot_reserve_critics_and_validation`.
 
 When a budget or profile caps hunter count, assign units in priority order and record the ordering rationale in the ledger. Rank by: (1) unauthenticated or lowest-trust entry surfaces before authenticated ones; (2) boundaries protecting the most valuable resources (credentials, cross-tenant data, code execution, release authority); (3) prior-run gaps, revalidation targets, and changed source before same-source re-passes; (4) units whose class historically yields confirmed findings for this target type over speculative ones. Ties break lexicographically by `coverage_id` so runs stay deterministic.
 
@@ -24,7 +24,7 @@ Every hunter prompt contains these parts in this order:
 
 A prompt may select several companion blocks when the same path crosses several domains. Keep their constraints together. Scope is the hunter's coverage obligation, not permission to duplicate excluded work. If an unexpected different boundary appears, return it under `uncovered` so the parent creates a stable ledger unit and assigns it in the next wave.
 
-#### Core hunting method — include in every hunter prompt
+#### Core hunting method - include in every hunter prompt
 
 ```text
 ## Defensive vulnerability-finding method
@@ -51,8 +51,8 @@ WORK FROM A CONCRETE INVARIANT:
 
 DEPTH BOUND: trace only paths that can reach your assigned boundary or whose
 guarantees that boundary relies on. Stop a line of investigation as soon as the
-invariant is settled either way, and record the result in your structured output —
-a covered, candidate, or blocked disposition, or an `uncovered` entry — instead of
+invariant is settled either way, and record the result in your structured output -
+a covered, candidate, or blocked disposition, or an `uncovered` entry - instead of
 continuing to search.
 
 TEST SAD PATHS AND DISAGREEMENTS. Check absent, empty, zero, negative, maximum,
@@ -96,7 +96,7 @@ outside source is not proof either way. If one such fact is decisive, return a
 needs_validation record with the exact missing observation and safe owner-observed check.
 ```
 
-#### Promotion procedure — copy this promotion procedure verbatim into every hunter prompt
+#### Promotion procedure - copy this promotion procedure verbatim into every hunter prompt
 
 ```text
 Artifact promotion procedure (trusted parent-side code only):
@@ -135,7 +135,7 @@ file separately:
     promotion blocker.
 ```
 
-#### Core validation rules — include in every hunter prompt
+#### Core validation rules - include in every hunter prompt
 
 ```text
 ## Candidate gate

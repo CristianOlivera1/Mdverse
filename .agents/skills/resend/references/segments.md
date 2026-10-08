@@ -1,6 +1,6 @@
 # Segments
 
-Group contacts for broadcast targeting. Segments replaced legacy "audiences" — use `segmentId` not `audienceId` everywhere.
+Group contacts for broadcast targeting. Segments replaced legacy "audiences" - use `segmentId` not `audienceId` everywhere.
 
 ## SDK Methods
 
@@ -10,9 +10,9 @@ Group contacts for broadcast targeting. Segments replaced legacy "audiences" —
 |-----------|--------|
 | Create | `resend.segments.create(params)` |
 | Get | `resend.segments.get(id)` |
-| Update | `resend.segments.update(id, { name })` — rename only |
+| Update | `resend.segments.update(id, { name })` - rename only |
 | List | `resend.segments.list(params?)` |
-| Delete | `resend.segments.remove(id)` — not `.delete()` |
+| Delete | `resend.segments.remove(id)` - not `.delete()` |
 
 ### Python
 
@@ -20,7 +20,7 @@ Group contacts for broadcast targeting. Segments replaced legacy "audiences" —
 |-----------|--------|
 | Create | `resend.Segments.create(params)` |
 | Get | `resend.Segments.get(id)` |
-| Update | `resend.Segments.update(id, params)` — rename only |
+| Update | `resend.Segments.update(id, params)` - rename only |
 | List | `resend.Segments.list(params?)` |
 | Delete | `resend.Segments.remove(id)` |
 
@@ -41,7 +41,7 @@ console.log(data.id); // seg_xxxxxxxx
 
 ## Update Segment
 
-Rename an existing segment. `name` is the only field — the response only returns `object` and `id`, not the new `name`.
+Rename an existing segment. `name` is the only field - the response only returns `object` and `id`, not the new `name`.
 
 ```typescript
 const { data, error } = await resend.segments.update('seg_xxx', {
@@ -88,6 +88,6 @@ await resend.broadcasts.create({
 
 | Mistake | Fix |
 |---------|-----|
-| Using `audienceId` | Audiences are deprecated — use `segmentId` |
+| Using `audienceId` | Audiences are deprecated - use `segmentId` |
 | Calling `.delete()` | SDK method is `.remove()` |
 | Expecting contacts auto-added | Contacts must be explicitly added via `contacts.segments.add()` |

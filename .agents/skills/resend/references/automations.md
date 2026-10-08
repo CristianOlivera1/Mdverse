@@ -15,7 +15,7 @@ Automations are created in a `disabled` state by default. Set `status: "enabled"
 | Create | `resend.automations.create(params)` | Returns automation ID |
 | Get | `resend.automations.get(id)` | Returns full automation with steps and connections |
 | List | `resend.automations.list(params?)` | Filter by `status`, cursor-paginated |
-| Update | `resend.automations.update(params)` | Partial update — name, status, or steps+connections |
+| Update | `resend.automations.update(params)` | Partial update - name, status, or steps+connections |
 | Duplicate | `resend.automations.duplicate(id)` | Copies steps and connections, returns the new automation ID |
 | Delete | `resend.automations.remove(id)` | Permanent |
 | Stop | `resend.automations.stop(id)` | Sets status to `disabled` |
@@ -24,7 +24,7 @@ Automations are created in a `disabled` state by default. Set `status: "enabled"
 
 ### Python
 
-`resend.Automations.create/get/list/update/remove/duplicate/stop` — same operations with snake_case params.
+`resend.Automations.create/get/list/update/remove/duplicate/stop` - same operations with snake_case params.
 
 ## Graph Model
 
@@ -36,7 +36,7 @@ Each step has a `key` (unique within the graph), a `type`, and a `config` object
 
 | Type | Config | Description |
 |------|--------|-------------|
-| `trigger` | `{ event_name: string }` | Entry point — fires when the named event occurs |
+| `trigger` | `{ event_name: string }` | Entry point - fires when the named event occurs |
 | `send_email` | `{ template: { id: string, variables?: object }, subject?: string, from?: string, reply_to?: string }` | Sends an email using a published template |
 | `delay` | `{ duration: string }` | Pauses the run. `duration` is human-readable (e.g. `"30 minutes"`, `"3 days"`) |
 | `wait_for_event` | `{ event_name: string, timeout?: string, filter_rule?: object }` | Waits for an event. `timeout` is human-readable (e.g. `"1 hour"`). `filter_rule` uses the same rule tree as `condition` but restricted to `event.*` fields |
@@ -231,7 +231,7 @@ const { data, error } = await resend.automations.duplicate('aut_abc123');
 | Creating without a trigger step | Every automation needs at least one step with `type: "trigger"` |
 | Updating steps without connections (or vice versa) | When changing the graph, provide both `steps` and `connections` together |
 | Using `ref` or `edges` (old naming) | Use `key` for step identifiers and `connections` for links between steps |
-| Using `template_id` in send_email config | Use `template: { id: "..." }` — template is a nested object |
-| Using `seconds` in delay config (old naming) | Use `duration` (e.g. `"30 minutes"`) — `seconds` is no longer accepted |
-| Forgetting to enable the automation | Automations default to `disabled` — set `status: "enabled"` on create or update |
-| Not checking `error` in Node.js | SDK returns `{ data, error }`, does not throw — always destructure and check |
+| Using `template_id` in send_email config | Use `template: { id: "..." }` - template is a nested object |
+| Using `seconds` in delay config (old naming) | Use `duration` (e.g. `"30 minutes"`) - `seconds` is no longer accepted |
+| Forgetting to enable the automation | Automations default to `disabled` - set `status: "enabled"` on create or update |
+| Not checking `error` in Node.js | SDK returns `{ data, error }`, does not throw - always destructure and check |

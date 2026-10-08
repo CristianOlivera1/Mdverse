@@ -27,7 +27,7 @@ unavailable or fails, do not use that file as evidence.
 2. Reconstruct the strongest source-visible validation, identity, authorization,
    normalization, lifecycle, framework, and containment controls on the path.
    Where the architecture summary names a comparable baseline, note whether it
-   shares the pattern — as calibration, never as grounds to dismiss.
+   shares the pattern - as calibration, never as grounds to dismiss.
 3. For a proposed confirmed candidate, independently reproduce the minimum observed
    result when possible. Verify inputs, interface shape, conditions, and affected
    dummy principal/resource. Do not infer a stronger result or continue after it.

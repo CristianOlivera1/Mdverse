@@ -2,7 +2,7 @@
 
 ## Overview
 
-After sending, emails can be retrieved, listed, rescheduled, cancelled, or shared. Updates are limited to `scheduled_at` only — content cannot be changed after creation.
+After sending, emails can be retrieved, listed, rescheduled, cancelled, or shared. Updates are limited to `scheduled_at` only - content cannot be changed after creation.
 
 ## SDK Methods
 
@@ -12,7 +12,7 @@ After sending, emails can be retrieved, listed, rescheduled, cancelled, or share
 |-----------|--------|-------|
 | Get | `resend.emails.get(id)` | Returns full email details and status |
 | List | `resend.emails.list({ limit, offset })` | Paginated list of sent emails |
-| Update | `resend.emails.update({ id, scheduledAt })` | Reschedule only — no content changes |
+| Update | `resend.emails.update({ id, scheduledAt })` | Reschedule only - no content changes |
 | Cancel | `resend.emails.cancel(id)` | Cancel a scheduled email before it sends |
 | Share | `resend.emails.share(id, { expiresIn })` | Create a public link for a sent or received email; `expiresIn` defaults to and caps at 48h |
 
@@ -22,16 +22,16 @@ After sending, emails can be retrieved, listed, rescheduled, cancelled, or share
 |-----------|--------|
 | Get | `resend.Emails.get(id)` |
 | List | `resend.Emails.list(params)` |
-| Update | `resend.Emails.update(params)` — params: `{ "id": ..., "scheduled_at": ... }` |
+| Update | `resend.Emails.update(params)` - params: `{ "id": ..., "scheduled_at": ... }` |
 | Cancel | `resend.Emails.cancel(id)` |
-| Share | `resend.Emails.share(email_id, params)` — params: `{ "expires_in": ... }` |
+| Share | `resend.Emails.share(email_id, params)` - params: `{ "expires_in": ... }` |
 
 ## Examples
 
 ### Get Email
 
 ```typescript
-// Node.js — always destructure { data, error }
+// Node.js - always destructure { data, error }
 const { data, error } = await resend.emails.get('email_abc123');
 if (error) {
   console.error(error);
@@ -41,7 +41,7 @@ console.log(data.status); // 'delivered', 'bounced', 'scheduled', etc.
 ```
 
 ```python
-# Python — returns data directly
+# Python - returns data directly
 email = resend.Emails.get("email_abc123")
 print(email["status"])
 ```
@@ -76,11 +76,11 @@ resend.Emails.cancel("email_abc123")
 
 ### Share a Sent or Received Email
 
-Creates a public, unauthenticated link — anyone with the URL can view the email. Works for both sent and received emails; the API detects which type the ID belongs to.
+Creates a public, unauthenticated link - anyone with the URL can view the email. Works for both sent and received emails; the API detects which type the ID belongs to.
 
 ```typescript
 const { data, error } = await resend.emails.share('email_abc123', {
-  expiresIn: '2 hours', // optional — human-readable duration, defaults to and caps at 48h
+  expiresIn: '2 hours', // optional - human-readable duration, defaults to and caps at 48h
 });
 if (error) {
   console.error(error);
@@ -160,7 +160,7 @@ const buffer = await response.arrayBuffer();
 
 Account-level email delivery and engagement metrics (sent, delivered, bounced, opened, clicked, etc.) for a date range. With no options, returns totals only. Optionally broken down by one or more dimensions: `period`, `domain`, `email`, `broadcast`.
 
-`email` and `broadcast` are mutually exclusive — as dimensions, and as filters (`emailId`/`broadcastId`). Requesting both, in either form, is rejected.
+`email` and `broadcast` are mutually exclusive - as dimensions, and as filters (`emailId`/`broadcastId`). Requesting both, in either form, is rejected.
 
 ### SDK Methods
 
@@ -175,9 +175,9 @@ Account-level email delivery and engagement metrics (sent, delivered, bounced, o
 | `startDate` / `start_date` | string | ISO 8601 date or datetime. Defaults to 6 days before `endDate` |
 | `endDate` / `end_date` | string | ISO 8601 date or datetime. Defaults to now |
 | `timezone` | string | IANA timezone, e.g. `America/New_York`. Defaults to UTC |
-| `granularity` | string | `hourly`, `daily`, `weekly`, or `monthly` — bucket size when `period` is a dimension. Defaults to `daily` |
+| `granularity` | string | `hourly`, `daily`, `weekly`, or `monthly` - bucket size when `period` is a dimension. Defaults to `daily` |
 | `metrics` | string[] | Which metrics to include. Defaults to all |
-| `dimensions` | string[] | `period`, `domain`, `email`, `broadcast` — combinable except `email`+`broadcast` |
+| `dimensions` | string[] | `period`, `domain`, `email`, `broadcast` - combinable except `email`+`broadcast` |
 | `domainId` / `domain_id` | string[] | Restrict to these sending domain IDs (max 100) |
 | `emailId` / `email_id` | string[] | Restrict to these email IDs (max 100). Cannot combine with `broadcast` dimension/`broadcastId` |
 | `broadcastId` / `broadcast_id` | string[] | Restrict to these broadcast IDs (max 100). Cannot combine with `email` dimension/`emailId` |
@@ -238,12 +238,12 @@ for row in metrics.get("data", []):
 
 | Mistake | Fix |
 |---------|-----|
-| Trying to update `subject`, `html`, or `to` | Only `scheduledAt` can be updated — cancel and resend for content changes |
+| Trying to update `subject`, `html`, or `to` | Only `scheduledAt` can be updated - cancel and resend for content changes |
 | Cancelling an already-sent email | Cancel only works on emails with `scheduled` status |
-| Cancelling too late | Cancel before the `scheduled_at` time — there's a brief processing window before send |
-| Not checking `error` in Node.js | SDK returns `{ data, error }`, does not throw — always destructure and check |
+| Cancelling too late | Cancel before the `scheduled_at` time - there's a brief processing window before send |
+| Not checking `error` in Node.js | SDK returns `{ data, error }`, does not throw - always destructure and check |
 | Using `.list()` without pagination | Pass `limit` and `offset` to paginate through results |
-| Combining `email` and `broadcast` in metrics | These are mutually exclusive as dimensions and as filters — the request is rejected |
+| Combining `email` and `broadcast` in metrics | These are mutually exclusive as dimensions and as filters - the request is rejected |
 | Expecting `unique_opened`/`open_rate`-style metrics without tracking enabled | Open/click tracking must be enabled on the sending domain for these to be meaningful |
-| Assuming a longer `expiresIn` is possible | 48 hours is the maximum — requesting more returns a validation error |
-| Treating share links as revocable | There's no revoke endpoint — the link is valid until it expires, no early invalidation |
+| Assuming a longer `expiresIn` is possible | 48 hours is the maximum - requesting more returns a validation error |
+| Treating share links as revocable | There's no revoke endpoint - the link is valid until it expires, no early invalidation |

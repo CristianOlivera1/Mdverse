@@ -1,6 +1,6 @@
 # Topics
 
-Fine-grained subscription preferences — contacts opt in or out per topic. Topics control which contacts receive broadcasts when `topicId` is set.
+Fine-grained subscription preferences - contacts opt in or out per topic. Topics control which contacts receive broadcasts when `topicId` is set.
 
 ## SDK Methods
 
@@ -10,9 +10,9 @@ Fine-grained subscription preferences — contacts opt in or out per topic. Topi
 |-----------|--------|
 | Create | `resend.topics.create(params)` |
 | Get | `resend.topics.get(id)` |
-| List | `resend.topics.list()` — no pagination params |
+| List | `resend.topics.list()` - no pagination params |
 | Update | `resend.topics.update(params)` |
-| Delete | `resend.topics.remove(id)` — not `.delete()` |
+| Delete | `resend.topics.remove(id)` - not `.delete()` |
 
 ### Python
 
@@ -20,7 +20,7 @@ Fine-grained subscription preferences — contacts opt in or out per topic. Topi
 |-----------|--------|
 | Create | `resend.Topics.create(params)` |
 | Get | `resend.Topics.get(id)` |
-| List | `resend.Topics.list(params?)` — `limit`, `after`, `before` |
+| List | `resend.Topics.list(params?)` - `limit`, `after`, `before` |
 | Update | `resend.Topics.update(id, params)` |
 | Delete | `resend.Topics.remove(id)` |
 
@@ -74,7 +74,7 @@ await resend.contacts.topics.update({
 
 ## Using Topics with Broadcasts
 
-Pass `topicId` when creating a broadcast — only contacts subscribed to that topic receive it:
+Pass `topicId` when creating a broadcast - only contacts subscribed to that topic receive it:
 
 ```typescript
 await resend.broadcasts.create({
@@ -93,15 +93,15 @@ await resend.broadcasts.create({
 |------------|-------|
 | Name max length | 50 characters |
 | Description max length | 200 characters |
-| `defaultSubscription` | `"opt_in"` or `"opt_out"` — immutable after create |
+| `defaultSubscription` | `"opt_in"` or `"opt_out"` - immutable after create |
 | `visibility` | `"public"` (shown on the unsubscribe page) or `"private"` (default) |
 
 ## Common Mistakes
 
 | Mistake | Fix |
 |---------|-----|
-| Omitting `defaultSubscription` on create | Required — must be `"opt_in"` or `"opt_out"` |
-| Trying to change `defaultSubscription` | Immutable after creation — delete and recreate with new value |
+| Omitting `defaultSubscription` on create | Required - must be `"opt_in"` or `"opt_out"` |
+| Trying to change `defaultSubscription` | Immutable after creation - delete and recreate with new value |
 | Calling `.delete()` | SDK method is `.remove()` |
-| `visibility: "hidden"` | Not a valid value — use `"private"` |
+| `visibility: "hidden"` | Not a valid value - use `"private"` |
 | Broadcast without `topicId` | Goes to all contacts in segment regardless of topic preferences |

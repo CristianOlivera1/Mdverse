@@ -18,14 +18,14 @@ Create, list, update, and delete API keys programmatically. No get endpoint exis
 **Optional:** `permission`, `domainId`
 
 - `permission`: `"full_access"` (default) or `"sending_access"`
-- `domainId`: only applies when `permission` is `"sending_access"` — scopes the key to a single domain
+- `domainId`: only applies when `permission` is `"sending_access"` - scopes the key to a single domain
 - `name`: max 50 characters
 
 ## Update Parameters
 
 **Required:** `name`
 
-Only `name` can be changed. `permission` and `domainId` are fixed at creation — recreate the key to change either.
+Only `name` can be changed. `permission` and `domainId` are fixed at creation - recreate the key to change either.
 
 ## Examples
 
@@ -97,12 +97,12 @@ resend.ApiKeys.remove("api_key_id")
 
 | Mistake | Fix |
 |---------|-----|
-| Not storing the token on create | The token is returned **once** — store it immediately |
-| Expecting a get endpoint | Doesn't exist — list returns metadata only (no tokens) |
-| Trying to update `permission` or `domainId` | Only `name` can be patched — recreate the key to change scope |
+| Not storing the token on create | The token is returned **once** - store it immediately |
+| Expecting a get endpoint | Doesn't exist - list returns metadata only (no tokens) |
+| Trying to update `permission` or `domainId` | Only `name` can be patched - recreate the key to change scope |
 | Setting `domainId` with `full_access` | `domainId` only applies to `sending_access` keys |
 | Calling `.delete()` instead of `.remove()` | Node.js SDK uses `.remove()` for all delete operations |
-| Ignoring `error` return | Node.js SDK returns `{ data, error }` — always check `error` |
+| Ignoring `error` return | Node.js SDK returns `{ data, error }` - always check `error` |
 | Name over 50 characters | `name` has a 50-character limit |
 
 ## Response Fields

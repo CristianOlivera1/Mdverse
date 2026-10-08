@@ -84,19 +84,19 @@ const { data, error } = await resend.broadcasts.update('bc_abc123', {
   subject: 'Updated subject line',
 });
 
-// Cancel a queued or scheduled broadcast — stops a queued send mid-flight, or
+// Cancel a queued or scheduled broadcast - stops a queued send mid-flight, or
 // reverts a scheduled one to draft. Does not remove the broadcast.
 const { data, error } = await resend.broadcasts.cancel('bc_abc123');
 
-// Duplicate — creates a new draft named "<name> (copy)" with the same content.
+// Duplicate - creates a new draft named "<name> (copy)" with the same content.
 // Works on any broadcast, including sent ones. Returns the new broadcast's id.
 const { data, error } = await resend.broadcasts.duplicate('bc_abc123');
 
-// Delete — draft or scheduled only (deleting a scheduled broadcast also
+// Delete - draft or scheduled only (deleting a scheduled broadcast also
 // cancels its delivery). Sent broadcasts cannot be deleted.
 const { data, error } = await resend.broadcasts.remove('bc_abc123');
 
-// Clicked links — ranked by total clicks, paginated with cursors
+// Clicked links - ranked by total clicks, paginated with cursors
 const { data, error } = await resend.broadcasts.clickedLinks('bc_abc123', { limit: 10 });
 ```
 
@@ -161,10 +161,10 @@ Use triple-mustache with a pipe for fallbacks: `{{{PROPERTY_KEY|fallback}}}`
 | Deleting a sent broadcast | Only draft or scheduled broadcasts can be deleted |
 | Cancelling a draft or sent broadcast | Only queued or scheduled broadcasts can be cancelled |
 | Using `.remove()` when you just want to stop delivery | `.cancel()` stops/reverts without deleting the broadcast; `.remove()` deletes it entirely |
-| Missing `segmentId` | Required — broadcasts target segments, not all contacts |
+| Missing `segmentId` | Required - broadcasts target segments, not all contacts |
 | Missing unsubscribe link | Include `{{{RESEND_UNSUBSCRIBE_URL}}}` in HTML |
 | `{{VAR}}` instead of `{{{VAR}}}` | Triple braces required for variable interpolation |
-| Ignoring `error` return | Node.js SDK returns `{ data, error }` — always check `error` |
+| Ignoring `error` return | Node.js SDK returns `{ data, error }` - always check `error` |
 | `scheduledAt` format confusion | Accepts both ISO 8601 (`2025-03-15T10:00:00Z`) and natural language (`in 1 hour`) |
-| Treating clicked links' `id` as an entity ID | It's an opaque pagination cursor for that row — use it with `after`/`before`, not to look up the link elsewhere |
-| Passing `bounceType` with a non-`bounced` type | Rejected with a 422 — only meaningful when `type: 'bounced'` |
+| Treating clicked links' `id` as an entity ID | It's an opaque pagination cursor for that row - use it with `after`/`before`, not to look up the link elsewhere |
+| Passing `bounceType` with a non-`bounced` type | Rejected with a 422 - only meaningful when `type: 'bounced'` |

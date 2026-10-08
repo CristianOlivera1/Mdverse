@@ -18,7 +18,7 @@ Contacts represent email recipients stored in Resend. They support custom proper
 
 ### Python
 
-`resend.Contacts.create/get/list/update/remove` — same operations with snake_case params (e.g., `first_name`, `last_name`, `segment_id`).
+`resend.Contacts.create/get/list/update/remove` - same operations with snake_case params (e.g., `first_name`, `last_name`, `segment_id`).
 
 ## Create Contact
 
@@ -68,7 +68,7 @@ resend.Contacts.Segments.add({"contact_id": contact["id"], "segment_id": "seg_ab
 // Get by email (alternative: pass { id: 'contact_uuid' })
 const { data, error } = await resend.contacts.get({ email: 'alice@example.com' });
 
-// Update by email — change properties, set a property to null to delete it
+// Update by email - change properties, set a property to null to delete it
 const { data: updated, error: updateErr } = await resend.contacts.update({
   email: 'alice@example.com',
   firstName: 'Alicia',
@@ -82,7 +82,7 @@ const { data: updated, error: updateErr } = await resend.contacts.update({
 ## Delete and List
 
 ```typescript
-// Delete by ID or email — pick one
+// Delete by ID or email - pick one
 const { data, error } = await resend.contacts.remove({ email: 'alice@example.com' });
 
 // List with segment filter
@@ -101,7 +101,7 @@ Import many contacts at once from a CSV file (`POST /contacts/imports`, `multipa
 | Operation | Method | Notes |
 |-----------|--------|-------|
 | Create | `resend.contacts.imports.create({ file, columnMap?, onConflict?, segments?, topics? })` | `file` is a `Blob`/`File` (CSV). Returns `{ id }` |
-| Get | `resend.contacts.imports.get(id)` | Status + counts. `id` is a positional string — not `{ id }` |
+| Get | `resend.contacts.imports.get(id)` | Status + counts. `id` is a positional string - not `{ id }` |
 | List | `resend.contacts.imports.list({ limit?, after?, before?, status? })` | `status` filters by `queued` / `in_progress` / `completed` / `failed` |
 
 ```typescript
@@ -120,7 +120,7 @@ if (error) {
   return;
 }
 
-// Imports are async — poll until processing finishes
+// Imports are async - poll until processing finishes
 const { data: imp } = await resend.contacts.imports.get(data.id);
 console.log(imp.status, imp.counts);
 // e.g. 'completed' { total: 1200, created: 800, updated: 300, skipped: 75, failed: 25 }
@@ -131,7 +131,7 @@ const { data: imports } = await resend.contacts.imports.list({ status: 'complete
 
 ### CSV columns
 
-Without `columnMap`, columns are matched by the lowercase names `email` (required), `first_name`, `last_name`, `unsubscribed` — **matching is case-sensitive**, so a CSV with `Email` / `First Name` headers returns `422 validation_error` ("CSV missing required email column"). Map non-standard headers explicitly:
+Without `columnMap`, columns are matched by the lowercase names `email` (required), `first_name`, `last_name`, `unsubscribed` - **matching is case-sensitive**, so a CSV with `Email` / `First Name` headers returns `422 validation_error` ("CSV missing required email column"). Map non-standard headers explicitly:
 
 ```typescript
 await resend.contacts.imports.create({
@@ -163,12 +163,12 @@ curl -X POST 'https://api.resend.com/contacts/imports' \
 
 | Mistake | Fix |
 |---------|-----|
-| Passing both `id` and `email` to get/update/remove | Use one or the other — not both |
-| Using `audienceId` (Node.js) | Segments replaced audiences — use `segmentId`. Python SDK still uses `audience_id` in create params |
+| Passing both `id` and `email` to get/update/remove | Use one or the other - not both |
+| Using `audienceId` (Node.js) | Segments replaced audiences - use `segmentId`. Python SDK still uses `audience_id` in create params |
 | Calling `.delete()` | SDK method is `.remove()` |
 | Expecting property deletion with empty string | Set property value to `null` to delete it |
-| Not checking `error` in Node.js | SDK returns `{ data, error }`, does not throw — always destructure and check |
-| Forgetting `email` is required on create | `email` is the only required field — all others are optional |
-| CSV import returns 422 "missing required email column" | Column matching is case-sensitive lowercase (`email`, `first_name`, `last_name`) — pass `columnMap` for headers like `Email` / `First Name` |
+| Not checking `error` in Node.js | SDK returns `{ data, error }`, does not throw - always destructure and check |
+| Forgetting `email` is required on create | `email` is the only required field - all others are optional |
+| CSV import returns 422 "missing required email column" | Column matching is case-sensitive lowercase (`email`, `first_name`, `last_name`) - pass `columnMap` for headers like `Email` / `First Name` |
 | Calling `imports.get({ id })` | `imports.get(id)` takes a positional string, unlike `contacts.get({ id })` |
-| Treating an import as synchronous | `create` returns an id immediately — poll `imports.get(id)` until `status` is `completed` |
+| Treating an import as synchronous | `create` returns an id immediately - poll `imports.get(id)` until `status` is `completed` |

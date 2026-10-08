@@ -1,6 +1,6 @@
 # Contact Properties
 
-Define custom properties that can be set on contacts and interpolated in broadcast HTML. Properties are account-wide — they apply across all segments.
+Define custom properties that can be set on contacts and interpolated in broadcast HTML. Properties are account-wide - they apply across all segments.
 
 ## SDK Methods
 
@@ -18,8 +18,8 @@ Define custom properties that can be set on contacts and interpolated in broadca
 
 **Optional:** `fallbackValue`
 
-- `type`: `"string"` or `"number"` — **immutable** after creation
-- `key`: alphanumeric + underscores, max 50 chars — **immutable** after creation
+- `type`: `"string"` or `"number"` - **immutable** after creation
+- `key`: alphanumeric + underscores, max 50 chars - **immutable** after creation
 - `fallbackValue`: used when a contact lacks a value for this property (must match `type`)
 
 ## Node.js Example
@@ -102,10 +102,10 @@ The fallback after the pipe overrides the property-level `fallbackValue` for tha
 
 | Mistake | Fix |
 |---------|-----|
-| Trying to change `key` or `type` after creation | Both are immutable — delete and recreate if wrong |
+| Trying to change `key` or `type` after creation | Both are immutable - delete and recreate if wrong |
 | Updating fields other than `fallbackValue` | Only `fallbackValue` can be updated via the API |
 | `fallbackValue` type mismatch | Must match the property `type` (string value for string property, number for number) |
 | `{{VAR}}` instead of `{{{VAR}}}` in broadcast HTML | Triple braces required |
 | Special characters in key | Only alphanumeric characters and underscores allowed |
 | Calling `.delete()` instead of `.remove()` | Node.js SDK uses `.remove()` for all delete operations |
-| Ignoring `error` return | Node.js SDK returns `{ data, error }` — always check `error` |
+| Ignoring `error` return | Node.js SDK returns `{ data, error }` - always check `error` |
