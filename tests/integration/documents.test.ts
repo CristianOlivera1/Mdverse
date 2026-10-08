@@ -5,7 +5,7 @@
  *
  * Row level security, the `revision` trigger and the history trigger are Postgres
  * behaviour, so the honest way to test them is to reach the live project with real
- * identities — exactly the path the app takes through PostgREST. Two throwaway
+ * identities - exactly the path the app takes through PostgREST. Two throwaway
  * accounts are created (confirmed, never emailed) and deleted in `afterAll`.
  *
  * Without usable keys in `.env` the whole suite is skipped, never failed.

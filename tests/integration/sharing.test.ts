@@ -160,7 +160,7 @@ describe.skipIf(!env)('sharing (live project)', () => {
       await inviteCollaborator(guest, { documentId, email: guestEmail, role: 'editor' }),
     ).toEqual({ ok: false, reason: 'forbidden' });
 
-    // The owner can. The guest joins as a reader — which is also the interesting
+    // The owner can. The guest joins as a reader - which is also the interesting
     // case below: reaching a document is not managing it.
     expect(
       await inviteCollaborator(owner, { documentId, email: guestEmail, role: 'reader' }),

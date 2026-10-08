@@ -6,8 +6,8 @@
  * Phase 4's live collaboration is not something a unit test can prove: it depends
  * on the project having Realtime enabled, on `public.documents` being part of the
  * `supabase_realtime` publication, and on Realtime re-checking the subscriber's
- * SELECT policy. So this suite opens two real channels — the owner and a
- * collaborator — and waits for what the browser would wait for:
+ * SELECT policy. So this suite opens two real channels - the owner and a
+ * collaborator - and waits for what the browser would wait for:
  *
  *   1. presence: each side sees the other, with the name it announced;
  *   2. `postgres_changes`: a save made by one client arrives at the other;
@@ -15,7 +15,7 @@
  *
  * Before those, the first test only proves that the project streams at all, and
  * retries while the server has no listener for the table yet. Right after
- * `public.documents` joins the publication — or after the project has sat idle —
+ * `public.documents` joins the publication - or after the project has sat idle -
  * a subscription that arrived before the listener existed never fires, and
  * joining again is what fixes it: the sharing migration was applied and this
  * suite then waited 25s for an event that could not arrive yet. Paying that cost
@@ -238,7 +238,7 @@ describe.skipIf(!env)('realtime (live project)', () => {
   it('streams a save made by one client to the other', async () => {
     // A `postgres_changes` handler has to be attached *before* `subscribe()`:
     // realtime refuses to add one to a channel that has already joined. So this
-    // test opens its own channel rather than reusing the presence one — the topic
+    // test opens its own channel rather than reusing the presence one - the topic
     // is arbitrary, because the row is authorized with the subscriber's token,
     // not with the topic name.
     const watcher = collaborator.channel(`doc:${documentId}:watch`);

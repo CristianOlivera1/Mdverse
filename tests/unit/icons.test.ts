@@ -5,11 +5,11 @@
  * `astro.config.mjs` spreads into the plugin's `include` map. Anything left out
  * is dropped *silently*: no build error, no lint error, no type error. With
  * `output: 'server'` the failed lookup aborts the render of the page it is on,
- * and the response is a `200 OK` with an empty body — a blank window that looks
+ * and the response is a `200 OK` with an empty body - a blank window that looks
  * like a broken app rather than a missing icon.
  *
- * That is why this file exists: it turns both halves of the contract — the name
- * is declared, and the declared collection is installed — into failures with a
+ * That is why this file exists: it turns both halves of the contract - the name
+ * is declared, and the declared collection is installed - into failures with a
  * file name attached.
  */
 
@@ -27,7 +27,7 @@ const ICONIFY_DIR = fileURLToPath(new URL('../../node_modules/@iconify-json', im
 /**
  * Literal `name="set:icon"` attributes *of an icon component*: the only form we
  * can resolve statically. The component name is part of the pattern because
- * `name` is not ours alone — `<meta name="twitter:card">` is not an icon, and a
+ * `name` is not ours alone - `<meta name="twitter:card">` is not an icon, and a
  * guard that flags it is a guard someone turns off.
  */
 const ICON_ATTRIBUTE = /<(?:Icon|Iconify)\b[^>]*?\bname="([a-z0-9-]+):([a-z0-9-]+)"/g;

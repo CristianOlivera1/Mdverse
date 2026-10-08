@@ -36,8 +36,8 @@ locally afterwards.
 
 Do **not** paste the design DDL from the plan: it documents the shape of the
 schema, not the security that goes with it. Pasting it creates tables with row
-level security enabled but **no policies**, which fails closed — the owner cannot
-read even their own rows — and the application looks broken for reasons that are
+level security enabled but **no policies**, which fails closed - the owner cannot
+read even their own rows - and the application looks broken for reasons that are
 invisible in the dashboard.
 
 Every migration is written to be re-runnable and to reconcile a hand-made schema
@@ -47,8 +47,8 @@ so applying the files on top of a database built by hand fixes it in place.
 ## Verifying security
 
 `pnpm db:rls` creates two throwaway accounts (confirmed, never emailed), acts as
-owners, collaborators and anonymous visitors through the Data API — the same path
-a browser takes — and deletes them afterwards. It needs no database password and
+owners, collaborators and anonymous visitors through the Data API - the same path
+a browser takes - and deletes them afterwards. It needs no database password and
 no CLI: only the three keys already in `.env`.
 
 ```
@@ -79,7 +79,7 @@ being sent.
 
 - Never commit real keys; `.env` is git-ignored and production values live in the
   Cloudflare dashboard.
-- Grant the _secret_ key (`SUPABASE_SECRET_KEY`) only to server code — it bypasses
+- Grant the _secret_ key (`SUPABASE_SECRET_KEY`) only to server code - it bypasses
   RLS.
 - Run `pnpm db:advisors` before every deploy; a missing RLS policy is a silent
   data leak.

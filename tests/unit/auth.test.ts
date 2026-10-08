@@ -380,7 +380,7 @@ describe('checkPassword', () => {
 
   it('rejects a missing confirmation from the form (form.get returns null, never undefined)', () => {
     // Regression: the signup route reads `form.get('confirm_password')`, which
-    // is `null` — not `undefined` — when the field is absent from the POST
+    // is `null` - not `undefined` - when the field is absent from the POST
     // body. That must reject as a mismatch, never slip through as valid.
     expect(checkPassword('markdown1', 'markdown1')).toEqual({ ok: true, problem: null });
     expect(checkPassword('markdown1', null)).toEqual({ ok: false, problem: 'mismatch' });

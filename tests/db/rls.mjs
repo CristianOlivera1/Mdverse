@@ -6,8 +6,8 @@
  * Why a script and not a unit test: RLS is enforced by Postgres, so the only
  * honest way to test it is to reach the project with several identities and watch
  * what each of them can actually do. The suite therefore creates two throwaway
- * accounts (confirmed, never emailed), acts as each one through the Data API —
- * exactly the path a browser takes — and deletes them when it finishes.
+ * accounts (confirmed, never emailed), acts as each one through the Data API -
+ * exactly the path a browser takes - and deletes them when it finishes.
  *
  * It needs the keys already in `.env`:
  *   PUBLIC_SUPABASE_URL, PUBLIC_SUPABASE_PUBLISHABLE_KEY (anon role),
@@ -25,7 +25,7 @@
  * editor taking the document outright. The second and third regress silently:
  * the first version of the schema was pasted from the plan, whose example update
  * policy is *another* name with an unguarded `with check`, and permissive
- * policies are OR-ed — so a hand-made policy kept answering yes while ours sat
+ * policies are OR-ed - so a hand-made policy kept answering yes while ours sat
  * next to it, unread, and re-applying the migrations changed nothing. They are
  * pinned here rather than only in the plan.
  */
@@ -50,7 +50,7 @@ function readEnv() {
   try {
     raw = readFileSync(new URL('../../.env', import.meta.url), 'utf8');
   } catch {
-    throw new Error('Missing .env — copy .env.example and fill in the Supabase keys.');
+    throw new Error('Missing .env - copy .env.example and fill in the Supabase keys.');
   }
 
   for (const line of raw.split(/\r?\n/)) {
@@ -262,7 +262,7 @@ async function main() {
     });
     // Two outcomes are both correct, and both are checked: Postgres either
     // refuses the write (`42501`, new row violates the policy) or filters the row
-    // out silently. Anything else — a 200 that reassigned the owner — is a fail.
+    // out silently. Anything else - a 200 that reassigned the owner - is a fail.
     const stealRefused = steal.status >= 400 && steal.body?.code === '42501';
     const stealNoop =
       Array.isArray(steal.body) && (steal.body.length === 0 || steal.body[0].owner_id === owner.id);
@@ -282,7 +282,7 @@ async function main() {
     // 3b. The invite RPC is SECURITY DEFINER, so it is the one door RLS does not
     //     stand behind: it has to refuse the caller itself. For an account with no
     //     relation to the document `private.can_manage_document` answers NULL (not
-    //     false), and a PL/pgSQL `if not <null>` is simply not taken — which is how
+    //     false), and a PL/pgSQL `if not <null>` is simply not taken - which is how
     //     any signed-in visitor used to be able to make themselves an editor by
     //     knowing a document id. The guard asks `is not true`.
     const selfInvite = await stranger.client.rest('rpc/invite_collaborator', {
@@ -297,7 +297,7 @@ async function main() {
       'a stranger cannot invite themselves into a document',
       selfInvite.status >= 400 && selfInvite.body?.code === '42501',
       selfInvite.body?.code === 'PGRST202'
-        ? `${selfInvite.status} — invite_collaborator is missing: apply supabase/migrations/20261006140000_sharing.sql`
+        ? `${selfInvite.status} - invite_collaborator is missing: apply supabase/migrations/20261006140000_sharing.sql`
         : `${selfInvite.status} ${JSON.stringify(selfInvite.body)}`,
     );
 
@@ -358,7 +358,7 @@ async function main() {
     });
     // The hover of the whole phase: an editor edits the text, publishing is the
     // owner's call. `with check` compares the new visibility against the stored
-    // one, so this has to be refused — and the stored value must survive.
+    // one, so this has to be refused - and the stored value must survive.
     const publish = await stranger.client.rest(`documents?id=eq.${document.id}`, {
       method: 'PATCH',
       headers: { Prefer: 'return=representation' },
@@ -380,7 +380,7 @@ async function main() {
 
     // The editor cannot take the document either. This is not a second way of
     // saying the same thing: the first version of the schema was pasted from the
-    // plan, whose example policy pinned `owner_id = auth.uid()` — so a hand-made
+    // plan, whose example policy pinned `owner_id = auth.uid()` - so a hand-made
     // policy left in the database next to ours (permissive policies are OR-ed)
     // says yes to exactly this write. Measured on the live project: an editor
     // took the document and published it while `documents_update_editor` sat
@@ -659,7 +659,7 @@ async function main() {
 
   const failed = results.filter((result) => !result.ok);
   console.log(
-    `\n${results.length - failed.length}/${results.length} checks passed${failed.length > 0 ? ` — FAILED: ${failed.map((f) => f.label).join('; ')}` : ''}\n`,
+    `\n${results.length - failed.length}/${results.length} checks passed${failed.length > 0 ? ` - FAILED: ${failed.map((f) => f.label).join('; ')}` : ''}\n`,
   );
 
   return failed.length === 0;

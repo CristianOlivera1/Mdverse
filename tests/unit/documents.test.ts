@@ -43,7 +43,7 @@ describe('documentAccess', () => {
     );
   });
 
-  it('falls back to reader — the least privileged role — when no row exists', () => {
+  it('falls back to reader - the least privileged role - when no row exists', () => {
     expect(documentAccess({ ownerId: 'a', viewerId: 'b' })).toBe('reader');
     expect(documentAccess({ ownerId: 'a', viewerId: 'b', collaboratorRole: null })).toBe('reader');
   });

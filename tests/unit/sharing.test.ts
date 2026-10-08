@@ -4,8 +4,8 @@ import {
   dashboardFeedbackUrl,
   isDocumentErrorCode,
   shareFailureCode,
+  shareFeedbackParams,
   shareNotice,
-  sharePageUrl,
 } from '../../src/lib/documents/messages';
 import {
   canEdit,
@@ -202,13 +202,10 @@ describe('sharing notices', () => {
     }
   });
 
-  it('builds the feedback URL without leaking anything but codes and counts', () => {
-    const url = sharePageUrl('doc-1', { invited: 2, invalid: 1 });
-    expect(url).toBe('/documents/doc-1/share?invited=2&invalid=1');
-    expect(sharePageUrl('doc-1')).toBe('/documents/doc-1/share');
-    expect(sharePageUrl('doc/1', { error: 'forbidden' })).toBe(
-      '/documents/doc%2F1/share?error=forbidden',
-    );
+  it('keeps the feedback payload to codes and counts', () => {
+    expect(shareFeedbackParams({ invited: 2, invalid: 1 }).toString()).toBe('invited=2&invalid=1');
+    expect(shareFeedbackParams().toString()).toBe('');
+    expect(shareFeedbackParams({ error: 'forbidden' }).toString()).toBe('error=forbidden');
   });
 
   it('leaves the dashboard catalog untouched', () => {
