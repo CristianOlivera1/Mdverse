@@ -33,13 +33,11 @@ export const POST: APIRoute = async (context) => {
     context.redirect(authFeedbackUrl({ to: SIGNUP_PATH, error, next, email }));
   const success = () => context.redirect(loginFeedbackUrl({ sent: 'confirm', next, email }));
 
-  // Honeypot: answer with the exact success shape without creating anything.
   if (isHoneypotFilled(form.get(HONEYPOT_FIELD))) {
     console.warn('[auth] honeypot signup ignored');
     return success();
   }
 
-  // Env-gated Turnstile: skipped until TURNSTILE_SECRET_KEY is provisioned.
   const turnstile = await maybeVerifyTurnstile(form.get(TURNSTILE_FIELD), TURNSTILE_SECRET_KEY);
   if (!turnstile.ok) {
     const attempt = authAttemptFor('signup', context.request, email || null);
@@ -74,24 +72,14 @@ export const POST: APIRoute = async (context) => {
 
   if (error) {
     if (isAlreadyRegistered(error)) {
-      // Anti-enumeration: an address that already has an account gets the SAME
-      // success redirect as a fresh sign-up, and no `email_taken` code is
-      // emitted here anymore. No email is sent on this path either, so an
-      // attacker cannot turn our Resend budget into an oracle or a spam
-      // cannon against someone else's address. Legitimate users who forgot
-      // they signed up still land on "check your inbox" and can recover
-      // through sign-in or forgot-password.
       return success();
     }
     console.warn('[auth] sign-up failed:', error.message);
     return fail('signup_failed');
   }
 
-  // Session present means email confirmation is disabled - user is already in.
   if (data.session) return context.redirect(next);
 
-  // No session → email confirmation is required.
-  // Use the admin client to generate the confirmation link and send it via Resend.
   const admin = createAdminSupabaseClient();
   if (admin) {
     try {
@@ -106,10 +94,6 @@ export const POST: APIRoute = async (context) => {
         console.warn('[auth] generateLink (signup) failed:', linkError.message);
       } else {
         const confirmUrl = (linkData as { properties: { action_link: string } }).properties.action_link;
-        // Lazy import: the React email chain must stay out of this route's
-        // static import graph, or `astro dev` 500s the whole route at import
-        // time when the SSR optimizer chokes on it (see the share invite
-        // route). The trailing `.catch` covers the import itself failing.
         keepAlive(
           context,
           import('@/lib/email/sender')

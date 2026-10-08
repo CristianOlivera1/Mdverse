@@ -123,5 +123,23 @@ const NOTICE_TONES = {
       source.addEventListener('input', sync);
       node.addEventListener('input', sync);
     }
+
+    // Submit gating (progressive enhancement): keep every auth POST submit
+    // disabled until the form is natively valid, so typos never burn
+    // rate-limit budget on a round trip the server would reject anyway. The
+    // server stays authoritative — without JS the buttons stay enabled and
+    // every rule is enforced there. Server-disabled (unconfigured) submits
+    // are never re-enabled here.
+    for (const form of document.querySelectorAll('form[method="POST"]')) {
+      if (!(form instanceof HTMLFormElement)) continue;
+      const submit = form.querySelector<HTMLButtonElement>('button[type="submit"]');
+      if (!submit || submit.disabled) continue;
+      const syncSubmit = () => {
+        submit.disabled = !form.checkValidity();
+      };
+      form.addEventListener('input', syncSubmit);
+      form.addEventListener('change', syncSubmit);
+      syncSubmit();
+    }
   </script>
 </Layout>
