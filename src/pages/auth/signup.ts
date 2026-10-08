@@ -6,7 +6,6 @@ import { checkPassword } from '@/lib/auth/password';
 import { isLikelyEmail, normalizeEmail } from '@/lib/auth/profile';
 import { safeRedirectPath } from '@/lib/auth/redirect';
 import { DEFAULT_AUTHENTICATED_PATH } from '@/lib/auth/routes';
-import { sendConfirmEmail } from '@/lib/email/sender';
 import { authCallbackUrl } from '@/lib/supabase/env';
 import { isAlreadyRegistered } from '@/lib/supabase/errors';
 import { createAdminSupabaseClient } from '@/lib/supabase/admin';
@@ -45,7 +44,7 @@ export const POST: APIRoute = async (context) => {
     return fail('signup_failed');
   }
 
-  // Session present means email confirmation is disabled — user is already in.
+  // Session present means email confirmation is disabled - user is already in.
   if (data.session) return context.redirect(next);
 
   // No session → email confirmation is required.
@@ -64,11 +63,18 @@ export const POST: APIRoute = async (context) => {
         console.warn('[auth] generateLink (signup) failed:', linkError.message);
       } else {
         const confirmUrl = (linkData as { properties: { action_link: string } }).properties.action_link;
+        // Lazy import: the React email chain must stay out of this route's
+        // static import graph, or `astro dev` 500s the whole route at import
+        // time when the SSR optimizer chokes on it (see the share invite
+        // route). The trailing `.catch` covers the import itself failing.
         keepAlive(
           context,
-          sendConfirmEmail({ to: email, confirmUrl }).then((sent) => {
-            if (!sent.ok) console.warn('[email] confirm email failed:', sent.error);
-          }),
+          import('@/lib/email/sender')
+            .then((m) => m.sendConfirmEmail({ to: email, confirmUrl }))
+            .then((sent) => {
+              if (!sent.ok) console.warn('[email] confirm email failed:', sent.error);
+            })
+            .catch((err) => console.warn('[email] confirm email could not be sent:', err)),
         );
       }
     } catch (err) {

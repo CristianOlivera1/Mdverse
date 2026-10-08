@@ -3,7 +3,6 @@
 import type { APIRoute } from 'astro';
 
 import { readShareInput, shareFeedbackResponse } from '@/lib/api/sharing';
-import { sendCollaborationInvite } from '@/lib/email/sender';
 import { isDocumentId } from '@/lib/documents/ids';
 import { getDocument, inviteCollaborator } from '@/lib/documents/repository';
 import { isInviteRole, parseInviteEmails } from '@/lib/documents/sharing';
@@ -17,13 +16,13 @@ export const POST: APIRoute = async (context) => {
   if (!isDocumentId(documentId)) return context.redirect('/dashboard?error=not_found');
 
   const input = await readShareInput(context.request);
-  if (!input) return shareFeedbackResponse(context, documentId, { error: 'invite_failed' });
+  if (!input) return shareFeedbackResponse({ error: 'invite_failed' });
 
   const role = input.get('role');
   const { valid, invalid } = parseInviteEmails(input.get('emails'));
 
   if (!isInviteRole(role) || valid.length === 0) {
-    return shareFeedbackResponse(context, documentId, { error: 'email_invalid' });
+    return shareFeedbackResponse({ error: 'email_invalid' });
   }
 
   let documentTitle = 'a document';
@@ -64,24 +63,38 @@ export const POST: APIRoute = async (context) => {
     // Awaited, and counted: `sendCollaborationInvite` reports instead of throwing,
     // so a fire-and-forget call used to hide "the message never left" behind
     // "the account was added".
-    const sent = await sendCollaborationInvite({
-      to: email,
-      documentTitle,
-      inviterName,
-      role,
-      // No account yet => signup; existing account => dashboard.
-      inviteUrl: result.value === 'invited' ? `${siteUrl}/signup` : `${siteUrl}/dashboard`,
-    });
+    //
+    // Lazy import on purpose: the React email chain (`react` / `react-email` /
+    // templates) must never sit in this route's static import graph. In
+    // `astro dev` the SSR optimizer fails to prebundle it and the whole route
+    // 500s at import time - before any invite row is created. Importing after
+    // the DB work lands a broken email stack in `emailsFailed`, never in a 500.
+    let sent: { ok: boolean; error?: string };
+    try {
+      const { sendCollaborationInvite } = await import('@/lib/email/sender');
+      sent = await sendCollaborationInvite({
+        to: email,
+        documentTitle,
+        inviterName,
+        role,
+        // No account yet => signup; existing account => dashboard.
+        inviteUrl: result.value === 'invited' ? `${siteUrl}/signup` : `${siteUrl}/dashboard`,
+      });
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      console.warn('[email] collaboration invite could not be sent:', message);
+      sent = { ok: false, error: message };
+    }
 
     if (sent.ok) emailsSent += 1;
     else emailsFailed += 1;
   }
 
   if (invited === 0 && added === 0 && yours === 0 && failed > 0) {
-    return shareFeedbackResponse(context, documentId, { error: 'invite_failed' });
+    return shareFeedbackResponse({ error: 'invite_failed' });
   }
 
-  return shareFeedbackResponse(context, documentId, {
+  return shareFeedbackResponse({
     invited,
     added,
     yours,

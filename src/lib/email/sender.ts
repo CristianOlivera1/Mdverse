@@ -1,15 +1,3 @@
-/**
- * Email sending helpers — all outbound Resend calls live here.
- *
- * Auth-related emails (confirmation, reset) are sent by Supabase unless
- * overridden via SMTP. The collaboration invite is fully ours: we create
- * the database row AND send the email in the same request.
- *
- * Pattern: never throw — return `{ ok: boolean; error?: string }` so callers
- * can report the truth to the person who pressed the button instead of
- * guessing whether the message left the building.
- */
-
 import * as React from 'react';
 import type { ReactElement } from 'react';
 import { render } from 'react-email';
@@ -29,14 +17,6 @@ interface EmailJob {
   element: ReactElement;
 }
 
-/**
- * The single place that talks to Resend.
- *
- * No idempotency key on purpose: Resend replays the stored response for the same
- * key during 24 hours without sending anything, which turns the re-send a person
- * asks for after "nothing arrived" into a silent no-op that still looks like a
- * success. Duplicate submissions are the UI's job (the buttons disable themselves).
- */
 async function sendEmail(job: EmailJob): Promise<SendResult> {
   try {
     const resend = getResendClient();
@@ -71,15 +51,13 @@ async function sendEmail(job: EmailJob): Promise<SendResult> {
   }
 }
 
-/* ── Collaboration invite ─────────────────────────────────────────────────── */
-
 export interface SendInviteOptions {
   to: string;
   inviteeName?: string | null;
   documentTitle: string;
   inviterName: string;
   role: 'editor' | 'reader';
-  /** URL to send the invitee to — /dashboard or a share-link URL */
+  /** URL to send the invitee to - /dashboard or a share-link URL */
   inviteUrl: string;
 }
 
@@ -98,8 +76,6 @@ export async function sendCollaborationInvite(options: SendInviteOptions): Promi
   });
 }
 
-/* ── Email confirmation ───────────────────────────────────────────────────── */
-
 export interface SendConfirmEmailOptions {
   to: string;
   confirmUrl: string;
@@ -110,15 +86,13 @@ export async function sendConfirmEmail(options: SendConfirmEmailOptions): Promis
   return sendEmail({
     tag: 'confirm email',
     to: options.to,
-    subject: 'Confirm your email address — Mdverse',
+    subject: 'Confirm your email address - Mdverse',
     element: React.createElement(ConfirmEmail, {
       confirmUrl: options.confirmUrl,
       username: options.username,
     }),
   });
 }
-
-/* ── Password reset ───────────────────────────────────────────────────────── */
 
 export interface SendResetPasswordOptions {
   to: string;

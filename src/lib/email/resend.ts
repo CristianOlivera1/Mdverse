@@ -1,7 +1,7 @@
 /**
  * Resend client singleton.
  *
- * All email sending goes through this module — never instantiate Resend directly
+ * All email sending goes through this module - never instantiate Resend directly
  * in route handlers. The client is created lazily so missing env vars only blow
  * up at send time, not at import time (matches the Supabase pattern used here).
  */
