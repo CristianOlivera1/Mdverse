@@ -1,5 +1,6 @@
 import {
   ContentSection,
+  DEFAULT_SITE_URL,
   EmailButton,
   EmailHeading,
   EmailParagraph,
@@ -14,7 +15,7 @@ export interface ConfirmEmailProps {
   siteUrl?: string;
 }
 
-export default function ConfirmEmail({ confirmUrl, username, siteUrl = 'https://mdverse.pages.dev' }: ConfirmEmailProps) {
+export default function ConfirmEmail({ confirmUrl, username, siteUrl = DEFAULT_SITE_URL }: ConfirmEmailProps) {
   const greeting = username ? `Hi ${username},` : 'Hi there,';
 
   return (
@@ -44,7 +45,7 @@ export default function ConfirmEmail({ confirmUrl, username, siteUrl = 'https://
 }
 
 ConfirmEmail.PreviewProps = {
-  confirmUrl: 'https://mdverse.pages.dev/auth/callback?token_hash=abc123&type=signup',
+  confirmUrl: `${DEFAULT_SITE_URL}/auth/callback?token_hash=abc123&type=signup`,
   username: 'john_doe',
-  siteUrl: 'https://mdverse.pages.dev',
+  siteUrl: DEFAULT_SITE_URL,
 } satisfies ConfirmEmailProps;

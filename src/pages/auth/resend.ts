@@ -6,7 +6,7 @@ import { loginFeedbackUrl } from '@/lib/auth/messages';
 import { isLikelyEmail, normalizeEmail } from '@/lib/auth/profile';
 import { safeRedirectPath } from '@/lib/auth/redirect';
 import { DEFAULT_AUTHENTICATED_PATH } from '@/lib/auth/routes';
-import { authCallbackUrl } from '@/lib/supabase/env';
+import { authCallbackUrl, getSiteUrl } from '@/lib/supabase/env';
 import { createAdminSupabaseClient } from '@/lib/supabase/admin';
 
 export const POST: APIRoute = async (context) => {
@@ -41,7 +41,7 @@ export const POST: APIRoute = async (context) => {
         keepAlive(
           context,
           import('@/lib/email/sender')
-            .then((m) => m.sendConfirmEmail({ to: email, confirmUrl }))
+            .then((m) => m.sendConfirmEmail({ to: email, confirmUrl, siteUrl: getSiteUrl() }))
             .then((sent) => {
               if (!sent.ok) console.warn('[email] resend confirm failed:', sent.error);
             })

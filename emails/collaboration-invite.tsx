@@ -2,6 +2,7 @@ import * as React from 'react';
 import { Section, Text } from 'react-email';
 import {
   ContentSection,
+  DEFAULT_SITE_URL,
   EmailButton,
   EmailHeading,
   EmailParagraph,
@@ -41,7 +42,7 @@ export default function CollaborationInviteEmail({
   inviterName,
   role,
   inviteUrl,
-  siteUrl = 'https://mdverse.pages.dev',
+  siteUrl = DEFAULT_SITE_URL,
 }: CollaborationInviteEmailProps) {
   const greeting = inviteeName ? `Hi ${inviteeName},` : 'Hi there,';
   const roleLabel = ROLE_LABELS[role];
@@ -82,8 +83,8 @@ CollaborationInviteEmail.PreviewProps = {
   documentTitle: 'Q4 Product Roadmap',
   inviterName: 'Carlos',
   role: 'editor',
-  inviteUrl: 'https://mdverse.pages.dev/dashboard',
-  siteUrl: 'https://mdverse.pages.dev',
+  inviteUrl: `${DEFAULT_SITE_URL}/dashboard`,
+  siteUrl: DEFAULT_SITE_URL,
 } satisfies CollaborationInviteEmailProps;
 
 /* Document card + quiet bordered role pill (neutral text/border, no color). */

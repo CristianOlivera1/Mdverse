@@ -59,6 +59,8 @@ export interface SendInviteOptions {
   role: 'editor' | 'reader';
   /** URL to send the invitee to - /dashboard or a share-link URL */
   inviteUrl: string;
+  /** Footer link base; falls back to DEFAULT_SITE_URL when omitted */
+  siteUrl?: string;
 }
 
 export async function sendCollaborationInvite(options: SendInviteOptions): Promise<SendResult> {
@@ -72,6 +74,7 @@ export async function sendCollaborationInvite(options: SendInviteOptions): Promi
       inviterName: options.inviterName,
       role: options.role,
       inviteUrl: options.inviteUrl,
+      siteUrl: options.siteUrl,
     }),
   });
 }
@@ -80,6 +83,8 @@ export interface SendConfirmEmailOptions {
   to: string;
   confirmUrl: string;
   username?: string | null;
+  /** Footer link base; falls back to DEFAULT_SITE_URL when omitted */
+  siteUrl?: string;
 }
 
 export async function sendConfirmEmail(options: SendConfirmEmailOptions): Promise<SendResult> {
@@ -90,6 +95,7 @@ export async function sendConfirmEmail(options: SendConfirmEmailOptions): Promis
     element: React.createElement(ConfirmEmail, {
       confirmUrl: options.confirmUrl,
       username: options.username,
+      siteUrl: options.siteUrl,
     }),
   });
 }
@@ -98,6 +104,8 @@ export interface SendResetPasswordOptions {
   to: string;
   resetUrl: string;
   username?: string | null;
+  /** Footer link base; falls back to DEFAULT_SITE_URL when omitted */
+  siteUrl?: string;
 }
 
 export async function sendResetPasswordEmail(
@@ -110,6 +118,7 @@ export async function sendResetPasswordEmail(
     element: React.createElement(ResetPasswordEmail, {
       resetUrl: options.resetUrl,
       username: options.username,
+      siteUrl: options.siteUrl,
     }),
   });
 }

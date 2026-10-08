@@ -13,9 +13,6 @@ import {
   Text,
 } from 'react-email';
 
-/* ─── Theme ──────────────────────────────────────────────────────────────── */
-/* Pure-black minimalism matching the app UI. No gradients, no emojis. */
-
 export const theme = {
   bodyBg: '#000000',
   containerBg: '#0a0a0a',
@@ -33,8 +30,6 @@ export const theme = {
 } as const;
 
 export const DEFAULT_SITE_URL = 'https://mdverse.pages.dev';
-
-/* ─── Shell ──────────────────────────────────────────────────────────────── */
 
 interface EmailShellProps {
   preview: string;

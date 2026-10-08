@@ -2,6 +2,7 @@ import * as React from 'react';
 import { Section, Text } from 'react-email';
 import {
   ContentSection,
+  DEFAULT_SITE_URL,
   EmailButton,
   EmailHeading,
   EmailParagraph,
@@ -20,7 +21,7 @@ export interface ResetPasswordEmailProps {
 export default function ResetPasswordEmail({
   resetUrl,
   username,
-  siteUrl = 'https://mdverse.pages.dev',
+  siteUrl = DEFAULT_SITE_URL,
 }: ResetPasswordEmailProps) {
   const greeting = username ? `Hi ${username},` : 'Hi there,';
 
@@ -59,9 +60,9 @@ export default function ResetPasswordEmail({
 }
 
 ResetPasswordEmail.PreviewProps = {
-  resetUrl: 'https://mdverse.pages.dev/auth/callback?token_hash=abc123&type=recovery',
+  resetUrl: `${DEFAULT_SITE_URL}/auth/callback?token_hash=abc123&type=recovery`,
   username: 'john_doe',
-  siteUrl: 'https://mdverse.pages.dev',
+  siteUrl: DEFAULT_SITE_URL,
 } satisfies ResetPasswordEmailProps;
 
 /* Quiet neutral note — replaces the old amber warning box, no emoji. */

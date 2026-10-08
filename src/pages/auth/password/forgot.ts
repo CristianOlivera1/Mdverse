@@ -3,7 +3,7 @@ import type { APIRoute } from 'astro';
 import { keepAlive } from '@/lib/api/http';
 import { authFeedbackUrl } from '@/lib/auth/messages';
 import { isLikelyEmail, normalizeEmail } from '@/lib/auth/profile';
-import { authCallbackUrl } from '@/lib/supabase/env';
+import { authCallbackUrl, getSiteUrl } from '@/lib/supabase/env';
 import { createAdminSupabaseClient } from '@/lib/supabase/admin';
 import { createServerSupabaseClient } from '@/lib/supabase/server';
 
@@ -56,7 +56,7 @@ export const POST: APIRoute = async (context) => {
   keepAlive(
     context,
     import('@/lib/email/sender')
-      .then((m) => m.sendResetPasswordEmail({ to: email, resetUrl }))
+      .then((m) => m.sendResetPasswordEmail({ to: email, resetUrl, siteUrl: getSiteUrl() }))
       .then((sent) => {
         if (!sent.ok) console.warn('[email] reset password send failed:', sent.error);
       })

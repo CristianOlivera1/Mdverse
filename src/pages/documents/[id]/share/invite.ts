@@ -77,6 +77,7 @@ export const POST: APIRoute = async (context) => {
         role,
         // No account yet => signup; existing account => dashboard.
         inviteUrl: result.value === 'invited' ? `${siteUrl}/signup` : `${siteUrl}/dashboard`,
+        siteUrl,
       });
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
