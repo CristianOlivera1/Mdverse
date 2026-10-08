@@ -1,4 +1,5 @@
 ---
+import AccountMenu from '@/components/auth/AccountMenu.astro';
 import Icon from '@/components/ui/Icon.astro';
 import Layout from '@/layouts/Layout.astro';
 import { canEdit } from '@/lib/documents/sharing';
@@ -58,25 +59,43 @@ const serialized = document
     <>
       <div class="min-h-screen flex flex-col">
         <header class="sticky top-0 z-10 border-b border-neutral-800 bg-black/90 backdrop-blur">
-          <div class="mx-auto flex w-full max-w-3xl items-center justify-between gap-3 px-4 py-3">
-            <div class="min-w-0">
-              <p class="truncate text-sm font-medium text-neutral-100">{document.title}</p>
-              <p class="mt-0.5 text-[11px] text-neutral-500">
-                Shared link · revision {document.revision} ·{' '}
-                {signedIn ? 'you have access' : 'read-only'}
-              </p>
+          <div class="relative mx-auto flex w-full max-w-3xl items-center justify-between gap-3 px-4 py-3">
+            <div class="absolute inset-0 overflow-hidden pointer-events-none" aria-hidden="true">
+              <img
+                src="/images/bg-header.avif"
+                alt=""
+                class="w-full h-full object-cover opacity-40"
+              />
             </div>
-            {signedIn ? (
-              <a href="/dashboard" class="hb shrink-0">
-                <Icon name="lucide:layout-dashboard" />
-                Documents
+            <div class="relative flex min-w-0 items-center gap-2.5">
+              <a href="/" class="flex shrink-0 items-center" aria-label="Mdverse home">
+                <img
+                  src="/svg/logo-calligraphy.svg"
+                  alt="Mdverse logo"
+                  class="h-6 w-auto"
+                  width="116"
+                  height="28"
+                />
               </a>
-            ) : (
-              <a href={`/login?next=${encodeURIComponent(`/s/${token}`)}`} class="hb on shrink-0">
-                <Icon name="lucide:log-in" />
-                Sign in
-              </a>
-            )}
+              <span class="sep hidden sm:inline-block"></span>
+              <div class="min-w-0">
+                <p class="truncate text-sm font-medium text-neutral-100">{document.title}</p>
+                <p class="mt-0.5 text-[11px] text-neutral-500">
+                  Shared link · revision {document.revision} ·{' '}
+                  {signedIn ? 'you have access' : 'read-only'}
+                </p>
+              </div>
+            </div>
+            <div class="relative flex shrink-0 items-center gap-1.5">
+              {signedIn ? (
+                <AccountMenu />
+              ) : (
+                <a href={`/login?next=${encodeURIComponent(`/s/${token}`)}`} class="hb on shrink-0">
+                  <Icon name="lucide:log-in" />
+                  Sign in
+                </a>
+              )}
+            </div>
           </div>
         </header>
 
