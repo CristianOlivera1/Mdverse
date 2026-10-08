@@ -142,6 +142,8 @@ export interface ShareFeedback {
   added?: number;
   yours?: number;
   invalid?: number;
+  emailsSent?: number;
+  emailsFailed?: number;
   roleUpdated?: boolean;
   removed?: boolean;
   linkCreated?: boolean;
@@ -157,6 +159,8 @@ export function shareFeedbackParams(feedback: ShareFeedback = {}): URLSearchPara
   if (feedback.added) params.set('added', String(feedback.added));
   if (feedback.yours) params.set('yours', String(feedback.yours));
   if (feedback.invalid) params.set('invalid', String(feedback.invalid));
+  if (feedback.emailsSent) params.set('email_sent', String(feedback.emailsSent));
+  if (feedback.emailsFailed) params.set('email_failed', String(feedback.emailsFailed));
   if (feedback.roleUpdated) params.set('role', '1');
   if (feedback.removed) params.set('removed', '1');
   if (feedback.linkCreated) params.set('link', 'created');
@@ -177,6 +181,8 @@ export interface ShareNoticeParams {
   added?: string | null;
   yours?: string | null;
   invalid?: string | null;
+  email_sent?: string | null;
+  email_failed?: string | null;
   role?: string | null;
   removed?: string | null;
   link?: string | null;
@@ -199,8 +205,13 @@ export function shareNotice(params: ShareNoticeParams): AuthNotice | null {
     added: count(params.added),
     yours: count(params.yours),
     invalid: count(params.invalid),
+    emailsSent: count(params.email_sent),
+    emailsFailed: count(params.email_failed),
   });
-  if (message !== null) return { tone: 'success', message };
+  if (message !== null) {
+    // Access granted but nobody was told: still not an error, and never dressed as one.
+    return { tone: count(params.email_failed) > 0 ? 'info' : 'success', message };
+  }
 
   if (params.role === '1') return { tone: 'success', message: 'Role updated.' };
   if (params.removed === '1') return { tone: 'success', message: 'Access removed.' };

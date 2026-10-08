@@ -31,6 +31,7 @@ export const POST: APIRoute = async (context) => {
     const doc = await getDocument(supabase, user.id, documentId);
     if (doc?.title) documentTitle = doc.title;
   } catch {
+    // The title is cosmetic; the invite must not hinge on reading it.
   }
 
   const inviterName =
@@ -42,6 +43,8 @@ export const POST: APIRoute = async (context) => {
   let added = 0;
   let yours = 0;
   let failed = 0;
+  let emailsSent = 0;
+  let emailsFailed = 0;
 
   for (const email of valid) {
     const result = await inviteCollaborator(supabase, { documentId, email, role });
@@ -50,27 +53,28 @@ export const POST: APIRoute = async (context) => {
       continue;
     }
 
-    if (result.value === 'invited') {
-      invited += 1;
-    } else if (result.value === 'collaborator') {
-      added += 1;
-    } else {
+    if (result.value === 'owner') {
       yours += 1;
       continue;
     }
-    sendCollaborationInvite({
+
+    if (result.value === 'invited') invited += 1;
+    else added += 1;
+
+    // Awaited, and counted: `sendCollaborationInvite` reports instead of throwing,
+    // so a fire-and-forget call used to hide "the message never left" behind
+    // "the account was added".
+    const sent = await sendCollaborationInvite({
       to: email,
       documentTitle,
       inviterName,
       role,
       // No account yet => signup; existing account => dashboard.
-      inviteUrl:
-        result.value === 'invited'
-          ? `${siteUrl}/signup`
-          : `${siteUrl}/dashboard`,
-    }).catch((err: unknown) => {
-      console.warn('[email] collaboration invite send failed:', err);
+      inviteUrl: result.value === 'invited' ? `${siteUrl}/signup` : `${siteUrl}/dashboard`,
     });
+
+    if (sent.ok) emailsSent += 1;
+    else emailsFailed += 1;
   }
 
   if (invited === 0 && added === 0 && yours === 0 && failed > 0) {
@@ -82,5 +86,7 @@ export const POST: APIRoute = async (context) => {
     added,
     yours,
     invalid: invalid.length,
+    emailsSent,
+    emailsFailed,
   });
 };

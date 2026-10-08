@@ -1,16 +1,7 @@
-/**
- * `POST /auth/resend` — sends the confirmation email again.
- *
- * The answer is identical whatever happens (unknown address, already confirmed,
- * rate-limited), so the route cannot be used to discover which addresses have
- * accounts. Failures are logged, never shown.
- *
- * With Supabase's built-in email provider disabled we generate the link ourselves
- * via the admin API and send it through Resend.
- */
 
 import type { APIRoute } from 'astro';
 
+import { keepAlive } from '@/lib/api/http';
 import { loginFeedbackUrl } from '@/lib/auth/messages';
 import { isLikelyEmail, normalizeEmail } from '@/lib/auth/profile';
 import { safeRedirectPath } from '@/lib/auth/redirect';
@@ -44,15 +35,17 @@ export const POST: APIRoute = async (context) => {
         console.warn('[auth] generateLink (resend) failed:', linkError.message);
       } else {
         const confirmUrl = (linkData as { properties: { action_link: string } }).properties.action_link;
-        sendConfirmEmail({ to: email, confirmUrl }).catch((err: unknown) => {
-          console.warn('[email] resend confirm failed:', err);
-        });
+        keepAlive(
+          context,
+          sendConfirmEmail({ to: email, confirmUrl }).then((sent) => {
+            if (!sent.ok) console.warn('[email] resend confirm failed:', sent.error);
+          }),
+        );
       }
     } catch (err) {
       console.warn('[auth] generateLink (resend) threw:', err);
     }
   }
 
-  // Always respond with success — never reveal whether the address has an account.
   return context.redirect(loginFeedbackUrl({ sent: 'resent', next, email }));
 };

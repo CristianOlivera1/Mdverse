@@ -41,9 +41,6 @@ const NOTICE_TONES = {
   <form method="POST" action="/settings/profile" class="space-y-5">
     <div class="flex items-center gap-4">
       <Avatar name={account.displayName} seed={account.toneSeed} size="lg" />
-      <p class="text-xs leading-relaxed text-neutral-500">
-        Initials only — no profile picture to upload. The colour is derived from your account id.
-      </p>
     </div>
 
     {notice && (
@@ -154,10 +151,6 @@ const NOTICE_TONES = {
             Change password
           </a>
         </dd>
-      </div>
-      <div>
-        <dt class="text-neutral-500">User id</dt>
-        <dd class="mt-0.5 break-all font-mono text-[11px] text-neutral-400">{account.id}</dd>
       </div>
     </dl>
 

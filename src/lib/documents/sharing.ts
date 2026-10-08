@@ -144,6 +144,10 @@ export interface InviteSummary {
   readonly invited: number;
   readonly yours: number;
   readonly invalid: number;
+  /** Invitation emails Resend accepted. Only the invite route knows this. */
+  readonly emailsSent?: number;
+  /** Invitation emails Resend refused — access happened, the message did not leave. */
+  readonly emailsFailed?: number;
 }
 
 export function describeInviteSummary(summary: InviteSummary): string | null {
@@ -175,7 +179,25 @@ export function describeInviteSummary(summary: InviteSummary): string | null {
     );
   }
 
-  return parts.length > 0 ? `${parts.join('; ')}.` : null;
+  const sentence = parts.length > 0 ? `${parts.join('; ')}.` : '';
+  const message = `${sentence}${describeEmailOutcome(summary)}`.trim();
+
+  return message.length > 0 ? message : null;
+}
+
+/**
+ * The second half of an invite notice. Access and delivery are two different
+ * things: reporting "added as a collaborator" while the email was rejected is how
+ * people end up waiting for a message that will never arrive.
+ */
+function describeEmailOutcome(summary: InviteSummary): string {
+  if ((summary.emailsFailed ?? 0) > 0) {
+    return ' The invitation email was rejected, so share the link instead.';
+  }
+  if ((summary.emailsSent ?? 0) > 0) {
+    return ' The invitation email is on its way.';
+  }
+  return '';
 }
 
 export function sortCollaborators<T extends { role: CollaboratorRole; name: string }>(

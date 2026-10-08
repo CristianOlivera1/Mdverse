@@ -1,5 +1,6 @@
 import type { APIRoute } from 'astro';
 
+import { keepAlive } from '@/lib/api/http';
 import { authFeedbackUrl, loginFeedbackUrl, passwordProblemErrorCode } from '@/lib/auth/messages';
 import { checkPassword } from '@/lib/auth/password';
 import { isLikelyEmail, normalizeEmail } from '@/lib/auth/profile';
@@ -63,9 +64,12 @@ export const POST: APIRoute = async (context) => {
         console.warn('[auth] generateLink (signup) failed:', linkError.message);
       } else {
         const confirmUrl = (linkData as { properties: { action_link: string } }).properties.action_link;
-        sendConfirmEmail({ to: email, confirmUrl }).catch((err: unknown) => {
-          console.warn('[email] confirm email send failed:', err);
-        });
+        keepAlive(
+          context,
+          sendConfirmEmail({ to: email, confirmUrl }).then((sent) => {
+            if (!sent.ok) console.warn('[email] confirm email failed:', sent.error);
+          }),
+        );
       }
     } catch (err) {
       console.warn('[auth] generateLink (signup) threw:', err);

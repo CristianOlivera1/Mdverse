@@ -1,5 +1,6 @@
 import type { APIRoute } from 'astro';
 
+import { keepAlive } from '@/lib/api/http';
 import { authFeedbackUrl } from '@/lib/auth/messages';
 import { isLikelyEmail, normalizeEmail } from '@/lib/auth/profile';
 import { sendResetPasswordEmail } from '@/lib/email/sender';
@@ -44,10 +45,15 @@ export const POST: APIRoute = async (context) => {
 
   const resetUrl = linkData.properties.action_link;
 
-  // Fire-and-forget: email failure never blocks the redirect.
-  sendResetPasswordEmail({ to: email, resetUrl }).catch((err: unknown) => {
-    console.warn('[email] reset password send failed:', err);
-  });
+  // Off the response path (never blocks the redirect) but still awaited by the
+  // platform: `waitUntil` keeps it alive on Cloudflare, and the sender reports
+  // instead of rejecting, so a `.catch()` here could only ever see an impossible one.
+  keepAlive(
+    context,
+    sendResetPasswordEmail({ to: email, resetUrl }).then((sent) => {
+      if (!sent.ok) console.warn('[email] reset password send failed:', sent.error);
+    }),
+  );
 
   return context.redirect(authFeedbackUrl({ to: FORGOT_PATH, sent: 'reset', email }));
 };

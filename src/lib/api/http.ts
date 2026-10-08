@@ -45,3 +45,9 @@ export function readString(value: unknown): string | null {
 export function readRevision(value: unknown): number | null {
   return typeof value === 'number' && Number.isInteger(value) && value >= 1 ? value : null;
 }
+
+export function keepAlive(context: { locals: App.Locals }, job: Promise<unknown>): void {
+  const cf = context.locals.cfContext as { waitUntil?: (promise: Promise<unknown>) => void } | undefined;
+  if (typeof cf?.waitUntil === 'function') cf.waitUntil(job);
+  else void job;
+}

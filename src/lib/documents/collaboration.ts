@@ -47,6 +47,8 @@ export interface CollaborationState {
 export interface CollaborationFeedback {
   readonly ok: boolean;
   readonly message: string;
+  /** `info` marks the honest middle case: access granted, the email refused. */
+  readonly tone?: 'success' | 'info';
 }
 
 /** The fields each action reads. Values are strings and numbers only: no nested JSON travels. */
@@ -195,8 +197,10 @@ export async function runShareAction(
     };
   }
 
+  const tone = notice.tone === 'info' ? 'info' : 'success';
   return {
     ok: body.ok !== false && notice.tone !== 'error',
     message: readString(notice.message, 'Done.'),
+    tone,
   };
 }
