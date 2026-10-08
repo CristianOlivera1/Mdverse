@@ -1,9 +1,7 @@
 ---
-import Avatar from '@/components/ui/Avatar.astro';
 import Icon from '@/components/ui/Icon.astro';
 import AccountLayout from '@/layouts/AccountLayout.astro';
-import { describeProvider, toAccountSummary } from '@/lib/auth/account';
-import { formatMemberSince } from '@/lib/auth/profile';
+import { toAccountSummary } from '@/lib/auth/account';
 import { describeAccess } from '@/lib/documents/access';
 import { describeSize, firstLine, formatTimestamp } from '@/lib/documents/format';
 import { documentNotice } from '@/lib/documents/messages';
@@ -28,9 +26,6 @@ const notice = documentNotice({
 const owned = documents.filter((document) => document.role === 'owner');
 const shared = documents.filter((document) => document.role !== 'owner');
 
-const providers = (account.providers.length > 0 ? account.providers : ['email'])
-  .map(describeProvider)
-  .join(', ');
 const editorUrl = (id: string): string => `/?doc=${encodeURIComponent(id)}`;
 ---
 
@@ -58,11 +53,11 @@ const editorUrl = (id: string): string => `/?doc=${encodeURIComponent(id)}`;
         type="text"
         name="title"
         maxlength="120"
-        placeholder="Untitled"
+        placeholder="My new document"
         aria-label="Title of the new document"
         class="min-w-0 flex-1 rounded-lg border border-neutral-800 bg-black px-3 py-2 text-sm text-neutral-100 placeholder:text-neutral-600 focus:border-neutral-600 focus:outline-none"
       />
-      <button type="submit" class="hb on">
+      <button type="submit" class="hb hf on">
         <Icon name="lucide:file-plus" />
         New document
       </button>
@@ -110,7 +105,7 @@ const editorUrl = (id: string): string => `/?doc=${encodeURIComponent(id)}`;
                   <div class="min-w-0">
                     <a
                       href={editorUrl(document.id)}
-                      class="text-sm font-medium text-neutral-50 hover:text-white"
+                      class="text-sm font-medium text-neutral-50 hover:text-white hover:underline"
                     >
                       {document.title}
                     </a>
@@ -258,61 +253,6 @@ const editorUrl = (id: string): string => `/?doc=${encodeURIComponent(id)}`;
     </>
   )}
 
-  <section class="mt-8 rounded-xl border border-neutral-800 p-4">
-    <div class="flex items-center gap-4">
-      <Avatar name={account.displayName} seed={account.toneSeed} size="lg" />
-      <div class="min-w-0">
-        <p class="truncate text-base font-medium text-neutral-50">{account.displayName}</p>
-        <p class="truncate text-xs text-neutral-500">@{account.username}</p>
-        <p class="truncate text-xs text-neutral-500">{account.email}</p>
-      </div>
-      <div class="ml-auto flex flex-wrap gap-2">
-        <a href="/settings" class="hb">
-          <Icon name="lucide:settings" />
-          Edit profile
-        </a>
-        <form method="POST" action="/auth/signout">
-          <input type="hidden" name="next" value="/" />
-          <button type="submit" class="hb danger">
-            <Icon name="lucide:log-out" />
-            Sign out
-          </button>
-        </form>
-      </div>
-    </div>
-
-    <dl class="mt-5 grid gap-3 text-xs sm:grid-cols-2">
-      <div>
-        <dt class="text-neutral-500">Member since</dt>
-        <dd class="mt-0.5 text-neutral-200">
-          {formatMemberSince(account.createdAt) || 'Not recorded yet'}
-        </dd>
-      </div>
-      <div>
-        <dt class="text-neutral-500">Sign-in methods</dt>
-        <dd class="mt-0.5 text-neutral-200">{providers}</dd>
-      </div>
-    </dl>
-  </section>
-
-  <section class="mt-6 grid gap-3 sm:grid-cols-2">
-    <div class="rounded-xl border border-neutral-800 p-4">
-      <Icon name="lucide:shield-check" size={16} class="text-neutral-500" />
-      <h2 class="mt-2 text-xs font-medium text-neutral-200">Protected by row level security</h2>
-      <p class="mt-1 text-xs leading-relaxed text-neutral-500">
-        Postgres decides who may read or write each row. The browser talks to the API with the
-        session cookie; there is no service key anywhere near it.
-      </p>
-    </div>
-    <div class="rounded-xl border border-neutral-800 p-4">
-      <Icon name="lucide:history" size={16} class="text-neutral-500" />
-      <h2 class="mt-2 text-xs font-medium text-neutral-200">Edits are versioned</h2>
-      <p class="mt-1 text-xs leading-relaxed text-neutral-500">
-        A snapshot of the replaced text is kept at most every ten minutes, and restoring one writes
-        a new revision instead of rewriting the past.
-      </p>
-    </div>
-  </section>
 </AccountLayout>
 
 <script>
