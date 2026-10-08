@@ -32,6 +32,22 @@ import { currentPathWithSearch, safeRedirectPath } from '../../src/lib/auth/redi
 import { isAnonymousOnlyPath, isProtectedPath, loginPathFor } from '../../src/lib/auth/routes';
 import { buildAuthCallbackUrl, normalizeSupabaseConfig } from '../../src/lib/supabase/config';
 import { pickAuthCookieOptions } from '../../src/lib/supabase/cookies';
+import {
+  authAttemptFor,
+  AUTH_RATE_LIMITS,
+  bucketKey,
+  checkEmailCooldown,
+  checkRateLimit,
+  clientIpFromHeaders,
+  EMAIL_RESEND_COOLDOWN_SECONDS,
+  hashForLog,
+  HONEYPOT_FIELD,
+  isHoneypotFilled,
+  maybeVerifyTurnstile,
+  rateLimitedRedirect,
+  shouldEnforceTurnstile,
+  TURNSTILE_FIELD,
+} from '../../src/lib/auth/rate-limit';
 import { isAlreadyRegistered, isEmailNotConfirmed } from '../../src/lib/supabase/errors';
 
 describe('safeRedirectPath', () => {
@@ -487,5 +503,157 @@ describe('pickAuthCookieOptions', () => {
       secure: true,
     });
     expect('priority' in picked).toBe(false);
+  });
+});
+
+describe('auth rate limiting (per-isolate buckets)', () => {
+  it('defines a budget for every auth route, strictest on sign-in', () => {
+    const routes = ['signin', 'signup', 'resend', 'forgot', 'update', 'oauth', 'callback'];
+    for (const route of routes) {
+      const config = AUTH_RATE_LIMITS[route as keyof typeof AUTH_RATE_LIMITS];
+      expect(config.capacity).toBeGreaterThan(0);
+      expect(config.windowSeconds).toBeGreaterThan(0);
+    }
+    expect(AUTH_RATE_LIMITS.signin.capacity).toBeLessThanOrEqual(
+      AUTH_RATE_LIMITS.oauth.capacity,
+    );
+  });
+
+  it('allows up to capacity, then blocks with a retry hint', () => {
+    const store = new Map();
+    const config = { capacity: 3, windowSeconds: 60 };
+    const now = 1_000_000;
+
+    expect(checkRateLimit(store, 'k', config, now)).toMatchObject({ allowed: true, remaining: 2 });
+    expect(checkRateLimit(store, 'k', config, now)).toMatchObject({ allowed: true, remaining: 1 });
+    expect(checkRateLimit(store, 'k', config, now)).toMatchObject({ allowed: true, remaining: 0 });
+
+    const blocked = checkRateLimit(store, 'k', config, now + 1000);
+    expect(blocked.allowed).toBe(false);
+    expect(blocked.remaining).toBe(0);
+    expect(blocked.retryAfterSeconds).toBeGreaterThan(0);
+    expect(blocked.retryAfterSeconds).toBeLessThanOrEqual(60);
+  });
+
+  it('resets the window after it expires and isolates keys', () => {
+    const store = new Map();
+    const config = { capacity: 1, windowSeconds: 60 };
+    const now = 1_000_000;
+
+    expect(checkRateLimit(store, 'a', config, now).allowed).toBe(true);
+    expect(checkRateLimit(store, 'a', config, now).allowed).toBe(false);
+    // A different key is unaffected.
+    expect(checkRateLimit(store, 'b', config, now).allowed).toBe(true);
+    // After the window, the first key is usable again.
+    expect(checkRateLimit(store, 'a', config, now + 61_000).allowed).toBe(true);
+  });
+
+  it('cools down email sends per address', () => {
+    expect(EMAIL_RESEND_COOLDOWN_SECONDS).toBe(60);
+    const store = new Map();
+    const now = 1_000_000;
+
+    expect(checkEmailCooldown(store, 'a@b.com', 60, now).allowed).toBe(true);
+    const blocked = checkEmailCooldown(store, 'a@b.com', 60, now + 1000);
+    expect(blocked.allowed).toBe(false);
+    expect(blocked.retryAfterSeconds).toBeGreaterThan(0);
+    // Another address is unaffected.
+    expect(checkEmailCooldown(store, 'c@d.com', 60, now + 1000).allowed).toBe(true);
+    // After the cooldown, the same address may receive mail again.
+    expect(checkEmailCooldown(store, 'a@b.com', 60, now + 61_000).allowed).toBe(true);
+  });
+});
+
+describe('honeypot and identifier hygiene', () => {
+  it('names the trap field both sides agree on', () => {
+    expect(HONEYPOT_FIELD).toBe('website');
+    expect(TURNSTILE_FIELD).toBe('cf-turnstile-response');
+  });
+
+  it('flags only a deliberately filled trap field', () => {
+    expect(isHoneypotFilled('')).toBe(false);
+    expect(isHoneypotFilled('   ')).toBe(false);
+    expect(isHoneypotFilled(null)).toBe(false);
+    expect(isHoneypotFilled(undefined)).toBe(false);
+    expect(isHoneypotFilled('http://spam.example')).toBe(true);
+  });
+
+  it('hashes identifiers deterministically without keeping the raw value', () => {
+    const hashed = hashForLog('ana@mail.com');
+    expect(hashed).toBe(hashForLog('ana@mail.com'));
+    expect(hashed).toMatch(/^[0-9a-f]{8}$/);
+    expect(hashed).not.toContain('ana@mail.com');
+    expect(hashForLog('other@mail.com')).not.toBe(hashed);
+  });
+
+  it('builds bucket keys that never contain the raw email', () => {
+    const key = bucketKey('signin', ['1.2.3.4', 'ana@mail.com']);
+    expect(key.startsWith('signin:')).toBe(true);
+    expect(key).not.toContain('ana@mail.com');
+    expect(key).not.toContain('1.2.3.4');
+    expect(key).toBe(bucketKey('signin', ['1.2.3.4', 'ana@mail.com']));
+  });
+
+  it('prefers the Cloudflare IP header, then the first forwarded entry', () => {
+    const cf = new Headers({ 'cf-connecting-ip': '1.2.3.4', 'x-forwarded-for': '5.6.7.8' });
+    expect(clientIpFromHeaders(cf)).toBe('1.2.3.4');
+    const xff = new Headers({ 'x-forwarded-for': '5.6.7.8, 9.9.9.9' });
+    expect(clientIpFromHeaders(xff)).toBe('5.6.7.8');
+    expect(clientIpFromHeaders(new Headers())).toBeNull();
+  });
+
+  it('keys attempts without leaking the raw identifier', () => {
+    const request = new Request('https://mdverse.pages.dev/auth/signin', {
+      headers: { 'cf-connecting-ip': '1.2.3.4' },
+    });
+    const attempt = authAttemptFor('signin', request, 'ana@mail.com');
+    expect(attempt.route).toBe('signin');
+    expect(attempt.key).not.toContain('ana@mail.com');
+    expect(attempt.key).not.toContain('1.2.3.4');
+  });
+});
+
+describe('turnstile hook (env-gated)', () => {
+  it('is skipped until a secret is configured', () => {
+    expect(shouldEnforceTurnstile(null)).toBe(false);
+    expect(shouldEnforceTurnstile(undefined)).toBe(false);
+    expect(shouldEnforceTurnstile('')).toBe(false);
+    expect(shouldEnforceTurnstile('   ')).toBe(false);
+    expect(shouldEnforceTurnstile('secret')).toBe(true);
+  });
+
+  it('skips verification without touching the network when unconfigured', async () => {
+    await expect(maybeVerifyTurnstile(null, null)).resolves.toEqual({ ok: true, skipped: true });
+    await expect(maybeVerifyTurnstile('token', undefined)).resolves.toEqual({
+      ok: true,
+      skipped: true,
+    });
+  });
+
+  it('fails closed when enforced but no token was submitted', async () => {
+    await expect(maybeVerifyTurnstile(null, 'secret')).resolves.toEqual({
+      ok: false,
+      skipped: false,
+    });
+    await expect(maybeVerifyTurnstile('', 'secret')).resolves.toEqual({
+      ok: false,
+      skipped: false,
+    });
+  });
+});
+
+describe('rate_limited feedback', () => {
+  it('maps the code to a coarse wait-a-minute notice', () => {
+    expect(isAuthErrorCode('rate_limited')).toBe(true);
+    const notice = authNotice({ error: 'rate_limited' });
+    expect(notice?.tone).toBe('error');
+    expect(notice?.message).toMatch(/wait/i);
+  });
+
+  it('redirects with the same shape plus a Retry-After header', () => {
+    const response = rateLimitedRedirect('/login?error=rate_limited', 42);
+    expect(response.status).toBe(303);
+    expect(response.headers.get('Location')).toBe('/login?error=rate_limited');
+    expect(response.headers.get('Retry-After')).toBe('42');
   });
 });

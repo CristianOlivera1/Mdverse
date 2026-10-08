@@ -1,0 +1,33 @@
+---
+// Abuse-control fields shared by every auth form.
+//
+// - Honeypot: a text field humans never see (wrapper is hidden). Bots that
+//   fill every field get an indistinguishable "success" redirect from the route
+//   without any account or email side effect. Legitimate browsers submit it
+//   empty, so it never affects real users.
+// - Turnstile hook: the widget renders ONLY when PUBLIC_TURNSTILE_SITE_KEY is
+//   configured, and the routes verify the token ONLY when TURNSTILE_SECRET_KEY
+//   is configured. No keys are provisioned here, so this renders just the
+//   honeypot today. Enabling Turnstile later = setting those two env vars,
+//   no code changes.
+import { PUBLIC_TURNSTILE_SITE_KEY } from 'astro:env/client';
+
+import { HONEYPOT_FIELD, TURNSTILE_FIELD } from '@/lib/auth/rate-limit';
+
+interface Props {
+  /** Render the Turnstile loader script (set on one form per page only). */
+  withScript?: boolean;
+}
+
+const { withScript = false } = Astro.props;
+const siteKey = PUBLIC_TURNSTILE_SITE_KEY;
+---
+
+<div hidden aria-hidden="true">
+  <input type="text" name={HONEYPOT_FIELD} value="" tabindex="-1" autocomplete="off" />
+</div>
+
+{siteKey && <div class="cf-turnstile" data-sitekey={siteKey} data-response-field-name={TURNSTILE_FIELD}></div>}
+{siteKey && withScript && (
+  <script src="https://challenges.cloudflare.com/turnstile/v0/api.js" async defer></script>
+)}

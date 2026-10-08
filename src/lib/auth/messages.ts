@@ -18,6 +18,7 @@ export const AUTH_ERROR_CODES = [
   'provider',
   'callback',
   'callback_failed',
+  'rate_limited',
 ] as const;
 
 export type AuthErrorCode = (typeof AUTH_ERROR_CODES)[number];
@@ -52,6 +53,8 @@ const ERROR_MESSAGES: Record<AuthErrorCode, string> = {
   provider: 'That sign-in provider is not supported.',
   callback: 'This sign-in link is incomplete. Please request a new one.',
   callback_failed: 'This sign-in link is invalid or has expired. Please request a new one.',
+  rate_limited:
+    'Too many attempts. Please wait a minute before trying again.',
 };
 
 const SENT_MESSAGES: Record<AuthSentCode, string> = {

@@ -2,6 +2,12 @@ import type { APIRoute } from 'astro';
 import type { EmailOtpType } from '@supabase/supabase-js';
 
 import { loginFeedbackUrl } from '@/lib/auth/messages';
+import {
+  authAttemptFor,
+  enforceAuthRateLimit,
+  logRateLimited,
+  rateLimitedRedirect,
+} from '@/lib/auth/rate-limit';
 import { safeRedirectPath } from '@/lib/auth/redirect';
 import { DEFAULT_AUTHENTICATED_PATH } from '@/lib/auth/routes';
 import { createServerSupabaseClient } from '@/lib/supabase/server';
@@ -24,6 +30,16 @@ export const GET: APIRoute = async (context) => {
   const next = safeRedirectPath(searchParams.get('next'), DEFAULT_AUTHENTICATED_PATH);
   const failure = (code: 'callback' | 'callback_failed') =>
     context.redirect(loginFeedbackUrl({ error: code, next }));
+
+  const attempt = authAttemptFor('callback', context.request, null);
+  const verdict = enforceAuthRateLimit(attempt);
+  if (!verdict.allowed) {
+    logRateLimited('callback', attempt.key, verdict.retryAfterSeconds);
+    return rateLimitedRedirect(
+      loginFeedbackUrl({ error: 'rate_limited', next }),
+      verdict.retryAfterSeconds,
+    );
+  }
 
   const providerError = searchParams.get('error_code') ?? searchParams.get('error');
   if (providerError) {

@@ -1,9 +1,20 @@
 import type { APIRoute } from 'astro';
+import { TURNSTILE_SECRET_KEY } from 'astro:env/server';
 
 import { keepAlive } from '@/lib/api/http';
 import { authFeedbackUrl, loginFeedbackUrl, passwordProblemErrorCode } from '@/lib/auth/messages';
 import { checkPassword } from '@/lib/auth/password';
 import { isLikelyEmail, normalizeEmail } from '@/lib/auth/profile';
+import {
+  authAttemptFor,
+  enforceAuthRateLimit,
+  HONEYPOT_FIELD,
+  isHoneypotFilled,
+  logRateLimited,
+  maybeVerifyTurnstile,
+  rateLimitedRedirect,
+  TURNSTILE_FIELD,
+} from '@/lib/auth/rate-limit';
 import { safeRedirectPath } from '@/lib/auth/redirect';
 import { DEFAULT_AUTHENTICATED_PATH } from '@/lib/auth/routes';
 import { authCallbackUrl, getSiteUrl } from '@/lib/supabase/env';
@@ -20,6 +31,31 @@ export const POST: APIRoute = async (context) => {
   const next = safeRedirectPath(form.get('next'), DEFAULT_AUTHENTICATED_PATH);
   const fail = (error: Parameters<typeof authFeedbackUrl>[0]['error']) =>
     context.redirect(authFeedbackUrl({ to: SIGNUP_PATH, error, next, email }));
+  const success = () => context.redirect(loginFeedbackUrl({ sent: 'confirm', next, email }));
+
+  // Honeypot: answer with the exact success shape without creating anything.
+  if (isHoneypotFilled(form.get(HONEYPOT_FIELD))) {
+    console.warn('[auth] honeypot signup ignored');
+    return success();
+  }
+
+  // Env-gated Turnstile: skipped until TURNSTILE_SECRET_KEY is provisioned.
+  const turnstile = await maybeVerifyTurnstile(form.get(TURNSTILE_FIELD), TURNSTILE_SECRET_KEY);
+  if (!turnstile.ok) {
+    const attempt = authAttemptFor('signup', context.request, email || null);
+    logRateLimited('signup', attempt.key, 0);
+    return rateLimitedRedirect(authFeedbackUrl({ to: SIGNUP_PATH, error: 'rate_limited', next, email }), 60);
+  }
+
+  const attempt = authAttemptFor('signup', context.request, email || null);
+  const verdict = enforceAuthRateLimit(attempt);
+  if (!verdict.allowed) {
+    logRateLimited('signup', attempt.key, verdict.retryAfterSeconds);
+    return rateLimitedRedirect(
+      authFeedbackUrl({ to: SIGNUP_PATH, error: 'rate_limited', next, email }),
+      verdict.retryAfterSeconds,
+    );
+  }
 
   if (!isLikelyEmail(email)) return fail('invalid_email');
 
@@ -38,7 +74,14 @@ export const POST: APIRoute = async (context) => {
 
   if (error) {
     if (isAlreadyRegistered(error)) {
-      return context.redirect(loginFeedbackUrl({ error: 'email_taken', next, email }));
+      // Anti-enumeration: an address that already has an account gets the SAME
+      // success redirect as a fresh sign-up, and no `email_taken` code is
+      // emitted here anymore. No email is sent on this path either, so an
+      // attacker cannot turn our Resend budget into an oracle or a spam
+      // cannon against someone else's address. Legitimate users who forgot
+      // they signed up still land on "check your inbox" and can recover
+      // through sign-in or forgot-password.
+      return success();
     }
     console.warn('[auth] sign-up failed:', error.message);
     return fail('signup_failed');
@@ -82,6 +125,5 @@ export const POST: APIRoute = async (context) => {
     }
   }
 
-  return context.redirect(loginFeedbackUrl({ sent: 'confirm', next, email }));
+  return success();
 };
-

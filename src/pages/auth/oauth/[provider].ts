@@ -2,6 +2,12 @@ import type { APIRoute } from 'astro';
 import type { Provider } from '@supabase/supabase-js';
 
 import { loginFeedbackUrl } from '@/lib/auth/messages';
+import {
+  authAttemptFor,
+  enforceAuthRateLimit,
+  logRateLimited,
+  rateLimitedRedirect,
+} from '@/lib/auth/rate-limit';
 import { safeRedirectPath } from '@/lib/auth/redirect';
 import { DEFAULT_AUTHENTICATED_PATH } from '@/lib/auth/routes';
 import { authCallbackUrl } from '@/lib/supabase/env';
@@ -21,6 +27,18 @@ export const GET: APIRoute = async (context) => {
 
   if (!isSupportedProvider(provider)) {
     return context.redirect(loginFeedbackUrl({ error: 'provider', next }));
+  }
+
+  // OAuth start is cheap for an attacker to loop (each hit builds a provider
+  // URL). Per-IP budget; no identity exists yet to key on.
+  const attempt = authAttemptFor('oauth', context.request, null);
+  const verdict = enforceAuthRateLimit(attempt);
+  if (!verdict.allowed) {
+    logRateLimited('oauth', attempt.key, verdict.retryAfterSeconds);
+    return rateLimitedRedirect(
+      loginFeedbackUrl({ error: 'rate_limited', next }),
+      verdict.retryAfterSeconds,
+    );
   }
 
   const supabase = createServerSupabaseClient(context);

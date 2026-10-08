@@ -1,7 +1,18 @@
 import type { APIRoute } from 'astro';
+import { TURNSTILE_SECRET_KEY } from 'astro:env/server';
 
 import { loginFeedbackUrl } from '@/lib/auth/messages';
 import { isLikelyEmail, normalizeEmail } from '@/lib/auth/profile';
+import {
+  authAttemptFor,
+  enforceAuthRateLimit,
+  HONEYPOT_FIELD,
+  isHoneypotFilled,
+  logRateLimited,
+  maybeVerifyTurnstile,
+  rateLimitedRedirect,
+  TURNSTILE_FIELD,
+} from '@/lib/auth/rate-limit';
 import { safeRedirectPath } from '@/lib/auth/redirect';
 import { DEFAULT_AUTHENTICATED_PATH } from '@/lib/auth/routes';
 import { isEmailNotConfirmed } from '@/lib/supabase/errors';
@@ -12,6 +23,28 @@ export const POST: APIRoute = async (context) => {
   const submitted = String(form.get('email') ?? '');
   const email = normalizeEmail(submitted);
   const next = safeRedirectPath(form.get('next'), DEFAULT_AUTHENTICATED_PATH);
+
+  if (isHoneypotFilled(form.get(HONEYPOT_FIELD))) {
+    console.warn('[auth] honeypot signin ignored');
+    return context.redirect(next);
+  }
+
+  const turnstile = await maybeVerifyTurnstile(form.get(TURNSTILE_FIELD), TURNSTILE_SECRET_KEY);
+  if (!turnstile.ok) {
+    const attempt = authAttemptFor('signin', context.request, email || null);
+    logRateLimited('signin', attempt.key, 0);
+    return rateLimitedRedirect(loginFeedbackUrl({ error: 'rate_limited', next, email }), 60);
+  }
+
+  const attempt = authAttemptFor('signin', context.request, email || null);
+  const verdict = enforceAuthRateLimit(attempt);
+  if (!verdict.allowed) {
+    logRateLimited('signin', attempt.key, verdict.retryAfterSeconds);
+    return rateLimitedRedirect(
+      loginFeedbackUrl({ error: 'rate_limited', next, email }),
+      verdict.retryAfterSeconds,
+    );
+  }
 
   if (!isLikelyEmail(email)) {
     return context.redirect(loginFeedbackUrl({ error: 'invalid_email', next, email: submitted }));
@@ -36,7 +69,5 @@ export const POST: APIRoute = async (context) => {
     return context.redirect(loginFeedbackUrl({ error: 'invalid_credentials', next, email }));
   }
 
-  // Cookies for the new session were written through `context.cookies` by the
-  // server client, so the redirect already carries them.
   return context.redirect(next);
 };

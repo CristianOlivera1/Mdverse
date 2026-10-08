@@ -1,8 +1,20 @@
 import type { APIRoute } from 'astro';
+import { TURNSTILE_SECRET_KEY } from 'astro:env/server';
 
 import { keepAlive } from '@/lib/api/http';
 import { authFeedbackUrl } from '@/lib/auth/messages';
 import { isLikelyEmail, normalizeEmail } from '@/lib/auth/profile';
+import {
+  authAttemptFor,
+  enforceAuthRateLimit,
+  enforceEmailCooldown,
+  HONEYPOT_FIELD,
+  isHoneypotFilled,
+  logRateLimited,
+  maybeVerifyTurnstile,
+  rateLimitedRedirect,
+  TURNSTILE_FIELD,
+} from '@/lib/auth/rate-limit';
 import { authCallbackUrl, getSiteUrl } from '@/lib/supabase/env';
 import { createAdminSupabaseClient } from '@/lib/supabase/admin';
 import { createServerSupabaseClient } from '@/lib/supabase/server';
@@ -16,8 +28,45 @@ export const POST: APIRoute = async (context) => {
   const email = normalizeEmail(submitted);
   const fail = (error: Parameters<typeof authFeedbackUrl>[0]['error']) =>
     context.redirect(authFeedbackUrl({ to: FORGOT_PATH, error, email }));
+  // Never reveal whether an account exists for the address.
+  const success = () => context.redirect(authFeedbackUrl({ to: FORGOT_PATH, sent: 'reset', email }));
+
+  // Honeypot: same success shape, no email sent.
+  if (isHoneypotFilled(form.get(HONEYPOT_FIELD))) {
+    console.warn('[auth] honeypot forgot ignored');
+    return success();
+  }
+
+  // Env-gated Turnstile: skipped until TURNSTILE_SECRET_KEY is provisioned.
+  const turnstile = await maybeVerifyTurnstile(form.get(TURNSTILE_FIELD), TURNSTILE_SECRET_KEY);
+  if (!turnstile.ok) {
+    const attempt = authAttemptFor('forgot', context.request, email || null);
+    logRateLimited('forgot', attempt.key, 0);
+    return rateLimitedRedirect(authFeedbackUrl({ to: FORGOT_PATH, error: 'rate_limited', email }), 60);
+  }
+
+  const attempt = authAttemptFor('forgot', context.request, email || null);
+  const verdict = enforceAuthRateLimit(attempt);
+  if (!verdict.allowed) {
+    logRateLimited('forgot', attempt.key, verdict.retryAfterSeconds);
+    return rateLimitedRedirect(
+      authFeedbackUrl({ to: FORGOT_PATH, error: 'rate_limited', email }),
+      verdict.retryAfterSeconds,
+    );
+  }
 
   if (!isLikelyEmail(email)) return fail('invalid_email');
+
+  // Per-address cooldown against email bombing via our Resend budget. Same
+  // success redirect either way, so the cooldown itself is not an oracle.
+  const cooldown = enforceEmailCooldown(email);
+  if (!cooldown.allowed) {
+    logRateLimited('forgot', attempt.key, cooldown.retryAfterSeconds);
+    return rateLimitedRedirect(
+      authFeedbackUrl({ to: FORGOT_PATH, error: 'rate_limited', email }),
+      cooldown.retryAfterSeconds,
+    );
+  }
 
   const supabase = createServerSupabaseClient(context);
   if (!supabase) return context.redirect(`/login?error=not_configured`);
@@ -39,7 +88,7 @@ export const POST: APIRoute = async (context) => {
     // Log but don't leak whether the address exists.
     console.warn('[auth] generateLink (recovery) failed:', linkError.message);
     // Still redirect with success - never reveal whether an account exists.
-    return context.redirect(authFeedbackUrl({ to: FORGOT_PATH, sent: 'reset', email }));
+    return success();
   }
 
   const resetUrl = linkData.properties.action_link;
@@ -63,5 +112,5 @@ export const POST: APIRoute = async (context) => {
       .catch((err) => console.warn('[email] reset password could not be sent:', err)),
   );
 
-  return context.redirect(authFeedbackUrl({ to: FORGOT_PATH, sent: 'reset', email }));
+  return success();
 };
