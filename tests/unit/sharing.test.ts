@@ -191,13 +191,34 @@ describe('sharing notices', () => {
     expect(notice?.tone).toBe('error');
   });
 
+  it('answers an access request without dressing it as an error', () => {
+    expect(shareNotice({ request: 'approved' })?.tone).toBe('success');
+    // Granted but not announced: honest middle ground, never a success.
+    expect(shareNotice({ request: 'unnotified' })?.tone).toBe('info');
+    expect(shareNotice({ request: 'unnotified' })?.message).toContain('did not go out');
+    expect(shareNotice({ request: 'denied' })?.tone).toBe('info');
+    expect(shareNotice({ request: 'something-else' })).toBeNull();
+  });
+
+  it('carries the request decision through the feedback payload', () => {
+    expect(shareFeedbackParams({ requestDecision: 'approved' }).toString()).toBe(
+      'request=approved',
+    );
+  });
+
   it('knows nothing to report', () => {
     expect(shareNotice({})).toBeNull();
     expect(shareNotice({ error: 'not-a-code' })).toBeNull();
   });
 
   it('keeps the sharing codes in the shared catalog', () => {
-    for (const code of ['invite_failed', 'email_invalid', 'role_failed', 'link_failed']) {
+    for (const code of [
+      'invite_failed',
+      'email_invalid',
+      'role_failed',
+      'link_failed',
+      'request_failed',
+    ]) {
       expect(isDocumentErrorCode(code)).toBe(true);
     }
   });

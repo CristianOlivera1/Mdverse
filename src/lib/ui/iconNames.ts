@@ -64,6 +64,7 @@ export const ICONIFY_ICONS = {
     'type',
     'undo-2',
     'upload',
+    'user-check',
     'user-minus',
     'user-plus',
     'users',

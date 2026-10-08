@@ -4,6 +4,7 @@ import {
   runShareAction,
   type CollaborationLink,
   type CollaborationPerson,
+  type CollaborationRequest,
   type CollaborationState,
   type ManagedAction,
   type ShareActionFields,
@@ -18,7 +19,6 @@ interface ActiveDocument {
   readonly id: string;
   readonly title: string;
   readonly collaborative: boolean;
-  /** The role this account holds on `id`; invites are the owner's to hand out. */
   readonly role?: DocumentAccess;
 }
 
@@ -63,12 +63,19 @@ export function initCollaborateDialog(): void {
   const invitationsList = pick<HTMLElement>('[data-collab="invitations"]');
   const linksList = pick<HTMLElement>('[data-collab="links"]');
   const linksEmpty = pick<HTMLElement>('[data-collab="links-empty"]');
+  const requestsBlock = pick<HTMLElement>('[data-collab="requests-block"]');
+  const requestsList = pick<HTMLElement>('[data-collab="requests"]');
+  const requestsCount = pick<HTMLElement>('[data-collab="requests-count"]');
+  const documentUrlInput = pick<HTMLInputElement>('[data-collab="document-url"]');
   const inviteForm = pick<HTMLFormElement>('[data-collab-form="invite"]');
   const linkForm = pick<HTMLFormElement>('[data-collab-form="link"]');
   const visibilityForm = pick<HTMLFormElement>('[data-collab-form="visibility"]');
   const personTemplate = template('person');
   const invitationTemplate = template('invitation');
+  const requestTemplate = template('request');
   const linkTemplate = template('link');
+
+  let wantsCollaborate = new URLSearchParams(window.location.search).get('collaborate') === '1';
 
   let active: ActiveDocument | null = null;
   let state: CollaborationState | null = null;
@@ -192,6 +199,43 @@ export function initCollaborateDialog(): void {
     );
   }
 
+  function renderRequests(requests: readonly CollaborationRequest[]): void {
+    requestsBlock.hidden = requests.length === 0;
+    requestsCount.textContent = requests.length > 0 ? `(${requests.length})` : '';
+
+    requestsList.replaceChildren(
+      ...requests.map((request) => {
+        const row = fill(requestTemplate, {
+          name: request.name,
+          meta: request.username
+            ? `@${request.username} - asked ${formatTimestamp(request.createdAt)}`
+            : `asked ${formatTimestamp(request.createdAt)}`,
+          role: 'reader',
+        });
+
+        row.dataset.request = request.id;
+
+        const note = row.querySelector<HTMLElement>('[data-field="note"]');
+        if (note) {
+          note.textContent = request.message ?? '';
+          note.hidden = !request.message;
+        }
+
+        const root = row.querySelector<HTMLElement>('[data-msel]');
+        if (root) syncMiniSelects(root);
+
+        return row;
+      }),
+    );
+  }
+
+  function renderDocumentLink(documentId: string): void {
+    documentUrlInput.value = new URL(
+      `/?doc=${encodeURIComponent(documentId)}`,
+      window.location.origin,
+    ).toString();
+  }
+
   function render(next: CollaborationState): void {
     state = next;
     subtitle.textContent = next.title;
@@ -203,6 +247,8 @@ export function initCollaborateDialog(): void {
 
     renderPeople(next.people);
     renderInvitations(next.invitations);
+    renderRequests(next.requests);
+    renderDocumentLink(next.id);
     renderLinks(next.links, window.location.origin);
     for (const radio of visibilityForm.querySelectorAll<HTMLInputElement>(
       'input[name="visibility"]',
@@ -268,7 +314,6 @@ export function initCollaborateDialog(): void {
     }
   }
 
-  /** Only the owner may invite people: everyone else never sees the entry points. */
   function canShare(): boolean {
     return active?.collaborative === true && canManageDocument(active.role ?? 'reader');
   }
@@ -285,14 +330,11 @@ export function initCollaborateDialog(): void {
   for (const button of openButtons) button.addEventListener('click', openDialog);
   pick<HTMLElement>('[data-collab="close"]').addEventListener('click', () => dialog.close());
 
-  // Rows on the documents dashboard carry their own trigger: the dialog opens for
-  // the document that button belongs to, not for whatever the editor has open.
   document.addEventListener('click', (event) => {
     const button = (event.target as HTMLElement).closest<HTMLButtonElement>('[data-collab-open]');
     const id = button?.dataset.docId;
     if (!id) return;
 
-    // The dashboard only renders this trigger on documents the account owns.
     active = { id, title: button.dataset.docTitle || 'Untitled', collaborative: true, role: 'owner' };
     openDialog();
   });
@@ -334,6 +376,44 @@ export function initCollaborateDialog(): void {
     void act('visibility', { visibility: String(data.get('visibility') ?? '') }, {
       form: visibilityForm,
     });
+  });
+
+  requestsList.addEventListener('click', (event) => {
+    const button = (event.target as HTMLElement).closest<HTMLButtonElement>('[data-action]');
+    const row = button?.closest<HTMLElement>('[data-request]');
+    if (!button || !row?.dataset.request) return;
+
+    const approve = button.dataset.action === 'approve';
+    const roleInput = row.querySelector<HTMLInputElement>('[data-field="role"]');
+    const msel = row.querySelector<HTMLElement>('[data-msel]');
+    const trigger = msel?.querySelector<HTMLButtonElement>('[data-msel-btn]');
+
+    void act(
+      'request',
+      {
+        action: approve ? 'approve' : 'deny',
+        request: row.dataset.request,
+        ...(approve ? { role: roleInput?.value ?? 'reader' } : {}),
+      },
+      { disable: trigger ? [trigger, button] : [button] },
+    );
+  });
+
+  pick<HTMLButtonElement>('[data-action="copy-document"]').addEventListener('click', (event) => {
+    const button = event.currentTarget as HTMLButtonElement;
+    const label = button.querySelector<HTMLElement>('[data-copy-label]');
+
+    void navigator.clipboard
+      ?.writeText(documentUrlInput.value)
+      .then(() => {
+        if (label) label.textContent = 'Copied';
+        window.setTimeout(() => {
+          if (label) label.textContent = 'Copy';
+        }, 1500);
+      })
+      .catch(() => {
+        /* Clipboard blocked: the field next to the button still holds the URL. */
+      });
   });
 
   peopleList.addEventListener('change', (event) => {
@@ -411,7 +491,6 @@ export function initCollaborateDialog(): void {
       });
   });
 
-  // The editor tells us which tab is on screen; we ask once in case it booted first.
   document.addEventListener('mdverse:active-document', (event) => {
     const detail = (event as CustomEvent<Partial<ActiveDocument>>).detail;
     if (typeof detail?.id !== 'string') return;
@@ -427,6 +506,12 @@ export function initCollaborateDialog(): void {
       section.hidden = !canShare();
     }
     if (!canShare() && dialog.open) dialog.close();
+
+    if (wantsCollaborate && canShare()) {
+      wantsCollaborate = false;
+      openDialog();
+      return;
+    }
 
     if (dialog.open && state?.id !== active.id) {
       clearNotice();

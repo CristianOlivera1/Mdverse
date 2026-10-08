@@ -32,6 +32,16 @@ export interface CollaborationLink {
   readonly createdAt: string;
 }
 
+export interface CollaborationRequest {
+  readonly id: string;
+  readonly requesterId: string;
+  readonly name: string;
+  readonly username: string;
+  /** The requester's note, when they left one. */
+  readonly message: string | null;
+  readonly createdAt: string;
+}
+
 export interface CollaborationState {
   readonly id: string;
   readonly title: string;
@@ -42,6 +52,8 @@ export interface CollaborationState {
   readonly people: readonly CollaborationPerson[];
   readonly invitations: readonly CollaborationInvitation[];
   readonly links: readonly CollaborationLink[];
+  /** Pending “could I get in?” questions, oldest first. Empty for non-managers. */
+  readonly requests: readonly CollaborationRequest[];
 }
 
 export interface CollaborationFeedback {
@@ -55,7 +67,13 @@ export interface CollaborationFeedback {
 export type ShareActionFields = Record<string, string | number>;
 
 // One endpoint per name, under /documents/:id/share/*.
-export type ManagedAction = 'invite' | 'collaborator' | 'invitation' | 'link' | 'visibility';
+export type ManagedAction =
+  | 'invite'
+  | 'collaborator'
+  | 'invitation'
+  | 'link'
+  | 'visibility'
+  | 'request';
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
@@ -93,6 +111,21 @@ function readInvitation(value: unknown): CollaborationInvitation | null {
     id,
     email,
     role: readString(value.role, 'reader') as CollaboratorRole,
+    createdAt: readString(value.createdAt),
+  };
+}
+
+function readRequest(value: unknown): CollaborationRequest | null {
+  if (!isRecord(value)) return null;
+  const id = readString(value.id);
+  if (!id) return null;
+
+  return {
+    id,
+    requesterId: readString(value.requesterId),
+    name: readString(value.name, 'Someone'),
+    username: readString(value.username),
+    message: typeof value.message === 'string' && value.message.length > 0 ? value.message : null,
     createdAt: readString(value.createdAt),
   };
 }
@@ -137,6 +170,9 @@ export function parseCollaborationState(payload: unknown): CollaborationState | 
     links: asArray(payload.links)
       .map(readLink)
       .filter((entry): entry is CollaborationLink => entry !== null),
+    requests: asArray(payload.requests)
+      .map(readRequest)
+      .filter((entry): entry is CollaborationRequest => entry !== null),
   };
 }
 

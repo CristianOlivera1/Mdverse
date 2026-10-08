@@ -5,6 +5,7 @@ import { canManageDocument } from '@/lib/documents/access';
 import { isDocumentId } from '@/lib/documents/ids';
 import {
   getDocument,
+  listAccessRequests,
   listCollaborators,
   listInvitations,
   listShareLinks,
@@ -28,14 +29,14 @@ export const GET: APIRoute = async (context) => {
 
     const canManage = canManageDocument(document.role);
 
-    // A non-manager skips these queries entirely: RLS would return nothing anyway.
-    const [collaborators, invitations, links] = canManage
+    const [collaborators, invitations, links, requests] = canManage
       ? await Promise.all([
           listCollaborators(supabase, id),
           listInvitations(supabase, id),
           listShareLinks(supabase, id),
+          listAccessRequests(supabase, id),
         ])
-      : [[], [], []];
+      : [[], [], [], []];
 
     return jsonResponse({
       document: {
@@ -66,6 +67,14 @@ export const GET: APIRoute = async (context) => {
         role: link.role,
         expiresAt: link.expires_at,
         createdAt: link.created_at,
+      })),
+      requests: requests.map((request) => ({
+        id: request.id,
+        requesterId: request.requesterId,
+        name: request.name,
+        username: request.username,
+        message: request.message,
+        createdAt: request.createdAt,
       })),
     });
   } catch (error) {

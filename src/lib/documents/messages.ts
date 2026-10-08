@@ -26,6 +26,7 @@ export const DOCUMENT_ERROR_CODES = [
   'remove_failed',
   'link_failed',
   'visibility_failed',
+  'request_failed',
 ] as const;
 
 export type DocumentErrorCode = (typeof DOCUMENT_ERROR_CODES)[number];
@@ -45,6 +46,7 @@ const ERROR_MESSAGES: Record<DocumentErrorCode, string> = {
   remove_failed: 'We could not remove that person. Only the owner can.',
   link_failed: 'We could not create or revoke that link. Please try again.',
   visibility_failed: 'We could not change who can reach the document.',
+  request_failed: 'We could not answer that request. Please try again.',
 };
 
 /** Maps a failed save onto the notice that explains it. */
@@ -135,7 +137,7 @@ export function shareFailureCode(
   }
 }
 
-/** Outcome of a sharing action, as a short code — never as database or exception text. */
+/** Outcome of a sharing action, as a short code - never as database or exception text. */
 export interface ShareFeedback {
   error?: DocumentErrorCode;
   invited?: number;
@@ -149,6 +151,8 @@ export interface ShareFeedback {
   linkCreated?: boolean;
   linkRevoked?: boolean;
   visibilityUpdated?: boolean;
+  /** `unnotified` is the honest middle: access granted, the email refused. */
+  requestDecision?: 'approved' | 'unnotified' | 'denied';
 }
 
 /** Query string for the same outcome, so the page and the JSON answer share one wording. */
@@ -166,6 +170,7 @@ export function shareFeedbackParams(feedback: ShareFeedback = {}): URLSearchPara
   if (feedback.linkCreated) params.set('link', 'created');
   if (feedback.linkRevoked) params.set('link', 'revoked');
   if (feedback.visibilityUpdated) params.set('visibility', '1');
+  if (feedback.requestDecision) params.set('request', feedback.requestDecision);
   return params;
 }
 
@@ -181,6 +186,7 @@ export interface ShareNoticeParams {
   removed?: string | null;
   link?: string | null;
   visibility?: string | null;
+  request?: string | null;
 }
 
 /** Resolves the notice shown on the share page (reuses the dashboard catalog). */
@@ -213,6 +219,19 @@ export function shareNotice(params: ShareNoticeParams): AuthNotice | null {
   if (params.link === 'revoked') return { tone: 'success', message: 'Link revoked.' };
   if (params.visibility === '1') {
     return { tone: 'success', message: 'Who can reach the document has been updated.' };
+  }
+
+  if (params.request === 'approved') {
+    return { tone: 'success', message: 'Access granted, and the requester was told.' };
+  }
+  if (params.request === 'unnotified') {
+    return {
+      tone: 'info',
+      message: 'Access granted. The notification email did not go out, so tell them yourself.',
+    };
+  }
+  if (params.request === 'denied') {
+    return { tone: 'info', message: 'Request denied. They can ask again later.' };
   }
 
   return null;

@@ -28,7 +28,7 @@ export interface ShareActionFeedback extends ShareFeedback {
 
 /**
  * The one answer these endpoints give: the dialog reads `notice` and shows it.
- * There is no page to redirect to any more — the collaboration dialog is the
+ * There is no page to redirect to any more - the collaboration dialog is the
  * only caller, and it always asks for JSON.
  */
 export function shareFeedbackResponse(feedback: ShareActionFeedback): Response {

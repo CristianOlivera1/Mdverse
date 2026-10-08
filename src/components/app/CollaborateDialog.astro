@@ -155,12 +155,44 @@ import {
         </div>
       </section>
 
+      <section data-collab="requests-block" hidden>
+        <h3 class="flex items-center gap-2 text-xs font-medium text-neutral-300">
+          <Icon name="lucide:user-check" size={13} />
+          Asking for access
+          <span class="text-neutral-600" data-collab="requests-count"></span>
+        </h3>
+        <ul class="mt-2 space-y-2" data-collab="requests"></ul>
+        <p class="mt-2 text-[11px] leading-relaxed text-neutral-500">
+          These people opened a link and cannot read the document yet. Approving grants the role
+          you pick and turns the request into real access.
+        </p>
+      </section>
+
       <section>
         <h3 class="flex items-center gap-2 text-xs font-medium text-neutral-300">
           <Icon name="lucide:link" size={13} />
           Share by link
         </h3>
-        <form class="mt-2 flex flex-wrap items-center gap-2" data-collab-form="link">
+
+        <div class="mt-2 flex items-center gap-1">
+          <input
+            type="text"
+            readonly
+            aria-label="Link to the editor"
+            class="min-w-0 flex-1 rounded-lg border border-neutral-800 bg-black px-2 py-1.5 font-mono text-[11px] text-neutral-300"
+            data-collab="document-url"
+          />
+          <button type="button" class="hb" data-action="copy-document" title="Copy link">
+            <Icon name="lucide:copy" />
+            <span data-copy-label>Copy</span>
+          </button>
+        </div>
+        <p class="mt-1 text-[11px] leading-relaxed text-neutral-500">
+          A link to the editor. It opens for people who already have access, and anybody else can
+          ask you from there. Create a link below to let someone in without an invitation.
+        </p>
+
+        <form class="mt-3 flex flex-wrap items-center gap-2" data-collab-form="link">
           <input type="hidden" name="action" value="create" />
           <MiniSelect
             name="role"
@@ -270,6 +302,41 @@ import {
         Revoke
       </button>
     </div>
+  </li>
+</template>
+
+<template data-collab-template="request">
+  <li class="rounded-xl border border-neutral-800 p-3">
+    <div class="flex flex-wrap items-start justify-between gap-2">
+      <div class="min-w-0">
+        <p class="truncate text-sm text-neutral-100" data-field="name"></p>
+        <p class="mt-0.5 truncate text-[11px] text-neutral-500" data-field="meta"></p>
+      </div>
+      <div class="flex shrink-0 flex-wrap items-center gap-1">
+        <MiniSelect
+          name="role"
+          dataField="role"
+          value="reader"
+          ariaLabel="Role to grant this person"
+          options={[
+            { value: 'reader', label: 'Can view' },
+            { value: 'editor', label: 'Can edit' },
+          ]}
+        />
+        <button type="button" class="hb on" data-action="approve" title="Grant access">
+          <Icon name="lucide:check" />
+          Approve
+        </button>
+        <button type="button" class="hb danger" data-action="deny" title="Deny access">
+          <Icon name="lucide:x" />
+        </button>
+      </div>
+    </div>
+    <p
+      class="mt-2 rounded-lg border border-neutral-800 bg-black/60 px-2 py-1.5 text-[11px] leading-relaxed text-neutral-400"
+      data-field="note"
+      hidden
+    ></p>
   </li>
 </template>
 

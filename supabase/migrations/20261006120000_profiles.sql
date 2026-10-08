@@ -1,5 +1,5 @@
 -- ============================================================================
--- OpenMarkdown — phase 2: accounts, profiles and RLS
+-- Mdverse - phase 2: accounts, profiles and RLS
 --
 -- Apply:   supabase link --project-ref <ref> && supabase db push
 -- Verify:  supabase db advisors
@@ -8,7 +8,7 @@
 --   * Avatars are initials only: no picture column, no avatar bucket.
 --   * `public.profiles` is the only table the browser reads in phase 2; phases 3+
 --     add documents, collaborators, invitations, versions, comments and links.
---   * RLS is enabled and every policy is scoped `to authenticated` — never via
+--   * RLS is enabled and every policy is scoped `to authenticated` - never via
 --     `auth.role()`. Ownership predicates use `(select auth.uid())` so the
 --     function is evaluated once per statement instead of once per row.
 --   * The signup trigger lives in the `private` schema (unreachable through the
@@ -139,7 +139,7 @@ declare
   candidate text;
   suffix int := 0;
 begin
-  -- Mirror of `usernameFromEmail` in src/lib/auth/profile.ts — keep them in sync.
+  -- Mirror of `usernameFromEmail` in src/lib/auth/profile.ts - keep them in sync.
   -- `+tag` is a routing label, not part of the name, so it is dropped too.
   base_username := lower(split_part(coalesce(new.email, ''), '@', 1));
   base_username := split_part(base_username, '+', 1);

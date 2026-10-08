@@ -2,6 +2,7 @@ import * as React from 'react';
 import type { ReactElement } from 'react';
 import { render } from 'react-email';
 
+import AccessRequestEmail from '../../../emails/access-request';
 import CollaborationInviteEmail from '../../../emails/collaboration-invite';
 import CommentMentionEmail from '../../../emails/comment-mention';
 import ConfirmEmail from '../../../emails/confirm-email';
@@ -71,6 +72,36 @@ export async function sendCollaborationInvite(options: SendInviteOptions): Promi
       inviterName: options.inviterName,
       role: options.role,
       inviteUrl: options.inviteUrl,
+      siteUrl: options.siteUrl,
+    }),
+  });
+}
+
+export interface SendAccessRequestOptions {
+  to: string;
+  ownerName?: string | null;
+  requesterName: string;
+  requesterEmail?: string | null;
+  documentTitle: string;
+  message?: string | null;
+  reviewUrl: string;
+  siteUrl?: string;
+}
+
+export async function sendAccessRequestEmail(
+  options: SendAccessRequestOptions,
+): Promise<SendResult> {
+  return sendEmail({
+    tag: 'access request',
+    to: options.to,
+    subject: `${options.requesterName} is asking for access to "${options.documentTitle}"`,
+    element: React.createElement(AccessRequestEmail, {
+      ownerName: options.ownerName,
+      requesterName: options.requesterName,
+      requesterEmail: options.requesterEmail,
+      documentTitle: options.documentTitle,
+      message: options.message,
+      reviewUrl: options.reviewUrl,
       siteUrl: options.siteUrl,
     }),
   });

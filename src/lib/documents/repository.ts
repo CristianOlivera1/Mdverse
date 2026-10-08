@@ -9,6 +9,12 @@ import type {
   DocumentVisibility,
 } from '../supabase/types';
 import { documentAccess } from './access';
+import {
+  isAccessRequestDecision,
+  isAccessRequestOutcome,
+  type AccessRequestDecision,
+  type AccessRequestOutcome,
+} from './accessRequests';
 import { isInviteStatus, type InviteRole, type InviteStatus } from './sharing';
 import { normalizeTitle } from './store';
 import type { CloudDocument, DocumentAccess, SaveDocumentResult } from './types';
@@ -238,7 +244,6 @@ export function renameDocument(
   });
 }
 
-// select('id') separates deleted from RLS-filtered; plain delete reports false success.
 export async function deleteDocument(
   db: Db,
   id: string,
@@ -483,6 +488,151 @@ export async function setVisibility(
   return asRows<{ id: string }>(data).length > 0
     ? { ok: true, value: true }
     : { ok: false, reason: 'forbidden' };
+}
+
+/* Asking for access --------------------------------------------------------- */
+
+export interface AccessRequestEntry {
+  readonly id: string;
+  readonly requesterId: string;
+  readonly name: string;
+  readonly username: string;
+  readonly message: string | null;
+  readonly createdAt: string;
+}
+
+export interface AccessRequestResult {
+  readonly outcome: AccessRequestOutcome;
+  readonly documentTitle: string;
+  readonly ownerEmail: string | null;
+  readonly ownerName: string | null;
+}
+
+export async function requestDocumentAccess(
+  db: Db,
+  input: { documentId: string; message?: string | null },
+): Promise<ShareResult<AccessRequestResult>> {
+  const { data, error } = await db.rpc('request_document_access', {
+    p_document_id: input.documentId,
+    p_message: input.message ?? null,
+  });
+
+  if (error) return { ok: false, reason: shareFailure(error) };
+
+  const row = asRow<{
+    result: string;
+    document_title: string | null;
+    owner_email: string | null;
+    owner_name: string | null;
+  }>(asRows(data)[0]);
+
+  if (!row || !isAccessRequestOutcome(row.result)) return { ok: false, reason: 'error' };
+
+  return {
+    ok: true,
+    value: {
+      outcome: row.result,
+      documentTitle: row.document_title ?? 'a document',
+      ownerEmail: row.owner_email,
+      ownerName: row.owner_name,
+    },
+  };
+}
+
+export interface AccessDecisionResult {
+  readonly decision: AccessRequestDecision;
+  readonly documentId: string;
+  readonly requesterId: string;
+  readonly requesterName: string;
+  readonly documentTitle: string;
+  readonly requesterEmail: string | null;
+}
+
+export async function decideAccessRequest(
+  db: Db,
+  input: { requestId: string; approve: boolean; role?: InviteRole },
+): Promise<ShareResult<AccessDecisionResult>> {
+  const { data, error } = await db.rpc('decide_access_request', {
+    p_request_id: input.requestId,
+    p_approve: input.approve,
+    ...(input.role ? { p_role: input.role } : {}),
+  });
+
+  if (error) return { ok: false, reason: shareFailure(error) };
+
+  const row = asRow<{
+    result: string;
+    document_id: string | null;
+    requester_id: string | null;
+    requester_email: string | null;
+    requester_name: string | null;
+    document_title: string | null;
+  }>(asRows(data)[0]);
+
+  if (!row || !isAccessRequestDecision(row.result) || !row.document_id || !row.requester_id) {
+    return { ok: false, reason: 'error' };
+  }
+
+  return {
+    ok: true,
+    value: {
+      decision: row.result,
+      documentId: row.document_id,
+      requesterId: row.requester_id,
+      requesterName: row.requester_name ?? 'Someone',
+      documentTitle: row.document_title ?? 'a document',
+      requesterEmail: row.requester_email,
+    },
+  };
+}
+
+export async function listAccessRequests(
+  db: Db,
+  documentId: string,
+): Promise<AccessRequestEntry[]> {
+  const { data, error } = await db
+    .from('document_access_requests')
+    .select('id, requester_id, message, created_at')
+    .eq('document_id', documentId)
+    .eq('status', 'pending')
+    .order('created_at', { ascending: true });
+
+  if (error) throw error;
+
+  const rows = asRows<{
+    id: string;
+    requester_id: string;
+    message: string | null;
+    created_at: string;
+  }>(data);
+
+  if (rows.length === 0) return [];
+
+  const { data: profileData, error: profileError } = await db
+    .from('profiles')
+    .select('id, display_name, username')
+    .in(
+      'id',
+      rows.map((row) => row.requester_id),
+    );
+
+  if (profileError) throw profileError;
+
+  const profiles = new Map<string, { display_name: string; username: string }>();
+  for (const profile of asRows<{ id: string; display_name: string; username: string }>(
+    profileData,
+  )) {
+    profiles.set(profile.id, profile);
+  }
+
+  return rows.map((row) => ({
+    id: row.id,
+    requesterId: row.requester_id,
+    name: profiles.get(row.requester_id)?.display_name ?? 'Unknown account',
+    username: profiles.get(row.requester_id)?.username ?? '',
+    message: row.message,
+    createdAt: row.created_at,
+  }));
 }
 
 export async function resolveShareToken(

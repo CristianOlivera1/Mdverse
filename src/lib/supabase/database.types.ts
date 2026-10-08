@@ -154,6 +154,39 @@ export interface Database {
         };
         Relationships: [];
       };
+      document_access_requests: {
+        Row: {
+          id: string;
+          document_id: string;
+          requester_id: string;
+          message: string | null;
+          status: Database['public']['Enums']['access_request_status'];
+          decided_by: string | null;
+          decided_at: string | null;
+          created_at: string;
+        };
+        Insert: {
+          id?: string;
+          document_id: string;
+          requester_id: string;
+          message?: string | null;
+          status?: Database['public']['Enums']['access_request_status'];
+          decided_by?: string | null;
+          decided_at?: string | null;
+          created_at?: string;
+        };
+        Update: {
+          id?: string;
+          document_id?: string;
+          requester_id?: string;
+          message?: string | null;
+          status?: Database['public']['Enums']['access_request_status'];
+          decided_by?: string | null;
+          decided_at?: string | null;
+          created_at?: string;
+        };
+        Relationships: [];
+      };
       document_versions: {
         Row: {
           id: number;
@@ -296,10 +329,37 @@ export interface Database {
           is_owner: boolean;
         }[];
       };
+      request_document_access: {
+        Args: { p_document_id: string; p_message?: string | null };
+        /** `requested` | `already_requested` | `already_has_access` | `not_found`. */
+        Returns: {
+          result: string;
+          document_title: string | null;
+          owner_email: string | null;
+          owner_name: string | null;
+        }[];
+      };
+      decide_access_request: {
+        Args: {
+          p_request_id: string;
+          p_approve: boolean;
+          p_role?: Database['public']['Enums']['collaborator_role'];
+        };
+        /** `approved` | `denied` | `not_found`. */
+        Returns: {
+          result: string;
+          document_id: string | null;
+          requester_id: string | null;
+          requester_email: string | null;
+          requester_name: string | null;
+          document_title: string | null;
+        }[];
+      };
     };
     Enums: {
       collaborator_role: 'reader' | 'editor' | 'admin';
       document_visibility: 'private' | 'unlisted' | 'public';
+      access_request_status: 'pending' | 'approved' | 'denied';
     };
     CompositeTypes: {
       [_ in never]: never;
