@@ -1,8 +1,3 @@
-/**
- * `PATCH` autosaves `{content, revision}`; stale writers get 409 + current
- * revision instead of overwriting unseen text. RLS decides visibility.
- */
-
 import type { APIRoute } from 'astro';
 
 import {
@@ -17,10 +12,12 @@ import { isDocumentId } from '@/lib/documents/ids';
 import {
   deleteDocument,
   getDocument,
+  getPublicDocumentById,
   renameDocument,
   saveDocument,
 } from '@/lib/documents/repository';
 import type { SaveDocumentResult } from '@/lib/documents/types';
+import { createAnonymousSupabaseClient } from '@/lib/supabase/server';
 
 function saveResponse(result: SaveDocumentResult): Response {
   if (result.ok) {
@@ -40,15 +37,22 @@ function saveResponse(result: SaveDocumentResult): Response {
 }
 
 export const GET: APIRoute = async (context) => {
-  const session = apiSession(context);
-  if (!session) return jsonError(401, 'unauthenticated');
-
   const id = context.params.id ?? '';
   if (!isDocumentId(id)) return jsonError(400, 'invalid_id');
 
+  const session = apiSession(context);
+
   try {
-    const document = await getDocument(session.supabase, session.userId, id);
-    return document ? jsonResponse({ document }) : jsonError(404, 'not_found');
+    if (session) {
+      const document = await getDocument(session.supabase, session.userId, id);
+      return document ? jsonResponse({ document }) : jsonError(404, 'not_found');
+    }
+
+    const anonymous = createAnonymousSupabaseClient();
+    const document = anonymous ? await getPublicDocumentById(anonymous, id) : null;
+    if (document) return jsonResponse({ document });
+
+    return jsonError(401, 'unauthenticated');
   } catch (error) {
     console.warn('[documents] read failed:', error);
     return jsonError(500, 'read_failed');

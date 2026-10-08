@@ -2,7 +2,6 @@ import { canManageDocument, describeAccess } from '../documents/access';
 import {
   loadCollaboration,
   runShareAction,
-  type CollaborationLink,
   type CollaborationPerson,
   type CollaborationRequest,
   type CollaborationState,
@@ -11,7 +10,8 @@ import {
 } from '../documents/collaboration';
 import { formatTimestamp } from '../documents/format';
 import type { DocumentAccess } from '../documents/types';
-import { linkIsActive, maskToken, ROLE_LABELS, shareUrl } from '../documents/sharing';
+import { ROLE_LABELS } from '../documents/sharing';
+import { confirmAction } from './confirmDialog';
 import { closeMenus } from './menus';
 import { syncMiniSelects } from './miniSelect';
 
@@ -61,19 +61,15 @@ export function initCollaborateDialog(): void {
   const peopleEmpty = pick<HTMLElement>('[data-collab="people-empty"]');
   const invitationsBlock = pick<HTMLElement>('[data-collab="invitations-block"]');
   const invitationsList = pick<HTMLElement>('[data-collab="invitations"]');
-  const linksList = pick<HTMLElement>('[data-collab="links"]');
-  const linksEmpty = pick<HTMLElement>('[data-collab="links-empty"]');
   const requestsBlock = pick<HTMLElement>('[data-collab="requests-block"]');
   const requestsList = pick<HTMLElement>('[data-collab="requests"]');
   const requestsCount = pick<HTMLElement>('[data-collab="requests-count"]');
   const documentUrlInput = pick<HTMLInputElement>('[data-collab="document-url"]');
   const inviteForm = pick<HTMLFormElement>('[data-collab-form="invite"]');
-  const linkForm = pick<HTMLFormElement>('[data-collab-form="link"]');
   const visibilityForm = pick<HTMLFormElement>('[data-collab-form="visibility"]');
   const personTemplate = template('person');
   const invitationTemplate = template('invitation');
   const requestTemplate = template('request');
-  const linkTemplate = template('link');
 
   let wantsCollaborate = new URLSearchParams(window.location.search).get('collaborate') === '1';
 
@@ -176,29 +172,6 @@ export function initCollaborateDialog(): void {
     );
   }
 
-  function renderLinks(links: readonly CollaborationLink[], origin: string): void {
-    const now = new Date();
-    linksEmpty.hidden = links.length > 0;
-
-    linksList.replaceChildren(
-      ...links.map((link) => {
-        const active_ = linkIsActive({ expires_at: link.expiresAt }, now);
-        const expiry = link.expiresAt
-          ? `${active_ ? 'expires' : 'expired'} ${formatTimestamp(link.expiresAt)}`
-          : 'never expires';
-
-        const row = fill(linkTemplate, {
-          meta: `${ROLE_LABELS[link.role]} · ${expiry} · ${maskToken(link.token)}`,
-          url: shareUrl(origin, link.token),
-        });
-
-        row.dataset.link = link.id;
-        if (!active_) row.classList.add('opacity-60');
-        return row;
-      }),
-    );
-  }
-
   function renderRequests(requests: readonly CollaborationRequest[]): void {
     requestsBlock.hidden = requests.length === 0;
     requestsCount.textContent = requests.length > 0 ? `(${requests.length})` : '';
@@ -249,7 +222,6 @@ export function initCollaborateDialog(): void {
     renderInvitations(next.invitations);
     renderRequests(next.requests);
     renderDocumentLink(next.id);
-    renderLinks(next.links, window.location.origin);
     for (const radio of visibilityForm.querySelectorAll<HTMLInputElement>(
       'input[name="visibility"]',
     )) {
@@ -356,20 +328,6 @@ export function initCollaborateDialog(): void {
     );
   });
 
-  linkForm.addEventListener('submit', (event) => {
-    event.preventDefault();
-    const data = new FormData(linkForm);
-    void act(
-      'link',
-      {
-        action: 'create',
-        role: String(data.get('role') ?? 'reader'),
-        expiry: String(data.get('expiry') ?? '0'),
-      },
-      { form: linkForm },
-    );
-  });
-
   visibilityForm.addEventListener('submit', (event) => {
     event.preventDefault();
     const data = new FormData(visibilityForm);
@@ -444,9 +402,18 @@ export function initCollaborateDialog(): void {
     );
     const row = button?.closest<HTMLElement>('[data-user]');
     if (!button || !row?.dataset.user) return;
-    if (!window.confirm('Remove this person from the document?')) return;
 
-    void act('collaborator', { action: 'remove', user: row.dataset.user }, { disable: [button] });
+    const userId = row.dataset.user;
+    const name = row.querySelector('[data-field="name"]')?.textContent?.trim() || 'this person';
+    void confirmAction({
+      title: `Remove ${name}?`,
+      message: 'They immediately lose access to this document.',
+      confirmLabel: 'Remove',
+      danger: true,
+    }).then((confirmed) => {
+      if (!confirmed) return;
+      void act('collaborator', { action: 'remove', user: userId }, { disable: [button] });
+    });
   });
 
   invitationsList.addEventListener('click', (event) => {
@@ -456,39 +423,18 @@ export function initCollaborateDialog(): void {
     const row = button?.closest<HTMLElement>('[data-invitation]');
     if (!button || !row?.dataset.invitation) return;
 
-    void act('invitation', { invitation: row.dataset.invitation }, { disable: [button] });
-  });
-
-  linksList.addEventListener('click', (event) => {
-    const target = event.target as HTMLElement;
-    const button = target.closest<HTMLElement>('[data-action]');
-    const row = button?.closest<HTMLElement>('[data-link]');
-    if (!button || !row?.dataset.link) return;
-
-    if (button.dataset.action === 'revoke') {
-      void act(
-        'link',
-        { action: 'revoke', link: row.dataset.link },
-        { disable: button instanceof HTMLButtonElement ? [button] : [] },
-      );
-      return;
-    }
-
-    const field = row.querySelector<HTMLInputElement>('[data-field="url"]');
-    if (!field) return;
-
-    const label = button.querySelector<HTMLElement>('[data-copy-label]');
-    void navigator.clipboard
-      ?.writeText(field.value)
-      .then(() => {
-        if (label) label.textContent = 'Copied';
-        window.setTimeout(() => {
-          if (label) label.textContent = 'Copy';
-        }, 1500);
-      })
-      .catch(() => {
-        /* Clipboard blocked: the field next to the button still holds the URL. */
-      });
+    const invitationId = row.dataset.invitation;
+    const email =
+      row.querySelector('[data-field="email"]')?.textContent?.trim() || 'this invitation';
+    void confirmAction({
+      title: `Revoke the invitation for ${email}?`,
+      message: 'They will no longer be able to claim access with it.',
+      confirmLabel: 'Revoke',
+      danger: true,
+    }).then((confirmed) => {
+      if (!confirmed) return;
+      void act('invitation', { invitation: invitationId }, { disable: [button] });
+    });
   });
 
   document.addEventListener('mdverse:active-document', (event) => {

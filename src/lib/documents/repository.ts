@@ -134,6 +134,23 @@ export async function getDocument(
   );
 }
 
+export async function getPublicDocumentById(db: Db, id: string): Promise<CloudDocument | null> {
+  const { data, error } = await db
+    .from('documents')
+    .select(DOCUMENT_COLUMNS)
+    .eq('id', id)
+    .eq('visibility', 'public')
+    .maybeSingle();
+
+  if (error) {
+    console.warn('[documents] reading a public document by id failed:', error.message);
+    return null;
+  }
+
+  const row = asRow<DocumentRow>(data);
+  return row ? toCloudDocument(row, 'reader') : null;
+}
+
 export async function listVersions(db: Db, documentId: string, limit = 50): Promise<VersionRow[]> {
   const { data, error } = await db
     .from('document_versions')

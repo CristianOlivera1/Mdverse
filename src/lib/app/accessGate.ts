@@ -40,7 +40,7 @@ export function showAccessGate(options: AccessGateOptions): void {
   root.append(card);
 
   card.innerHTML = `
-    <p class="text-[11px] uppercase tracking-wide text-neutral-500">Mdverse</p>
+    <img src="/svg/logo-calligraphy.svg" alt="Mdverse logo" class="h-7 w-auto my-2" width="136" height="33">
     <h1 class="mt-1 text-lg font-semibold text-neutral-100">This document is not open to you</h1>
     <p class="mt-2 text-xs leading-relaxed text-neutral-400">
       You do not have access to this document. Ask the owner - they get an email and can let you

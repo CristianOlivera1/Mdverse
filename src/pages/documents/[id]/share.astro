@@ -5,19 +5,10 @@ import { canManageDocument, describeAccess } from '@/lib/documents/access';
 import { formatTimestamp } from '@/lib/documents/format';
 import { isDocumentId } from '@/lib/documents/ids';
 import { shareNotice } from '@/lib/documents/messages';
+import { getDocument, listCollaborators, listInvitations } from '@/lib/documents/repository';
 import {
-  getDocument,
-  listCollaborators,
-  listInvitations,
-  listShareLinks,
-} from '@/lib/documents/repository';
-import {
-  LINK_EXPIRIES,
-  linkIsActive,
-  maskToken,
   ROLE_HINTS,
   ROLE_LABELS,
-  shareUrl,
   sortCollaborators,
   VISIBILITIES,
   VISIBILITY_LABELS,
@@ -49,7 +40,6 @@ const notice = shareNotice({
 });
 
 const action = `/documents/${encodeURIComponent(document.id)}/share`;
-const now = new Date();
 
 // Non-managers skip these queries entirely - RLS would reject them anyway.
 const collaborators = manageable
@@ -58,7 +48,6 @@ const collaborators = manageable
 const invitations = manageable
   ? (await listInvitations(supabase, document.id)).filter((entry) => entry.acceptedAt === null)
   : [];
-const links = manageable ? await listShareLinks(supabase, document.id) : [];
 const origin = Astro.url.origin;
 const roleOptions = ['reader', 'editor'] as const;
 ---
@@ -83,7 +72,7 @@ const roleOptions = ['reader', 'editor'] as const;
 
   <div class="mb-6 flex flex-wrap items-center gap-2">
     <a href={`/?doc=${encodeURIComponent(document.id)}`} class="hb on">
-      <Icon name="lucide:pencil-line" />
+      <Icon name="lucide:terminal" />
       Open in the editor
     </a>
     <a href={`/documents/${encodeURIComponent(document.id)}/history`} class="hb">
@@ -202,7 +191,14 @@ const roleOptions = ['reader', 'editor'] as const;
                     </div>
                   </form>
 
-                  <form method="POST" action={`${action}/collaborator`}>
+                  <form
+                    method="POST"
+                    action={`${action}/collaborator`}
+                    data-confirm={`Remove ${collaborator.name}? They immediately lose access to this document.`}
+                    data-confirm-title={`Remove ${collaborator.name}?`}
+                    data-confirm-label="Remove"
+                    data-confirm-danger
+                  >
                     <input type="hidden" name="action" value="remove" />
                     <input type="hidden" name="user" value={collaborator.userId} />
                     <button
@@ -234,7 +230,14 @@ const roleOptions = ['reader', 'editor'] as const;
                         {formatTimestamp(invitation.createdAt)}
                       </p>
                     </div>
-                    <form method="POST" action={`${action}/invitation`}>
+                    <form
+                      method="POST"
+                      action={`${action}/invitation`}
+                      data-confirm={`Revoke the invitation for ${invitation.email}? They will no longer be able to claim access with it.`}
+                      data-confirm-title="Revoke this invitation?"
+                      data-confirm-label="Revoke"
+                      data-confirm-danger
+                    >
                       <input type="hidden" name="invitation" value={invitation.id} />
                       <button type="submit" class="hb danger">
                         <Icon name="lucide:x" />
@@ -255,93 +258,29 @@ const roleOptions = ['reader', 'editor'] as const;
           Share by link
         </h2>
 
-        <form
-          method="POST"
-          action={`${action}/link`}
-          class="mt-3 flex flex-wrap items-center gap-2"
-        >
-          <input type="hidden" name="action" value="create" />
-          <select
-            name="role"
-            aria-label="Role granted by the link"
-            class="rounded-lg border border-neutral-800 bg-black px-2 py-1.5 text-xs text-neutral-200"
+        <div class="mt-3 flex flex-wrap items-center gap-1">
+          <input
+            type="text"
+            readonly
+            value={`${origin}/?doc=${encodeURIComponent(document.id)}`}
+            aria-label="Link to the editor"
+            class="min-w-0 flex-1 rounded-lg border border-neutral-800 bg-black px-2 py-1.5 font-mono text-[11px] text-neutral-300"
+          />
+          <button
+            type="button"
+            class="hb"
+            data-copy={`${origin}/?doc=${encodeURIComponent(document.id)}`}
+            title="Copy link"
+            aria-label="Copy link"
           >
-            <option value="reader">Can view</option>
-            <option value="editor">Can edit</option>
-          </select>
-          <select
-            name="expiry"
-            aria-label="Link expiry"
-            class="rounded-lg border border-neutral-800 bg-black px-2 py-1.5 text-xs text-neutral-200"
-          >
-            {LINK_EXPIRIES.map((expiry) => (
-              <option value={String(expiry.days)}>{expiry.label}</option>
-            ))}
-          </select>
-          <button type="submit" class="hb">
-            <Icon name="lucide:plus" />
-            Create link
+            <Icon name="lucide:copy" />
+            Copy
           </button>
-          <p class="w-full text-[11px] leading-relaxed text-neutral-500">
-            Anyone who opens the link reads the document. Editing through a link also requires being
-            signed in - the link then becomes real access for that account.
-          </p>
-        </form>
-
-        {links.length === 0 ? (
-          <p class="mt-4 text-xs text-neutral-500">No links yet.</p>
-        ) : (
-          <ul class="mt-4 space-y-2">
-            {links.map((entry) => {
-              const active = linkIsActive(entry, now);
-              const url = shareUrl(origin, entry.token);
-              return (
-                <li class="rounded-xl border border-neutral-800 p-3">
-                  <div class="flex flex-wrap items-center justify-between gap-2">
-                    <p class="text-[11px] text-neutral-400">
-                      {ROLE_LABELS[entry.role]} ·{' '}
-                      {entry.expires_at
-                        ? `${active ? 'expires' : 'expired'} ${formatTimestamp(entry.expires_at)}`
-                        : 'never expires'}{' '}
-                      ·{' '}
-                      <span class:list={[!active && 'text-amber-400/80']}>
-                        {maskToken(entry.token)}
-                      </span>
-                    </p>
-                    <form method="POST" action={`${action}/link`}>
-                      <input type="hidden" name="action" value="revoke" />
-                      <input type="hidden" name="link" value={entry.id} />
-                      <button type="submit" class="hb danger">
-                        <Icon name="lucide:trash" />
-                        Revoke
-                      </button>
-                    </form>
-                  </div>
-
-                  <div class="mt-2 flex items-center gap-1">
-                    <input
-                      type="text"
-                      readonly
-                      value={url}
-                      aria-label="Share link"
-                      class="min-w-0 flex-1 rounded-lg border border-neutral-800 bg-black px-2 py-1.5 font-mono text-[11px] text-neutral-300"
-                    />
-                    <button
-                      type="button"
-                      class="hb"
-                      data-copy={url}
-                      title="Copy link"
-                      aria-label="Copy link"
-                    >
-                      <Icon name="lucide:copy" />
-                      Copy
-                    </button>
-                  </div>
-                </li>
-              );
-            })}
-          </ul>
-        )}
+        </div>
+        <p class="mt-2 text-[11px] leading-relaxed text-neutral-500">
+          Anyone who already has access opens it here, and anybody else can ask you from there. Use
+          Invite by email, or “Who can reach it”, to let someone in.
+        </p>
       </section>
 
       <section class="mt-8 rounded-xl border border-neutral-800 bg-neutral-950/60 p-4">
@@ -387,7 +326,11 @@ const roleOptions = ['reader', 'editor'] as const;
 </AccountLayout>
 
 <script>
-  // Copy button only - every action is a plain form POST without JS.
+  import { initConfirmForms } from '@/lib/app/confirmDialog';
+
+  initConfirmForms();
+
+  // Copy button only - every other action is a plain form POST.
   for (const button of document.querySelectorAll<HTMLButtonElement>('button[data-copy]')) {
     button.addEventListener('click', () => {
       const value = button.dataset.copy ?? '';

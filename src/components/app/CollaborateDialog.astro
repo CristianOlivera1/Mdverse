@@ -1,12 +1,7 @@
 ---
 import Icon from '@/components/ui/Icon.astro';
 import MiniSelect from '@/components/ui/MiniSelect.astro';
-import {
-  LINK_EXPIRIES,
-  ROLE_HINTS,
-  VISIBILITY_LABELS,
-  VISIBILITIES,
-} from '@/lib/documents/sharing';
+import { ROLE_HINTS, VISIBILITY_LABELS, VISIBILITIES } from '@/lib/documents/sharing';
 ---
 
 <button
@@ -188,39 +183,8 @@ import {
           </button>
         </div>
         <p class="mt-1 text-[11px] leading-relaxed text-neutral-500">
-          A link to the editor. It opens for people who already have access, and anybody else can
-          ask you from there. Create a link below to let someone in without an invitation.
-        </p>
-
-        <form class="mt-3 flex flex-wrap items-center gap-2" data-collab-form="link">
-          <input type="hidden" name="action" value="create" />
-          <MiniSelect
-            name="role"
-            ariaLabel="Role granted by the link"
-            options={[
-              { value: 'reader', label: 'Can view' },
-              { value: 'editor', label: 'Can edit' },
-            ]}
-          />
-          <MiniSelect
-            name="expiry"
-            ariaLabel="Link expiry"
-            options={LINK_EXPIRIES.map((expiry) => ({
-              value: String(expiry.days),
-              label: expiry.label,
-            }))}
-          />
-          <button type="submit" class="hb" data-collab-submit>
-            <Icon name="lucide:plus" />
-            Create link
-            <span class="msel-spin" data-collab-spinner hidden>
-              <Icon name="lucide:loader-circle" size={14} />
-            </span>
-          </button>
-        </form>
-        <ul class="mt-2 space-y-2" data-collab="links"></ul>
-        <p class="mt-2 text-xs text-neutral-500" data-collab="links-empty" hidden>
-          No links yet.
+          A link to the editor. Anyone who already has access opens it here, and anybody else can ask
+          you from there. Use Invite by email, or “Who can reach it”, to let someone in.
         </p>
       </section>
 
@@ -337,31 +301,6 @@ import {
       data-field="note"
       hidden
     ></p>
-  </li>
-</template>
-
-<template data-collab-template="link">
-  <li class="rounded-xl border border-neutral-800 p-3">
-    <div class="flex flex-wrap items-center justify-between gap-2">
-      <p class="text-[11px] text-neutral-400" data-field="meta"></p>
-      <button type="button" class="hb danger" data-action="revoke">
-        <Icon name="lucide:trash" />
-        Revoke
-      </button>
-    </div>
-    <div class="mt-2 flex items-center gap-1">
-      <input
-        type="text"
-        readonly
-        aria-label="Share link"
-        class="min-w-0 flex-1 rounded-lg border border-neutral-800 bg-black px-2 py-1.5 font-mono text-[11px] text-neutral-300"
-        data-field="url"
-      />
-      <button type="button" class="hb" data-action="copy" title="Copy link">
-        <Icon name="lucide:copy" />
-        <span data-copy-label>Copy</span>
-      </button>
-    </div>
   </li>
 </template>
 

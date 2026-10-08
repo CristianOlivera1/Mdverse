@@ -26,6 +26,7 @@ import {
   createShareLink,
   deleteDocument,
   getDocument,
+  getPublicDocumentById,
   inviteCollaborator,
   listCollaborators,
   listInvitations,
@@ -238,6 +239,29 @@ describe.skipIf(!env)('sharing (live project)', () => {
       value: true,
     });
     expect((await getDocument(owner, ownerId, documentId))?.visibility).toBe('unlisted');
+  });
+
+  it('serves a published document to a visitor with no session, and nothing else', async () => {
+    expect(await setVisibility(owner, { documentId, visibility: 'public' })).toEqual({
+      ok: true,
+      value: true,
+    });
+
+    const published = await getPublicDocumentById(anonymous, documentId);
+    expect(published?.id).toBe(documentId);
+    // No account, no role to attach: reading a published document is always reader.
+    expect(published?.role).toBe('reader');
+    expect(published?.visibility).toBe('public');
+
+    // Private again: the same anonymous read finds nothing.
+    expect(await setVisibility(owner, { documentId, visibility: 'private' })).toEqual({
+      ok: true,
+      value: true,
+    });
+    expect(await getPublicDocumentById(anonymous, documentId)).toBeNull();
+
+    // An id that exists for nobody is not a document either.
+    expect(await getPublicDocumentById(anonymous, randomUUID())).toBeNull();
   });
 
   it('creates a link, resolves it, and stops resolving it once revoked', async () => {

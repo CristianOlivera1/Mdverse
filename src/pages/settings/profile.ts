@@ -34,8 +34,6 @@ export const POST: APIRoute = async (context) => {
     return context.redirect(profileFeedbackUrl({ error: code }));
   }
 
-  // No error and no row means RLS filtered the update: report it instead of
-  // pretending the profile was saved.
   if (!data || data.length === 0) {
     console.warn('[profile] update matched no rows for user', user.id);
     return context.redirect(profileFeedbackUrl({ error: 'save_failed' }));

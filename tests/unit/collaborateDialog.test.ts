@@ -18,8 +18,6 @@ const SLOTS = [
   'people-empty',
   'invitations-block',
   'invitations',
-  'links',
-  'links-empty',
   'requests-block',
   'requests',
   'requests-count',
@@ -75,12 +73,10 @@ function mount(): void {
       <button data-collab="close"></button>
       <button data-action="copy-document"><span data-copy-label>Copy</span></button>
       <form data-collab-form="invite"></form>
-      <form data-collab-form="link"></form>
       <form data-collab-form="visibility"></form>
     </dialog>
     <template data-collab-template="person"></template>
     <template data-collab-template="invitation"></template>
-    <template data-collab-template="link"></template>
     <template data-collab-template="request">
       <li>
         <span data-field="name"></span>

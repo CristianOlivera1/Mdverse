@@ -1,11 +1,3 @@
-/**
- * Shared plumbing for the suites that talk to the real Supabase project.
- *
- * The keys are read from `.env`; when they are missing or still placeholders the
- * suites skip instead of failing, so a clone without credentials still has a green
- * `pnpm test:db`.
- */
-
 import { readFileSync } from 'node:fs';
 
 import { createClient, type SupabaseClient } from '@supabase/supabase-js';
@@ -64,10 +56,6 @@ export interface LiveAccount {
   readonly password: string;
 }
 
-/**
- * Creates a confirmed account (never emailed) and signs a client into it, exactly
- * like a browser would.
- */
 export async function createAccount(
   env: LiveEnv,
   admin: SupabaseClient<Database>,
@@ -88,12 +76,17 @@ export async function createAccount(
     email: input.email,
     password: input.password,
   });
-  if (signInError) throw signInError;
+  if (signInError) {
+    const { error: cleanupError } = await admin.auth.admin.deleteUser(id);
+    if (cleanupError) {
+      console.warn(`[integration] could not remove ${input.email} after a refused sign-in:`, cleanupError.message);
+    }
+    throw signInError;
+  }
 
   return { client, id, email: input.email, password: input.password };
 }
 
-/** Deletes every account the suite created, whatever the outcome of the tests. */
 export async function deleteAccounts(
   admin: SupabaseClient<Database>,
   ids: readonly string[],
