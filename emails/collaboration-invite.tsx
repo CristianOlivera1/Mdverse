@@ -1,19 +1,15 @@
 import * as React from 'react';
+import { Section, Text } from 'react-email';
 import {
-  Html,
-  Head,
-  Preview,
-  Body,
-  Container,
-  Section,
-  Text,
-  Heading,
-  Hr,
-  Button,
-  Link,
-  Row,
-  Column,
-} from 'react-email';
+  ContentSection,
+  EmailButton,
+  EmailHeading,
+  EmailParagraph,
+  EmailShell,
+  MutedInfo,
+  sharedStrong,
+  theme,
+} from './_shared';
 
 export interface CollaborationInviteEmailProps {
   /** Name or email of the person being invited */
@@ -52,79 +48,32 @@ export default function CollaborationInviteEmail({
   const roleDesc = ROLE_DESCRIPTIONS[role];
 
   return (
-    <Html lang="en">
-      <Head />
-      <Preview>
-        {inviterName} invited you to collaborate on "{documentTitle}" in Mdverse.
-      </Preview>
-      <Body style={body}>
-        <Container style={container}>
-          {/* Header */}
-          <Section style={headerSection}>
-            <Heading style={logoText}>Mdverse</Heading>
-            <Text style={headerSubtitle}>Collaborative markdown editor</Text>
-          </Section>
+    <EmailShell
+      preview={`${inviterName} invited you to collaborate on "${documentTitle}" in Mdverse.`}
+      siteUrl={siteUrl}
+      footerNote="You received this because someone shared a document with you."
+    >
+      <ContentSection>
+        <EmailHeading>You have been invited to collaborate</EmailHeading>
+        <EmailParagraph>{greeting}</EmailParagraph>
+        <EmailParagraph>
+          <strong style={sharedStrong}>{inviterName}</strong> has invited you to {roleDesc} on
+          the following document:
+        </EmailParagraph>
+      </ContentSection>
 
-          <Hr style={divider} />
+      <Section style={cardSection}>
+        <Text style={cardTitle}>{documentTitle}</Text>
+        <Text style={rolePill}>{roleLabel}</Text>
+      </Section>
 
-          {/* Body */}
-          <Section style={contentSection}>
-            <Heading as="h1" style={h1}>
-              You have been invited to collaborate
-            </Heading>
-            <Text style={paragraph}>{greeting}</Text>
-            <Text style={paragraph}>
-              <strong style={highlight}>{inviterName}</strong> has invited you to{' '}
-              {roleDesc} on the following document:
-            </Text>
-          </Section>
+      <EmailButton href={inviteUrl}>Open document</EmailButton>
 
-          {/* Document card */}
-          <Section style={cardSection}>
-            <Row>
-              <Column>
-                <Text style={documentIcon}>📄</Text>
-              </Column>
-              <Column>
-                <Text style={documentTitle_style}>{documentTitle}</Text>
-                <Text style={roleBadge}>{roleLabel}</Text>
-              </Column>
-            </Row>
-          </Section>
-
-          {/* CTA */}
-          <Section style={ctaSection}>
-            <Button href={inviteUrl} style={button}>
-              Open document
-            </Button>
-          </Section>
-
-          {/* Info */}
-          <Section style={contentSection}>
-            <Text style={infoText}>
-              If you do not have an account yet, you will be asked to create one first. Your
-              access will be waiting once you sign up with this email address.
-            </Text>
-          </Section>
-
-          <Hr style={divider} />
-
-          {/* Footer */}
-          <Section style={footer}>
-            <Row>
-              <Column align="left">
-                <Link href={siteUrl} style={footerLink}>
-                  Mdverse
-                </Link>
-              </Column>
-              <Column align="right">
-                <Text style={footerText}>You received this because someone shared a document with you.</Text>
-              </Column>
-            </Row>
-          </Section>
-        </Container>
-      </Body>
-    </Html>
+      <MutedInfo>
+        If you do not have an account yet, you will be asked to create one first. Your access
+        will be waiting once you sign up with this email address.
+      </MutedInfo>
+    </EmailShell>
   );
 }
 
@@ -137,149 +86,31 @@ CollaborationInviteEmail.PreviewProps = {
   siteUrl: 'https://mdverse.pages.dev',
 } satisfies CollaborationInviteEmailProps;
 
-/* ─── Styles ─────────────────────────────────────────────────────────────── */
-
-const body: React.CSSProperties = {
-  backgroundColor: '#0f1117',
-  fontFamily: "'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif",
-  margin: '0',
-  padding: '40px 0',
-};
-
-const container: React.CSSProperties = {
-  backgroundColor: '#1a1d27',
-  border: '1px solid #2d3148',
-  borderRadius: '16px',
-  margin: '0 auto',
-  maxWidth: '520px',
-  overflow: 'hidden',
-  padding: '0',
-};
-
-const headerSection: React.CSSProperties = {
-  background: 'linear-gradient(135deg, #0ea5e9 0%, #6366f1 100%)',
-  padding: '28px 40px',
-  textAlign: 'center',
-};
-
-const logoText: React.CSSProperties = {
-  color: '#ffffff',
-  fontSize: '28px',
-  fontWeight: '700',
-  letterSpacing: '-0.5px',
-  margin: '0',
-  padding: '0',
-};
-
-const headerSubtitle: React.CSSProperties = {
-  color: 'rgba(255, 255, 255, 0.75)',
-  fontSize: '13px',
-  margin: '4px 0 0',
-};
-
-const divider: React.CSSProperties = {
-  borderColor: '#2d3148',
-  borderStyle: 'solid',
-  margin: '0',
-  width: '100%',
-};
-
-const contentSection: React.CSSProperties = {
-  padding: '32px 40px 0',
-};
-
-const ctaSection: React.CSSProperties = {
-  padding: '24px 40px',
-  textAlign: 'center',
-};
-
-const h1: React.CSSProperties = {
-  color: '#f1f5f9',
-  fontSize: '22px',
-  fontWeight: '600',
-  letterSpacing: '-0.3px',
-  lineHeight: '1.3',
-  margin: '0 0 20px',
-  padding: '0',
-};
-
-const paragraph: React.CSSProperties = {
-  color: '#94a3b8',
-  fontSize: '15px',
-  lineHeight: '1.65',
-  margin: '0 0 16px',
-};
-
-const highlight: React.CSSProperties = {
-  color: '#f1f5f9',
-};
+/* Document card + quiet bordered role pill (neutral text/border, no color). */
 
 const cardSection: React.CSSProperties = {
-  backgroundColor: '#0f1117',
-  border: '1px solid #2d3148',
-  borderRadius: '12px',
-  margin: '16px 40px 8px',
-  padding: '20px 24px',
+  backgroundColor: theme.bodyBg,
+  border: `1px solid ${theme.border}`,
+  borderRadius: '8px',
+  margin: '0 32px 4px',
+  padding: '16px 20px',
 };
 
-const documentIcon: React.CSSProperties = {
-  fontSize: '28px',
-  margin: '0 16px 0 0',
-  padding: '0',
-};
-
-const documentTitle_style: React.CSSProperties = {
-  color: '#f1f5f9',
-  fontSize: '16px',
+const cardTitle: React.CSSProperties = {
+  color: theme.strong,
+  fontSize: '15px',
   fontWeight: '600',
-  lineHeight: '1.3',
-  margin: '0 0 6px',
+  lineHeight: '1.4',
+  margin: '0 0 8px',
 };
 
-const roleBadge: React.CSSProperties = {
-  backgroundColor: '#1e2a3b',
-  border: '1px solid #0ea5e9',
-  borderRadius: '6px',
-  color: '#38bdf8',
+const rolePill: React.CSSProperties = {
+  border: `1px solid ${theme.border}`,
+  borderRadius: '999px',
+  color: theme.bodyText,
   display: 'inline-block',
   fontSize: '12px',
   fontWeight: '500',
   margin: '0',
-  padding: '3px 10px',
-};
-
-const button: React.CSSProperties = {
-  background: 'linear-gradient(135deg, #0ea5e9 0%, #6366f1 100%)',
-  borderRadius: '10px',
-  boxSizing: 'border-box',
-  color: '#ffffff',
-  display: 'block',
-  fontSize: '15px',
-  fontWeight: '600',
-  padding: '14px 32px',
-  textAlign: 'center',
-  textDecoration: 'none',
-};
-
-const infoText: React.CSSProperties = {
-  color: '#64748b',
-  fontSize: '13px',
-  lineHeight: '1.6',
-  margin: '0 0 28px',
-};
-
-const footer: React.CSSProperties = {
-  padding: '20px 40px 28px',
-};
-
-const footerLink: React.CSSProperties = {
-  color: '#0ea5e9',
-  fontSize: '13px',
-  textDecoration: 'none',
-};
-
-const footerText: React.CSSProperties = {
-  color: '#475569',
-  fontSize: '12px',
-  margin: '0',
+  padding: '3px 12px',
 };
