@@ -49,8 +49,6 @@ function build(): HTMLDialogElement {
     settle('confirm'),
   );
 
-  // Escape and the backdrop decide nothing, and say so. Closing ourselves keeps the
-  // promise settling exactly once, even when the browser closes the dialog for us.
   element.addEventListener('cancel', (event) => {
     event.preventDefault();
     settle('dismiss');
@@ -63,10 +61,6 @@ function build(): HTMLDialogElement {
   return element;
 }
 
-/**
- * Asks a question and reports which button ended it — for when a dismissal must be
- * told apart from an explicit "no".
- */
 export function confirmChoice(options: ConfirmOptions): Promise<ConfirmChoice> {
   const element = dialog ?? (dialog = build());
   if (pending) settle('dismiss');

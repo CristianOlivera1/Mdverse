@@ -1,5 +1,5 @@
 ---
-import Icon from '@/components/ui/Icon.astro'; // Se importa tu componente de iconos
+import Icon from '@/components/ui/Icon.astro';
 import Layout from '@/layouts/Layout.astro';
 import type { AuthNotice } from '@/lib/auth/messages';
 
@@ -25,7 +25,6 @@ const NOTICE_TONES = {
   </Fragment>
 
   <main class="min-h-screen flex flex-col justify-center px-4 sm:px-8 py-10 relative">
-    <!-- BOTÓN DE VOLVER: Arriba y pegado al extremo izquierdo de la pantalla -->
     <div class="absolute top-6 left-4 sm:left-8">
       <button
         type="button"
@@ -39,11 +38,10 @@ const NOTICE_TONES = {
       </button>
     </div>
 
-    <!-- TARJETA DEL FORMULARIO: Centrada perfectamente en el espacio restante -->
     <div class="w-full max-w-sm mx-auto">
       <div class="flex justify-center">
         <img
-          src="/logo-calligraphy.svg"
+          src="/svg/logo-calligraphy.svg"
           alt="Mdverse"
           width="220"
           height="54"
@@ -83,7 +81,7 @@ const NOTICE_TONES = {
         if (document.referrer && document.referrer.includes(window.location.host)) {
           window.history.back();
         } else {
-          window.location.href = '/'; // Redirección segura si se entra directo
+          window.location.href = '/';
         }
       });
     }

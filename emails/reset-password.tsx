@@ -65,7 +65,7 @@ ResetPasswordEmail.PreviewProps = {
   siteUrl: DEFAULT_SITE_URL,
 } satisfies ResetPasswordEmailProps;
 
-/* Quiet neutral note — replaces the old amber warning box, no emoji. */
+/* Quiet neutral note - replaces the old amber warning box, no emoji. */
 
 const noteSection: React.CSSProperties = {
   border: `1px solid ${theme.border}`,

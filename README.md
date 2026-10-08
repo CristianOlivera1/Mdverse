@@ -2,13 +2,13 @@
 <picture>
   <source
     media="(prefers-color-scheme: dark)"
-    srcset="public/logo-calligraphy-black.svg"
+    srcset="public/svg/logo-calligraphy-black.svg"
   />
 
   <img
     width="50%"
     alt="openvid"
-    src="public/logo-calligraphy.svg"
+    src="public/svg/logo-calligraphy.svg"
   />
 </picture>
 

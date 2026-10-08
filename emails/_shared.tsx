@@ -64,7 +64,7 @@ export function EmailShell({ preview, siteUrl = DEFAULT_SITE_URL, footerNote, ch
               <Link href={siteUrl} style={footerLink}>
                 Mdverse
               </Link>
-              {' — '}
+              {' - '}
               {footerNote}
             </Text>
           </Section>
@@ -119,7 +119,7 @@ export function ContentSection({ children }: { children: React.ReactNode }) {
   return <Section style={contentSection}>{children}</Section>;
 }
 
-/* ─── Styles (inline style objects only — email-client safe) ─────────────── */
+/* ─── Styles (inline style objects only - email-client safe) ─────────────── */
 
 const body: React.CSSProperties = {
   backgroundColor: theme.bodyBg,
