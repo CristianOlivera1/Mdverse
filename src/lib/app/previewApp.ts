@@ -13,8 +13,6 @@ export function initPreviewApp(): void {
   const statusElement = document.getElementById('preview-status');
   if (!rootElement || !contentElement || !scrollElement) return;
 
-  // Non-nullable aliases: TypeScript does not preserve the narrowing above
-  // inside the closures declared further down.
   const root: HTMLElement = rootElement;
   const content: HTMLElement = contentElement;
   const scroll: HTMLElement = scrollElement;
@@ -30,16 +28,11 @@ export function initPreviewApp(): void {
   let current = -1;
   let frame = 0;
   let renderTimer: number | undefined;
+  let hashConsumed = false;
 
   const readDocuments = (): OpenDocument[] =>
     readJsonPref<OpenDocument[]>(PREF_KEYS.openDocuments, []);
 
-  /**
-   * A tab the editor keeps locally is in `localStorage`; a tab of a signed-in
-   * account is a row in Postgres, so the popout asks the API for it. The popout
-   * shows that server snapshot - live syncing arrives with phase 4's realtime
-   * channel.
-   */
   async function loadDocument(): Promise<OpenDocument | undefined> {
     const list = readDocuments();
     const local = requestedId ? list.find((doc) => doc.id === requestedId) : list[0];
@@ -103,6 +96,37 @@ export function initPreviewApp(): void {
     mark();
   }
 
+  function syncHash(id: string): void {
+    try {
+      const url = new URL(window.location.href);
+      url.hash = id;
+      window.history.replaceState(null, '', url);
+    } catch {
+      // Non-http(s) contexts: the view still scrolls, the URL just lags.
+    }
+  }
+
+  // Deep links (`/preview?doc=<id>#<heading>`) land on the heading once, right
+  // after the first render that produces it. Later renders never yank the view.
+  function honorInitialHash(): void {
+    if (hashConsumed) return;
+    hashConsumed = true;
+    let raw: string;
+    try {
+      raw = decodeURIComponent(window.location.hash.slice(1));
+    } catch {
+      return;
+    }
+    if (!raw) return;
+    let target: Element | null;
+    try {
+      target = content.querySelector(`[id="${CSS.escape(raw)}"]`);
+    } catch {
+      return;
+    }
+    target?.scrollIntoView({ block: 'start' });
+  }
+
   async function render(): Promise<void> {
     const doc = await loadDocument();
     if (!doc) {
@@ -114,6 +138,7 @@ export function initPreviewApp(): void {
     const applied = await renderMarkdown(content, doc.content, { renderDiagram });
     if (!applied) return;
     buildToc();
+    honorInitialHash();
     document.title = `${doc.title} · Mdverse`;
     if (status) status.textContent = `Synced · ${new Date().toLocaleTimeString('en-US')}`;
   }
@@ -126,8 +151,9 @@ export function initPreviewApp(): void {
   navs.forEach((nav) =>
     nav.addEventListener('click', (event) => {
       const link = (event.target as HTMLElement).closest<HTMLElement>('a[data-id]');
-      if (!link) return;
+      if (!link?.dataset.id) return;
       event.preventDefault();
+      syncHash(link.dataset.id);
       headings
         .find((heading) => heading.id === link.dataset.id)
         ?.scrollIntoView({
@@ -142,8 +168,21 @@ export function initPreviewApp(): void {
     const link = (event.target as HTMLElement).closest<HTMLAnchorElement>('a[href^="#"]');
     if (!link) return;
     event.preventDefault();
-    const id = decodeURIComponent((link.getAttribute('href') ?? '').slice(1));
-    content.querySelector<HTMLElement>(`[id="${id}"]`)?.scrollIntoView({
+    let id: string;
+    try {
+      id = decodeURIComponent((link.getAttribute('href') ?? '').slice(1));
+    } catch {
+      return;
+    }
+    if (!id) return;
+    syncHash(id);
+    let target: Element | null;
+    try {
+      target = content.querySelector(`[id="${CSS.escape(id)}"]`);
+    } catch {
+      return;
+    }
+    target?.scrollIntoView({
       behavior: 'smooth',
       block: 'start',
     });

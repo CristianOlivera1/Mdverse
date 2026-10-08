@@ -29,6 +29,7 @@ import type { CloudDocument, OpenDocument, SaveDocumentResult } from '../documen
 import { HIGHLIGHT_THEME_CSS } from '../markdown/highlightTheme';
 import { renderDiagram } from '../markdown/mermaid';
 import { renderMarkdown } from '../markdown/render';
+import { buildTocHtml, collectHeadings } from '../markdown/toc';
 import { confirmChoice } from './confirmDialog';
 import { closeMenus, initMenus } from './menus';
 
@@ -76,7 +77,9 @@ const INLINE_MARKERS: Record<string, string> = {
   code: '`',
 };
 
-/** Commands that rewrite text; a document this account may only read refuses them. */
+/** Shown whenever someone without write access reaches for the text. */
+const READ_ONLY_STATUS = 'View only — only the owner and editors can change this document';
+
 const EDIT_COMMANDS: ReadonlySet<string> = new Set([
   ...Object.keys(INLINE_MARKERS),
   'link',
@@ -132,6 +135,20 @@ export function initEditorApp(): void {
   let peers: Peer[] = [];
   let remoteCursors: RemoteCursor[] = [];
   let viewerId = '';
+  let pendingHash: string | null = null;
+
+  // Single index bound to the ACTIVE preview pane (mirrors previewApp.ts).
+  // Inactive panes keep rendering, but only the visible preview feeds the TOC.
+  const tocFloat = document.getElementById('toc-float');
+  const tocNavs = [...document.querySelectorAll<HTMLElement>('.toc')];
+  let tocHeadings: HTMLElement[] = [];
+  let tocSignature = '';
+  let tocCurrent = -1;
+  let tocFrame = 0;
+
+  // Deep-link heading (`?doc=<id>#<heading>`) not yet consumed by the active
+  // pane. Consumed when a post-render pass finds the element; dropped on the
+  // first user scroll or doc switch. Null in the common no-hash case.
 
   const panes = new Map<string, Pane>();
 
@@ -149,6 +166,25 @@ export function initEditorApp(): void {
   function persist(): void {
     if (!cloud) saveOpenDocuments(documents);
     saveActiveDocumentId(activeId);
+  }
+
+  // The URL is the source of truth for the active tab: boot prefers `?doc=`
+  // over localStorage, so every switch rewrites it (replaceState: no history
+  // spam, back button untouched). Reloads and copied links then reopen this tab.
+  // A doc switch also drops the `#hash`: it addresses a heading of the previous
+  // document, and keeping it would jump the new preview to a stale anchor.
+  // Same-doc calls (e.g. after an in-preview anchor click) leave the URL alone.
+  function syncDocParam(id: string): void {
+    try {
+      const url = new URL(window.location.href);
+      if (url.searchParams.get('doc') === id) return;
+      url.searchParams.set('doc', id);
+      url.hash = '';
+      pendingHash = null;
+      window.history.replaceState(null, '', url);
+    } catch {
+      // Non-http(s) contexts (file://, sandbox): localStorage still restores.
+    }
   }
 
   function queueCloudSave(doc: OpenDocument, immediate = false, keepalive = false): void {
@@ -238,7 +274,7 @@ export function initEditorApp(): void {
   }
 
   function denyEdit(): void {
-    showStatus('View only — only the owner and editors can change this document', 3500);
+    showStatus(READ_ONLY_STATUS, 3500);
   }
 
   /** Replaces what is on screen with the newer server copy, without asking. */
@@ -610,9 +646,79 @@ export function initEditorApp(): void {
     void renderMarkdown(pane.preview, doc.content, { renderDiagram }).then(
       () => {
         if (!pane.hasScrolled) pane.preview.scrollTop = 0;
+        consumePendingHash(pane);
+        if (pane.docId === activeId) buildEditorToc();
       },
       () => {},
     );
+  }
+
+  function consumePendingHash(pane: Pane): void {
+    if (!pendingHash || pane.docId !== activeId) return;
+    let target: Element | null;
+    try {
+      target = pane.preview.querySelector(`[id="${CSS.escape(pendingHash)}"]`);
+    } catch {
+      target = null;
+    }
+    if (!target) return;
+    pendingHash = null;
+    target.scrollIntoView({ block: 'start' });
+    pane.hasScrolled = true;
+  }
+
+  function markToc(): void {
+    tocFrame = 0;
+    const preview = currentPane()?.preview;
+    if (!preview || !tocHeadings.length) return;
+    const top = preview.getBoundingClientRect().top + 24;
+    let index = 0;
+    for (let i = 0; i < tocHeadings.length; i++) {
+      if (tocHeadings[i].getBoundingClientRect().top <= top) index = i;
+      else break;
+    }
+    if (index === tocCurrent) return;
+    tocCurrent = index;
+    tocNavs.forEach((nav) => {
+      nav.querySelector('.on')?.classList.remove('on');
+      const link = nav.querySelector<HTMLElement>(`a[data-id="${tocHeadings[index].id}"]`);
+      if (link) {
+        link.classList.add('on');
+        link.scrollIntoView({ block: 'nearest' });
+      }
+    });
+  }
+
+  function scheduleTocMark(): void {
+    if (!tocFrame) tocFrame = requestAnimationFrame(markToc);
+  }
+
+  function buildEditorToc(): void {
+    const preview = currentPane()?.preview;
+    if (!preview) return;
+    tocHeadings = [...preview.querySelectorAll<HTMLElement>('h1, h2, h3, h4')];
+    const next = tocHeadings
+      .map((heading) => heading.tagName + heading.id + heading.textContent)
+      .join('|');
+    if (next !== tocSignature) {
+      tocSignature = next;
+      const html = buildTocHtml(collectHeadings(preview, 'h1, h2, h3, h4'));
+      tocNavs.forEach((nav) => {
+        nav.innerHTML = html;
+      });
+    }
+    tocCurrent = -1;
+    markToc();
+  }
+
+  function syncTocHash(id: string): void {
+    try {
+      const url = new URL(window.location.href);
+      url.hash = id;
+      window.history.replaceState(null, '', url);
+    } catch {
+      // Non-http(s) contexts: the view still scrolls, the URL just lags.
+    }
   }
 
   function scheduleWork(pane: Pane): void {
@@ -664,7 +770,12 @@ export function initEditorApp(): void {
     source.addEventListener(
       'scroll',
       (event: Event) => {
-        if (event.isTrusted) pane.hasScrolled = true;
+        if (event.isTrusted) {
+          pane.hasScrolled = true;
+          pendingHash = null;
+        }
+        // The scroll-spy rides this same listener: no second scroll pipeline.
+        if (sourceName === 'preview' && pane.docId === activeId) scheduleTocMark();
         if (pane.scrollGuard === sourceName) {
           pane.scrollGuard = null;
           return;
@@ -865,7 +976,7 @@ export function initEditorApp(): void {
     const pane = panes.get(id);
     if (pane) {
       if (documentById(id)?.role === 'reader') {
-        showStatus('View only — only the owner and editors can save changes', 3500);
+        showStatus(READ_ONLY_STATUS, 3500);
       }
       if (pane.savedScroll) {
         pane.textarea.scrollTop = pane.savedScroll[0];
@@ -880,7 +991,11 @@ export function initEditorApp(): void {
 
     renderTabs();
     persist();
+    syncDocParam(id);
     updateStatus();
+
+    buildEditorToc();
+    tocFloat?.classList.add('hidden');
 
     collab?.setDocument(id);
     syncOverlay();
@@ -1014,6 +1129,7 @@ export function initEditorApp(): void {
 
   function setPanel(mode: 'code' | 'preview'): void {
     document.body.dataset.panel = mode;
+    tocFloat?.classList.add('hidden');
     document.querySelectorAll<HTMLElement>('[data-command^="panel-"]').forEach((button) => {
       button.classList.toggle('on', button.dataset.command === `panel-${mode}`);
     });
@@ -1126,15 +1242,32 @@ export function initEditorApp(): void {
         return;
       case 'export-pdf':
         if (!pane || !doc) return;
+        showStatus('Rendering PDF…', 4000);
         void exportDocument({
           kind: 'pdf',
           markdown: pane.textarea.value,
           fallbackName: doc.title,
         }).then((result) => {
-          if (!result.ok && result.reason === 'popup-blocked') {
-            toast('Allow pop-ups to export as PDF');
+          if (!result.ok && result.reason !== 'empty') {
+            toast('Could not render the PDF - try again');
           }
         });
+        return;
+      case 'export-docx':
+        if (!pane || !doc) return;
+        showStatus('Building Word document…', 4000);
+        void exportDocument({
+          kind: 'docx',
+          markdown: pane.textarea.value,
+          fallbackName: doc.title,
+        }).then((result) => {
+          if (!result.ok && result.reason !== 'empty') {
+            toast('Could not build the Word document - try again');
+          }
+        });
+        return;
+      case 'toggle-comments':
+        // Handled entirely by commentsIntegration.ts via DOM event delegation
         return;
       case 'toggle-sync':
         syncScroll = !syncScroll;
@@ -1428,6 +1561,7 @@ export function initEditorApp(): void {
   document.addEventListener('keydown', (event) => {
     if (event.key !== 'Escape') return;
     closeMenus();
+    tocFloat?.classList.add('hidden');
     const pane = currentPane();
     if (pane && !pane.findbar.hidden) closeFind(pane);
   });
@@ -1440,6 +1574,12 @@ export function initEditorApp(): void {
     if (document.hidden) flushAll(true);
   });
 
+  // Bridge toast events from imageUploadIntegration / commentsIntegration
+  document.addEventListener('mdverse:toast', (event) => {
+    const msg = (event as CustomEvent<string>).detail;
+    if (msg) showStatus(msg, 3000);
+  });
+
   function mountAll(preferred?: string | null): void {
     documents.forEach(mountPane);
     const remembered = documentById(loadActiveDocumentId() ?? '');
@@ -1449,6 +1589,11 @@ export function initEditorApp(): void {
 
   async function boot(): Promise<void> {
     const requested = new URLSearchParams(window.location.search).get('doc');
+    try {
+      pendingHash = decodeURIComponent(window.location.hash.slice(1)) || null;
+    } catch {
+      pendingHash = null;
+    }
     const session = await openCloudDocuments();
 
     if (!session) {
@@ -1492,6 +1637,24 @@ export function initEditorApp(): void {
   setZoom(readNumberPref(PREF_KEYS.zoom, 1));
   toggleSyncUi();
   setPanel(document.body.dataset.panel === 'preview' ? 'preview' : 'code');
+
+  tocNavs.forEach((nav) =>
+    nav.addEventListener('click', (event) => {
+      const link = (event.target as HTMLElement).closest<HTMLElement>('a[data-id]');
+      if (!link?.dataset.id) return;
+      event.preventDefault();
+      const id = link.dataset.id;
+      syncTocHash(id);
+      tocHeadings
+        .find((heading) => heading.id === id)
+        ?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      tocFloat?.classList.add('hidden');
+    }),
+  );
+
+  document
+    .getElementById('toc-fab')
+    ?.addEventListener('click', () => tocFloat?.classList.toggle('hidden'));
   showStatus('Loading your documents…', 4000);
   void boot();
 

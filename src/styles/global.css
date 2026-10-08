@@ -28,6 +28,10 @@ textarea {
   font-size: calc(13px * var(--z));
 }
 
+.editor.is-readonly .ed-ta {
+  caret-color: transparent;
+}
+
 .pv-pane.prose-sm {
   font-size: calc(0.875rem * var(--z));
 }
@@ -549,6 +553,15 @@ button.mi.danger:hover svg {
 
   #preview-root[data-toc='closed'] #toc-open {
     display: inline-flex;
+  }
+}
+
+/* The index belongs to the preview pane: hide its mobile entry points while
+   the code pane is on screen so the FAB never covers the format toolbar. */
+@media (max-width: 1023.98px) {
+  body[data-panel='code'] #toc-fab,
+  body[data-panel='code'] #toc-float {
+    display: none !important;
   }
 }
 

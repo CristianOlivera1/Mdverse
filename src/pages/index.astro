@@ -2,6 +2,7 @@
 import AppHeader from '../components/app/AppHeader.astro';
 import EditorPane from '../components/app/EditorPane.astro';
 import StatusBar from '../components/app/StatusBar.astro';
+import Icon from '../components/ui/Icon.astro';
 import Layout from '../layouts/Layout.astro';
 ---
 
@@ -12,17 +13,49 @@ import Layout from '../layouts/Layout.astro';
 >
   <div id="app" class="h-full flex flex-col">
     <AppHeader />
-    <main id="editor-panes" class="flex flex-col flex-1 min-h-0"></main>
+    <main id="editor-panes" class="flex flex-col flex-1 min-h-0 min-w-0"></main>
     <StatusBar />
+
+    <button
+      type="button"
+      id="toc-fab"
+      class="lg:hidden fixed bottom-4 right-4 z-20 hb !h-10 !px-4 bg-neutral-900 border border-neutral-700 !text-neutral-100 shadow-xl rounded-full"
+    >
+      <Icon name="lucide:list-tree" />
+      Index
+    </button>
+    <div
+      id="toc-float"
+      class="hidden fixed bottom-16 right-4 z-20 w-[min(20rem,calc(100vw-2rem))] rounded-xl border border-neutral-700 bg-neutral-950 shadow-2xl"
+    >
+      <nav class="toc max-h-[60vh] overflow-y-auto py-2"></nav>
+    </div>
   </div>
 
   <template id="editor-pane-template">
     <EditorPane />
   </template>
+
+  {/* Host element for the slide-in comments panel — rendered into body so it
+      can overlay everything without clipping. The panel.ts module populates it. */}
+  <div id="comment-panel-host" aria-live="polite"></div>
+
+  {/* Hidden file input for image uploads triggered from the toolbar */}
+  <input
+    id="image-file-input"
+    type="file"
+    accept="image/jpeg,image/png,image/gif,image/webp,image/svg+xml,image/avif"
+    class="sr-only"
+    aria-hidden="true"
+  />
 </Layout>
 
 <script>
   import { initEditorApp } from '../lib/app/editorApp';
+  import { initImageUpload } from '../lib/app/imageUploadIntegration';
+  import { initComments } from '../lib/app/commentsIntegration';
 
   initEditorApp();
+  initImageUpload();
+  initComments();
 </script>
