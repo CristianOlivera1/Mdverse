@@ -106,6 +106,13 @@ describe('displayNameFromEmail', () => {
     expect(displayNameFromEmail('ANA@mail.com')).toBe('ANA');
   });
 
+  it('splits dots, underscores, dashes and plus-tags into words', () => {
+    expect(displayNameFromEmail('cristian.olivera@mail.com')).toBe('Cristian Olivera');
+    expect(displayNameFromEmail('cristian_olivera@mail.com')).toBe('Cristian Olivera');
+    expect(displayNameFromEmail('cristian-olivera@mail.com')).toBe('Cristian Olivera');
+    expect(displayNameFromEmail('cristian.olivera+tag@mail.com')).toBe('Cristian Olivera');
+  });
+
   it('falls back for unusable input', () => {
     expect(displayNameFromEmail('')).toBe('Anonymous');
     expect(displayNameFromEmail(null)).toBe('Anonymous');
