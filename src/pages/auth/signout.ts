@@ -1,9 +1,3 @@
-/**
- * `POST /auth/signout` - ends the session and clears the auth cookies.
- *
- * POST only: a link prefetch or a stray GET must never be able to log someone out.
- */
-
 import type { APIRoute } from 'astro';
 
 import { safeRedirectPath } from '@/lib/auth/redirect';

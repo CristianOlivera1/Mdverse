@@ -1,15 +1,3 @@
-/**
- * What a published document can be taken away as:
- *
- *   /d/:slug/document.md             the Markdown exactly as the owner wrote it
- *   /d/:slug/document.html           one self-contained file, styles inlined
- *   /d/:slug/document.html?print=1   the same file, opening the print dialog
- *
- * Both are read as `anon` (`createAnonymousSupabaseClient`), so they follow the
- * same rule as the page they belong to: published, or 404 - never "you can see it
- * because of who you are", which is what makes them safe to cache and to link.
- */
-
 import type { APIRoute } from 'astro';
 
 import { formatTimestamp } from '@/lib/documents/format';

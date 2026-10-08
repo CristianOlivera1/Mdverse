@@ -1,13 +1,3 @@
-/**
- * `GET /api/documents/:id/collaboration` - everything the editor's collaboration
- * dialog shows, in one round trip.
- *
- * Reads only. Every change still goes through the form endpoints under
- * `/documents/:id/share/*`, which answer JSON to this dialog and redirect to the
- * share page for a plain form post. The mapping from rows to camelCase lives here
- * so the browser never sees a column name.
- */
-
 import type { APIRoute } from 'astro';
 
 import { apiSession, jsonError, jsonResponse } from '@/lib/api/http';

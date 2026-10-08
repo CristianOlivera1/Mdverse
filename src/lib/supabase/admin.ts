@@ -1,12 +1,3 @@
-/**
- * Supabase Admin client - service-role key, server-only.
- *
- * Bypasses RLS. Use only for operations that require it:
- *   - auth.admin.generateLink()  (get auth magic links to send ourselves)
- *
- * Never expose this client or its key to the browser.
- */
-
 import { createClient } from '@supabase/supabase-js';
 import type { SupabaseClient } from '@supabase/supabase-js';
 

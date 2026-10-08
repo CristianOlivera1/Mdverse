@@ -1,14 +1,3 @@
-/**
- * `GET /auth/callback` - completes sign-in.
- *
- * Handles both shapes Supabase can send:
- *  - `?code=…` (PKCE, used by magic links and OAuth),
- *  - `?token_hash=…&type=…` (email confirmations, invites, recovery links).
- *
- * Any failure redirects back to `/login` with a code; the raw provider error is
- * logged server-side and never echoed to the browser.
- */
-
 import type { APIRoute } from 'astro';
 import type { EmailOtpType } from '@supabase/supabase-js';
 

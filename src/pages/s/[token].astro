@@ -1,10 +1,4 @@
 ---
-/**
- * Signed-in visits claim the token into real access (viewers stay read-only,
- * editors redirect to the editor). Unknown and expired tokens both answer 404
- * so links cannot be probed; token URLs stay noindex.
- */
-
 import Icon from '@/components/ui/Icon.astro';
 import Layout from '@/layouts/Layout.astro';
 import { canEdit } from '@/lib/documents/sharing';
@@ -16,7 +10,6 @@ export const prerender = false;
 const token = Astro.params.token ?? '';
 const { user, supabase } = Astro.locals;
 
-// No client or malformed token: fall through to the 404 below.
 const readable = Boolean(supabase) && isShareToken(token);
 
 let document = readable && supabase ? await resolveShareToken(supabase, token) : null;

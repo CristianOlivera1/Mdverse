@@ -1,10 +1,5 @@
 ---
 import Icon from '../ui/Icon.astro';
-
-// Optional name suffix for the trigger/panel pair. menus.ts resolves
-// `[data-menu="<name>"]` with first-match querySelector, so two triggers
-// sharing a name would break each other — mobile copies render with a suffix
-// (e.g. "-m") to keep every name unique. Default keeps desktop names unchanged.
 interface Props {
   suffix?: string;
 }

@@ -1,5 +1,3 @@
-/** Separate from autosave: editors can write text, but only managers change reach. */
-
 import type { APIRoute } from 'astro';
 
 import { readShareInput, shareFeedbackResponse } from '@/lib/api/sharing';

@@ -1,12 +1,3 @@
-/**
- * `POST /auth/password/update` - sets a new password for the signed-in user.
- *
- * Requires a session, which is what the recovery link establishes: the form at
- * `/reset-password` is behind the middleware, and this route re-checks the session
- * before touching the account. Reachable both from the recovery link and from the
- * "Change password" entry in the profile screen.
- */
-
 import type { APIRoute } from 'astro';
 
 import { authFeedbackUrl, passwordProblemErrorCode, profileFeedbackUrl } from '@/lib/auth/messages';

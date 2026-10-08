@@ -1,28 +1,3 @@
-/**
- * Supabase database types.
- *
- * ⚠️ This file is **generated** - do not edit it by hand.
- *
- * Until the Supabase CLI can reach the project (`SUPABASE_PROJECT_REF` +
- * `SUPABASE_ACCESS_TOKEN` in `.env`), it holds a hand-written placeholder for the
- * tables created in phases 2–4 (`public.profiles`, `public.documents`, …) and for
- * the phase 4 functions (`invite_collaborator`, `resolve_share_token`,
- * `claim_share_link`), so the app typechecks without the generator. Once the
- * project is linked, regenerate it after every migration:
- *
- *   pnpm db:types
- *
- * Everything the app needs from this file is re-exported through
- * `src/lib/supabase/types.ts` (e.g. `Document`, `DocumentVersion`) so call sites
- * never depend on the generated shape directly.
- *
- * Column notes worth keeping when the file is regenerated:
- *  - `documents.search` is a generated `tsvector`; it is intentionally absent
- *    here (it cannot be written and nothing in the app reads it).
- *  - `document_versions.id` is a bigint identity, so it arrives as a number over
- *    the Data API.
- */
-
 export type Json = string | number | boolean | null | { [key: string]: Json | undefined } | Json[];
 
 export interface Database {

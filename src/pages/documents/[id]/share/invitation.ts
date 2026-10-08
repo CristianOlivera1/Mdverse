@@ -1,5 +1,3 @@
-/** Cancel a pending invitation (email-addressed row, no account yet). */
-
 import type { APIRoute } from 'astro';
 
 import { readShareInput, shareFeedbackResponse } from '@/lib/api/sharing';

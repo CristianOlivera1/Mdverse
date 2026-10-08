@@ -1,13 +1,3 @@
-/**
- * `POST /api/documents/import` - moves the drafts this browser kept in
- * `localStorage` into the account.
- *
- * The drafts only exist in the browser, so the dashboard reads them and sends
- * them here; parsing and the size caps live in `src/lib/documents/drafts.ts`.
- * Failed drafts are counted instead of aborting the batch: importing nine of ten
- * drafts is better than importing none.
- */
-
 import type { APIRoute } from 'astro';
 
 import { apiSession, jsonError, jsonResponse, readJsonObject } from '@/lib/api/http';

@@ -1,8 +1,3 @@
-/**
- * Token is DB-generated and visible only to owner/admin.
- * Revocation deletes; expiry only lapses so the page shows when it ended.
- */
-
 import type { APIRoute } from 'astro';
 
 import { readShareInput, shareFeedbackResponse } from '@/lib/api/sharing';

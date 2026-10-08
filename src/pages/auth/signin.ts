@@ -1,13 +1,3 @@
-/**
- * `POST /auth/signin` - signs in with an email address and password.
- *
- * Only the *presence* of a password is checked here: the policy belongs to
- * sign-up, and applying it to sign-in would reject legacy or externally-set
- * passwords with a misleading message. Every failure that is not "unconfirmed
- * address" is reported as `invalid_credentials`, so the response never reveals
- * whether an address has an account.
- */
-
 import type { APIRoute } from 'astro';
 
 import { loginFeedbackUrl } from '@/lib/auth/messages';

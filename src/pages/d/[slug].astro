@@ -1,15 +1,4 @@
 ---
-/**
- * The published document: `/d/:slug`, rendered on the server so it is indexable
- * and cacheable.
- *
- * Only `visibility = 'public'` answers here; `private` and `unlisted` get the
- * same 404, so an address cannot be probed for existence. The row is read with a
- * client that has no session (`createAnonymousSupabaseClient`), which is what
- * makes the response identical for everybody - and therefore safe to hand to a
- * CDN and to a crawler.
- */
-
 import Icon from '@/components/ui/Icon.astro';
 import Layout from '@/layouts/Layout.astro';
 import { formatTimestamp } from '@/lib/documents/format';

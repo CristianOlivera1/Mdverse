@@ -1,5 +1,3 @@
-/** Invite by email: each address resolves independently; email send never fails the share. */
-
 import type { APIRoute } from 'astro';
 
 import { readShareInput, shareFeedbackResponse } from '@/lib/api/sharing';
