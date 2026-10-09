@@ -19,7 +19,7 @@
 
 <p align="center"><a href="https://mdverse.pages.dev"><strong>Live demo</strong></a> · <a href="#quickstart">Get started</a> · <a href="https://mdverse.pages.dev/dashboard">Open dashboard</a></p>
 
-No account needed to start. Your drafts stay in the browser until you sign in.
+<img width="1607" height="920" alt="openvid-1791518338477 (1)" src="https://github.com/user-attachments/assets/5078e6a5-8d31-4165-b618-de09dfd4ba06" />
 
 ## Why Mdverse
 
