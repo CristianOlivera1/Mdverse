@@ -135,6 +135,8 @@ function openLightbox(src: string, alt: string): void {
 export function attachImageLightbox(root: ParentNode): void {
   root.querySelectorAll<HTMLImageElement>('img').forEach((image) => {
     if (image.dataset.lightbox === 'on') return;
+
+    if (image.closest('a[href]')) return;
     image.dataset.lightbox = 'on';
     image.classList.add('zoomable');
     image.addEventListener('click', () =>
