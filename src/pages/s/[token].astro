@@ -18,7 +18,6 @@ let signedIn = Boolean(user);
 
 if (supabase && user && document) {
   const claimed = await claimShareLink(supabase, token);
-  // Null means the link lapsed or was revoked between the two calls.
   if (!claimed) document = null;
   else if (canEdit(claimed.role)) {
     return Astro.redirect(`/?doc=${encodeURIComponent(claimed.documentId)}`, 303);
@@ -36,12 +35,9 @@ const serialized = document
 
 <Layout
   title={document ? `${document.title} · Mdverse` : 'Link not found · Mdverse'}
+  robots="noindex, nofollow"
   bodyClass="min-h-screen bg-black text-neutral-200 font-sans"
 >
-  <Fragment slot="head">
-    <meta name="robots" content="noindex, nofollow" />
-  </Fragment>
-
   {!document ? (
     <main class="mx-auto flex min-h-screen w-full max-w-lg flex-col items-center justify-center px-6 text-center">
       <Icon name="lucide:link-2-off" size={22} class="text-neutral-600" />

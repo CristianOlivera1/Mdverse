@@ -1,15 +1,17 @@
 import type { APIRoute } from 'astro';
 
+import { apiRateLimitedResponse, enforceApiRateLimit } from '@/lib/auth/rate-limit';
 import { formatTimestamp } from '@/lib/documents/format';
 import { isPublicSlug } from '@/lib/documents/ids';
 import {
+  buildStandaloneHtml,
   documentDescription,
+  LINK_ONLY_CACHE_CONTROL,
   MISSING_CACHE_CONTROL,
   PUBLIC_CACHE_CONTROL,
   publicDocumentUrl,
 } from '@/lib/documents/publicPage';
 import { getPublicDocument } from '@/lib/documents/repository';
-import { buildStandaloneHtml } from '@/lib/export';
 import { renderStaticMarkdown } from '@/lib/markdown/renderStatic';
 import { getSiteUrl } from '@/lib/supabase/env';
 import { createAnonymousSupabaseClient } from '@/lib/supabase/server';
@@ -18,7 +20,12 @@ export const prerender = false;
 
 const KNOWN_FILES = new Set(['document.md', 'document.html']);
 
-export const GET: APIRoute = async ({ params, url }) => {
+export const GET: APIRoute = async ({ params, url, request }) => {
+  const limit = enforceApiRateLimit('public-export', request);
+  if (!limit.allowed) {
+    return apiRateLimitedResponse(limit, 'text/plain; charset=utf-8', 'Too many requests');
+  }
+
   const slug = params.slug ?? '';
   const file = params.file ?? '';
 
@@ -37,9 +44,11 @@ export const GET: APIRoute = async ({ params, url }) => {
     });
   }
 
+  const indexable = document.visibility === 'public';
+  const cacheControl = indexable ? PUBLIC_CACHE_CONTROL : LINK_ONLY_CACHE_CONTROL;
+  const robots: Record<string, string> = indexable ? {} : { 'X-Robots-Tag': 'noindex, nofollow' };
+
   const extension = file === 'document.md' ? 'md' : 'html';
-  // `isPublicSlug` rejects quotes, slashes and spaces, so the name is safe in the
-  // header as written; the `filename*` copy is what carries non-ASCII letters.
   const filename = `${document.slug}.${extension}`;
   const disposition = (kind: 'attachment' | 'inline'): string =>
     `${kind}; filename="${filename}"; filename*=UTF-8''${encodeURIComponent(filename)}`;
@@ -47,9 +56,10 @@ export const GET: APIRoute = async ({ params, url }) => {
   if (file === 'document.md') {
     return new Response(document.content, {
       headers: {
-        'Cache-Control': PUBLIC_CACHE_CONTROL,
+        'Cache-Control': cacheControl,
         'Content-Type': 'text/markdown; charset=utf-8',
         'Content-Disposition': disposition('attachment'),
+        ...robots,
       },
     });
   }
@@ -76,9 +86,10 @@ export const GET: APIRoute = async ({ params, url }) => {
 
   return new Response(html, {
     headers: {
-      'Cache-Control': PUBLIC_CACHE_CONTROL,
+      'Cache-Control': cacheControl,
       'Content-Type': 'text/html; charset=utf-8',
       'Content-Disposition': disposition(printable ? 'inline' : 'attachment'),
+      ...robots,
     },
   });
 };

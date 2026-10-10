@@ -11,6 +11,7 @@ const DISALLOWED = [
   '/api/',
   '/auth/',
   '/s/',
+  '/preview',
   '/login',
   '/signup',
   '/forgot-password',

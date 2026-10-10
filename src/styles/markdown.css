@@ -134,8 +134,25 @@
   font-size: 11px;
 }
 
-/* Tables -------------------------------------------------------------------- */
-/* A wide table scrolls inside its own frame instead of widening the pane. */
+.prose img {
+  display: inline-block;
+  margin-top: 0;
+  margin-bottom: 0;
+}
+
+.prose p > img:only-child,
+.prose p > a:only-child > img,
+.prose p > picture:only-child {
+  display: block;
+  margin-top: 1.5em;
+  margin-bottom: 1.5em;
+}
+
+.prose picture > img {
+  margin-top: 0;
+  margin-bottom: 0;
+}
+
 .table-scroll {
   margin: 1.25em 0;
   overflow-x: auto;
@@ -145,7 +162,6 @@
   margin: 0;
 }
 
-/* Code blocks --------------------------------------------------------------- */
 .code-block {
   position: relative;
   margin: 1.25em 0;
@@ -194,10 +210,6 @@
   color: #fff;
 }
 
-/* Heading anchors ----------------------------------------------------------- */
-/* The glyph is CSS: the anchor element itself stays empty, so a heading's
-   `textContent` — which the table of contents and the export both read — is
-   exactly the title. */
 .prose :is(h1, h2, h3, h4, h5, h6) {
   position: relative;
 }

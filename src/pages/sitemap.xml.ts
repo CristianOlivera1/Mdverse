@@ -18,14 +18,15 @@ export const GET: APIRoute = async () => {
       (document) =>
         `<url><loc>${escapeHtml(publicDocumentUrl(siteUrl, document.slug))}</loc>` +
         `<lastmod>${escapeHtml(document.updatedAt)}</lastmod>` +
-        '<changefreq>weekly</changefreq></url>',
+        '<changefreq>weekly</changefreq><priority>0.8</priority></url>',
     )
     .join('');
 
   const xml =
     '<?xml version="1.0" encoding="UTF-8"?>' +
     '<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">' +
-    `<url><loc>${escapeHtml(siteUrl)}/</loc><changefreq>daily</changefreq></url>` +
+    `<url><loc>${escapeHtml(siteUrl)}/</loc>` +
+    '<changefreq>daily</changefreq><priority>1.0</priority></url>' +
     entries +
     '</urlset>';
 
