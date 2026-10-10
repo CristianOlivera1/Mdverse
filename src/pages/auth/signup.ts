@@ -87,12 +87,19 @@ export const POST: APIRoute = async (context) => {
       console.warn('[auth] sign-up failed:', linkError.message);
       return fail('signup_failed');
     } else {
-      const confirmUrl = (linkData as { properties: { action_link: string } }).properties
-        .action_link;
+      const props = (
+        linkData as { properties: { hashed_token: string; verification_type: string } }
+      ).properties;
+      const confirmUrl = new URL('/auth/confirm', getSiteUrl());
+      confirmUrl.search = new URLSearchParams({
+        token_hash: props.hashed_token,
+        type: props.verification_type,
+        next,
+      }).toString();
       keepAlive(
         context,
         import('@/lib/email/sender')
-          .then((m) => m.sendConfirmEmail({ to: email, confirmUrl, siteUrl: getSiteUrl() }))
+          .then((m) => m.sendConfirmEmail({ to: email, confirmUrl: confirmUrl.toString(), siteUrl: getSiteUrl() }))
           .then((sent) => {
             if (!sent.ok) console.warn('[email] confirm email failed:', sent.error);
           })
