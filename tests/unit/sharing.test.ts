@@ -12,8 +12,12 @@ import {
   canManage,
   describeInviteSummary,
   expiryDate,
+  GENERAL_ACCESS,
+  GENERAL_ACCESS_LABELS,
+  generalAccessFor,
   isInviteRole,
   isVisibility,
+  LINK_ROLE_LABELS,
   linkIsActive,
   maskToken,
   MAX_INVITES_PER_REQUEST,
@@ -23,7 +27,7 @@ import {
   ROLE_LABELS,
   shareUrl,
   sortCollaborators,
-  VISIBILITY_LABELS,
+  visibilityFor,
 } from '../../src/lib/documents/sharing';
 
 describe('parseInviteEmails', () => {
@@ -91,14 +95,30 @@ describe('roles and visibility', () => {
     expect(isVisibility('secret')).toBe(false);
   });
 
-  it('labels every role and visibility, so the page never renders a raw enum', () => {
+  it('labels every role, reach and link role, so the page never renders a raw enum', () => {
     for (const role of ['owner', 'admin', 'editor', 'reader'] as const) {
       expect(ROLE_LABELS[role]).toBeTruthy();
     }
-    for (const visibility of ['private', 'unlisted', 'public'] as const) {
-      expect(VISIBILITY_LABELS[visibility].label).toBeTruthy();
-      expect(VISIBILITY_LABELS[visibility].hint).toBeTruthy();
+    for (const access of GENERAL_ACCESS) {
+      expect(GENERAL_ACCESS_LABELS[access].label).toBeTruthy();
+      expect(GENERAL_ACCESS_LABELS[access].hint).toBeTruthy();
     }
+    for (const role of ['reader', 'editor'] as const) {
+      expect(LINK_ROLE_LABELS[role].label).toBeTruthy();
+      expect(LINK_ROLE_LABELS[role].hint).toBeTruthy();
+    }
+  });
+
+  it('folds the two link reaches into one, and listing into a single switch', () => {
+    // `unlisted` and `public` are the same reach; only the listing differs.
+    expect(generalAccessFor('private')).toBe('restricted');
+    expect(generalAccessFor('unlisted')).toBe('link');
+    expect(generalAccessFor('public')).toBe('link');
+
+    expect(visibilityFor('restricted', false)).toBe('private');
+    expect(visibilityFor('restricted', true)).toBe('private');
+    expect(visibilityFor('link', false)).toBe('unlisted');
+    expect(visibilityFor('link', true)).toBe('public');
   });
 
   it('sorts collaborators by power, then by name', () => {
@@ -134,8 +154,8 @@ describe('share links', () => {
   });
 
   it('builds the public address without doubling or losing slashes', () => {
-    expect(shareUrl('https://mdverse.app/', 'abc')).toBe('https://mdverse.app/s/abc');
-    expect(shareUrl('https://mdverse.app', 'a b')).toBe('https://mdverse.app/s/a%20b');
+    expect(shareUrl('https://mdverse.dev/', 'abc')).toBe('https://mdverse.dev/s/abc');
+    expect(shareUrl('https://mdverse.dev', 'a b')).toBe('https://mdverse.dev/s/a%20b');
   });
 
   it('masks a token so a screenshot does not leak it', () => {

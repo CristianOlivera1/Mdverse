@@ -1,13 +1,5 @@
-/**
- * What the editor's collaboration dialog talks to.
- *
- * The shape is deliberately camelCase and independent from the database rows: the
- * API endpoint does the mapping, so a column rename never reaches the browser and
- * this module stays free of `supabase-js`.
- */
-
 import type { CollaboratorRole, DocumentVisibility } from '../supabase/types';
-import type { DocumentAccess } from './types';
+import type { DocumentAccess, LinkRole } from './types';
 
 export interface CollaborationPerson {
   readonly userId: string;
@@ -37,7 +29,6 @@ export interface CollaborationRequest {
   readonly requesterId: string;
   readonly name: string;
   readonly username: string;
-  /** The requester's note, when they left one. */
   readonly message: string | null;
   readonly createdAt: string;
 }
@@ -45,35 +36,27 @@ export interface CollaborationRequest {
 export interface CollaborationState {
   readonly id: string;
   readonly title: string;
+  readonly slug: string;
   readonly visibility: DocumentVisibility;
+  readonly linkRole: LinkRole;
   readonly role: DocumentAccess;
-  /** Only an owner may invite, remove people or publish; everyone else reads this panel. */
   readonly canManage: boolean;
   readonly people: readonly CollaborationPerson[];
   readonly invitations: readonly CollaborationInvitation[];
   readonly links: readonly CollaborationLink[];
-  /** Pending “could I get in?” questions, oldest first. Empty for non-managers. */
   readonly requests: readonly CollaborationRequest[];
 }
 
 export interface CollaborationFeedback {
   readonly ok: boolean;
   readonly message: string;
-  /** `info` marks the honest middle case: access granted, the email refused. */
   readonly tone?: 'success' | 'info';
 }
 
-/** The fields each action reads. Values are strings and numbers only: no nested JSON travels. */
 export type ShareActionFields = Record<string, string | number>;
 
-// One endpoint per name, under /documents/:id/share/*.
 export type ManagedAction =
-  | 'invite'
-  | 'collaborator'
-  | 'invitation'
-  | 'link'
-  | 'visibility'
-  | 'request';
+  'invite' | 'collaborator' | 'invitation' | 'link' | 'visibility' | 'request';
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
@@ -145,7 +128,6 @@ function readLink(value: unknown): CollaborationLink | null {
   };
 }
 
-/** `null` when the payload is not a document we can show: the caller keeps its old state. */
 export function parseCollaborationState(payload: unknown): CollaborationState | null {
   if (!isRecord(payload)) return null;
 
@@ -158,7 +140,9 @@ export function parseCollaborationState(payload: unknown): CollaborationState | 
   return {
     id,
     title: readString(document.title, 'Untitled'),
+    slug: readString(document.slug),
     visibility: readString(document.visibility, 'private') as DocumentVisibility,
+    linkRole: readString(document.linkRole, 'reader') === 'editor' ? 'editor' : 'reader',
     role: readString(document.role, 'reader') as DocumentAccess,
     canManage: document.canManage === true,
     people: asArray(payload.people)
@@ -180,7 +164,6 @@ function collaborationUrl(documentId: string): string {
   return `/api/documents/${encodeURIComponent(documentId)}/collaboration`;
 }
 
-// Same endpoints the share page posts to; they answer JSON when the caller asks for it.
 function shareActionUrl(documentId: string, action: ManagedAction): string {
   return `/documents/${encodeURIComponent(documentId)}/share/${action}`;
 }
@@ -222,7 +205,6 @@ export async function runShareAction(
   const body = isRecord(payload) ? payload : {};
   const notice = isRecord(body.notice) ? body.notice : null;
 
-  // 401/403 without a notice (signed out, or the session expired while editing).
   if (!notice) {
     return {
       ok: false,

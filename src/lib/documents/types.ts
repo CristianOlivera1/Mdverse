@@ -4,11 +4,9 @@ export interface OpenDocument {
   readonly id: string;
   title: string;
   content: string;
-  /** Absent for drafts that never reached the server. */
   readonly role?: DocumentAccess;
 }
 
-// Owner is implicit via `documents.owner_id`, never in `document_collaborators`.
 export type DocumentAccess = 'owner' | CollaboratorRole;
 
 export interface CloudDocument extends OpenDocument {
@@ -16,7 +14,14 @@ export interface CloudDocument extends OpenDocument {
   role: DocumentAccess;
   slug: string;
   visibility: DocumentVisibility;
+  linkRole: LinkRole;
   updatedAt: string;
+}
+
+export type LinkRole = 'reader' | 'editor';
+
+export function isLinkRole(value: unknown): value is LinkRole {
+  return value === 'reader' || value === 'editor';
 }
 
 export interface DocumentVersionSummary {
@@ -44,6 +49,7 @@ export function isCloudDocument(value: unknown): value is CloudDocument {
     (candidate.visibility === 'private' ||
       candidate.visibility === 'unlisted' ||
       candidate.visibility === 'public') &&
+    isLinkRole(candidate.linkRole) &&
     (candidate.role === 'owner' ||
       candidate.role === 'reader' ||
       candidate.role === 'editor' ||

@@ -25,7 +25,8 @@ export const MAX_LISTED_DOCUMENTS = 200;
 
 export const NEW_DOCUMENT_TITLE = 'Untitled';
 
-const DOCUMENT_COLUMNS = 'id, owner_id, title, slug, content, revision, visibility, updated_at';
+const DOCUMENT_COLUMNS =
+  'id, owner_id, title, slug, content, revision, visibility, link_role, updated_at';
 
 interface DocumentRow {
   id: string;
@@ -35,6 +36,7 @@ interface DocumentRow {
   content: string;
   revision: number;
   visibility: DocumentVisibility;
+  link_role: CollaboratorRole;
   updated_at: string;
 }
 
@@ -64,11 +66,11 @@ export function toCloudDocument(row: DocumentRow, access: DocumentAccess): Cloud
     revision: row.revision,
     role: access,
     visibility: row.visibility,
+    linkRole: row.link_role === 'editor' ? 'editor' : 'reader',
     updatedAt: row.updated_at,
   };
 }
 
-// 42501 means RLS denied the row, not a system error.
 const INSUFFICIENT_PRIVILEGE = '42501';
 
 function failure(error: { code?: string } | null): 'forbidden' | 'error' {
@@ -76,16 +78,11 @@ function failure(error: { code?: string } | null): 'forbidden' | 'error' {
 }
 
 export async function listDocuments(db: Db, userId: string): Promise<CloudDocument[]> {
-  const [documentsResult, rolesResult] = await Promise.all([
-    db
-      .from('documents')
-      .select(DOCUMENT_COLUMNS)
-      .order('updated_at', { ascending: false })
-      .limit(MAX_LISTED_DOCUMENTS),
-    db.from('document_collaborators').select('document_id, role').eq('user_id', userId),
-  ]);
+  const rolesResult = await db
+    .from('document_collaborators')
+    .select('document_id, role')
+    .eq('user_id', userId);
 
-  if (documentsResult.error) throw documentsResult.error;
   if (rolesResult.error) throw rolesResult.error;
 
   const roles = new Map<string, CollaboratorRole>();
@@ -93,18 +90,32 @@ export async function listDocuments(db: Db, userId: string): Promise<CloudDocume
     roles.set(entry.document_id, entry.role);
   }
 
-  return asRows<DocumentRow>(documentsResult.data)
-    .filter((row) => row.owner_id === userId || roles.has(row.id))
-    .map((row) =>
-      toCloudDocument(
-        row,
-        documentAccess({
-          ownerId: row.owner_id,
-          viewerId: userId,
-          collaboratorRole: roles.get(row.id),
-        }),
-      ),
-    );
+  const shared = [...roles.keys()];
+  const mine = shared.length
+    ? `owner_id.eq.${userId},id.in.(${shared.join(',')})`
+    : `owner_id.eq.${userId}`;
+
+  const documentsResult = await db
+    .from('documents')
+    .select(DOCUMENT_COLUMNS)
+    .or(mine)
+    .order('updated_at', { ascending: false })
+    .limit(MAX_LISTED_DOCUMENTS);
+
+  if (documentsResult.error) throw documentsResult.error;
+
+  return asRows<DocumentRow>(documentsResult.data).map((row) =>
+    toCloudDocument(
+      row,
+      documentAccess({
+        ownerId: row.owner_id,
+        viewerId: userId,
+        collaboratorRole: roles.get(row.id) ?? null,
+        visibility: row.visibility,
+        linkRole: row.link_role,
+      }),
+    ),
+  );
 }
 
 export async function getDocument(
@@ -130,7 +141,13 @@ export async function getDocument(
   const role = asRow<{ role: CollaboratorRole }>(roleResult.data)?.role ?? null;
   return toCloudDocument(
     row,
-    documentAccess({ ownerId: row.owner_id, viewerId: userId, collaboratorRole: role }),
+    documentAccess({
+      ownerId: row.owner_id,
+      viewerId: userId,
+      collaboratorRole: role,
+      visibility: row.visibility,
+      linkRole: row.link_role,
+    }),
   );
 }
 
@@ -139,7 +156,7 @@ export async function getPublicDocumentById(db: Db, id: string): Promise<CloudDo
     .from('documents')
     .select(DOCUMENT_COLUMNS)
     .eq('id', id)
-    .eq('visibility', 'public')
+    .in('visibility', ['public', 'unlisted'])
     .maybeSingle();
 
   if (error) {
@@ -493,11 +510,14 @@ export async function revokeShareLink(db: Db, id: string): Promise<ShareResult<t
 
 export async function setVisibility(
   db: Db,
-  input: { documentId: string; visibility: DocumentVisibility },
+  input: { documentId: string; visibility: DocumentVisibility; linkRole?: InviteRole },
 ): Promise<ShareResult<true>> {
+  const patch: DocumentUpdate = { visibility: input.visibility };
+  if (input.linkRole) patch.link_role = input.linkRole;
+
   const { data, error } = await db
     .from('documents')
-    .update({ visibility: input.visibility })
+    .update(patch)
     .eq('id', input.documentId)
     .select('id');
 
@@ -506,8 +526,6 @@ export async function setVisibility(
     ? { ok: true, value: true }
     : { ok: false, reason: 'forbidden' };
 }
-
-/* Asking for access --------------------------------------------------------- */
 
 export interface AccessRequestEntry {
   readonly id: string;
@@ -709,39 +727,25 @@ export async function claimShareLink(
   };
 }
 
-/* Public pages -------------------------------------------------------------- */
-
-/** What `/d/:slug` and its export files need, and nothing else. */
 export interface PublicDocument {
   readonly id: string;
   readonly slug: string;
   readonly title: string;
   readonly content: string;
   readonly revision: number;
+  readonly visibility: DocumentVisibility;
   readonly createdAt: string;
   readonly updatedAt: string;
 }
 
 export const MAX_SITEMAP_DOCUMENTS = 2000;
 
-/**
- * The document behind `/d/:slug`: `visibility = 'public'` and nothing else.
- *
- * Read it with a client that has no session (`createAnonymousSupabaseClient`),
- * so the row is fetched as `anon`: the page is the same for everybody and can be
- * cached by a CDN. The `visibility` filter repeats what RLS already enforces -
- * belt and braces, because *this* is the query whose result is shared with the
- * whole internet, and it must stay true if a future policy ever widens access.
- *
- * A failure answers `null` (a 404), like `resolveShareToken`: an unreachable
- * database must not publish anything.
- */
 export async function getPublicDocument(db: Db, slug: string): Promise<PublicDocument | null> {
   const { data, error } = await db
     .from('documents')
-    .select('id, slug, title, content, revision, created_at, updated_at')
+    .select('id, slug, title, content, revision, visibility, created_at, updated_at')
     .eq('slug', slug)
-    .eq('visibility', 'public')
+    .in('visibility', ['public', 'unlisted'])
     .maybeSingle();
 
   if (error) {
@@ -755,6 +759,7 @@ export async function getPublicDocument(db: Db, slug: string): Promise<PublicDoc
     title: string;
     content: string;
     revision: number;
+    visibility: DocumentVisibility;
     created_at: string;
     updated_at: string;
   }>(data);
@@ -766,19 +771,19 @@ export async function getPublicDocument(db: Db, slug: string): Promise<PublicDoc
     title: row.title,
     content: row.content,
     revision: row.revision,
+    visibility: row.visibility,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
   };
 }
 
-/** Every published address, newest first, for the sitemap. */
 export async function listPublicDocuments(
   db: Db,
   limit = MAX_SITEMAP_DOCUMENTS,
-): Promise<{ slug: string; updatedAt: string }[]> {
+): Promise<{ slug: string; title: string; updatedAt: string }[]> {
   const { data, error } = await db
     .from('documents')
-    .select('slug, updated_at')
+    .select('slug, title, updated_at')
     .eq('visibility', 'public')
     .order('updated_at', { ascending: false })
     .limit(limit);
@@ -788,8 +793,9 @@ export async function listPublicDocuments(
     return [];
   }
 
-  return asRows<{ slug: string; updated_at: string }>(data).map((row) => ({
+  return asRows<{ slug: string; title: string; updated_at: string }>(data).map((row) => ({
     slug: row.slug,
+    title: row.title,
     updatedAt: row.updated_at,
   }));
 }

@@ -2,6 +2,7 @@ import { canManageDocument, describeAccess } from '../documents/access';
 import {
   loadCollaboration,
   runShareAction,
+  type CollaborationInvitation,
   type CollaborationPerson,
   type CollaborationRequest,
   type CollaborationState,
@@ -10,7 +11,7 @@ import {
 } from '../documents/collaboration';
 import { formatTimestamp } from '../documents/format';
 import type { DocumentAccess } from '../documents/types';
-import { ROLE_LABELS } from '../documents/sharing';
+import { generalAccessFor, ROLE_LABELS, type GeneralAccess } from '../documents/sharing';
 import { confirmAction } from './confirmDialog';
 import { closeMenus } from './menus';
 import { syncMiniSelects } from './miniSelect';
@@ -26,13 +27,12 @@ interface ActOptions {
   form?: HTMLFormElement;
   disable?: readonly HTMLButtonElement[];
   revert?: () => void;
+  reset?: boolean;
 }
 
 export function initCollaborateDialog(): void {
   const found = document.querySelector<HTMLDialogElement>('[data-collab-dialog]');
-  const openButtons = [
-    ...document.querySelectorAll<HTMLButtonElement>('[data-collab-open-btn]'),
-  ];
+  const openButtons = [...document.querySelectorAll<HTMLButtonElement>('[data-collab-open-btn]')];
   if (!found || openButtons.length === 0) return;
 
   const dialog: HTMLDialogElement = found;
@@ -65,8 +65,16 @@ export function initCollaborateDialog(): void {
   const requestsList = pick<HTMLElement>('[data-collab="requests"]');
   const requestsCount = pick<HTMLElement>('[data-collab="requests-count"]');
   const documentUrlInput = pick<HTMLInputElement>('[data-collab="document-url"]');
+  const linkOptions = pick<HTMLElement>('[data-collab="link-options"]');
   const inviteForm = pick<HTMLFormElement>('[data-collab-form="invite"]');
   const visibilityForm = pick<HTMLFormElement>('[data-collab-form="visibility"]');
+  const accessInputs = [
+    ...visibilityForm.querySelectorAll<HTMLInputElement>('[data-collab-access]'),
+  ];
+  const linkRoleInputs = [
+    ...visibilityForm.querySelectorAll<HTMLInputElement>('[data-collab-link-role]'),
+  ];
+  const publishedInput = visibilityForm.querySelector<HTMLInputElement>('[data-collab-published]');
   const personTemplate = template('person');
   const invitationTemplate = template('invitation');
   const requestTemplate = template('request');
@@ -127,30 +135,94 @@ export function initCollaborateDialog(): void {
     if (spinner) spinner.hidden = !pending;
   }
 
-  function renderPeople(people: readonly CollaborationPerson[]): void {
-    peopleList.replaceChildren(
-      ...people.map((person) => {
-        const row = fill(personTemplate, {
-          name: person.name,
-          meta: person.username
-            ? `@${person.username} · added ${formatTimestamp(person.addedAt)}`
-            : `added ${formatTimestamp(person.addedAt)}`,
-          role: person.role,
-        });
+  /**
+   * Keyed list update. A row keeps its DOM node across a refresh, so changing one
+   * person's role never rebuilds the whole list: only the rows that truly appeared
+   * or disappeared are created or removed, and an untouched row is left alone (no
+   * lost focus, no dropdown churn, no scroll jump).
+   */
+  function reconcile<T>(
+    list: HTMLElement,
+    items: readonly T[],
+    attribute: string,
+    keyOf: (item: T) => string,
+    create: (item: T) => HTMLElement,
+    update: (row: HTMLElement, item: T) => void,
+  ): void {
+    const known = new Map<string, HTMLElement>();
+    for (const row of list.querySelectorAll<HTMLElement>(`[${attribute}]`)) {
+      const key = row.getAttribute(attribute);
+      if (key) known.set(key, row);
+    }
 
-        row.dataset.user = person.userId;
-        row.dataset.role = person.role;
+    const kept = new Set<string>();
+    items.forEach((item, index) => {
+      const key = keyOf(item);
+      kept.add(key);
 
-        const input = row.querySelector<HTMLInputElement>('[data-field="role"]');
-        if (input) input.setAttribute('aria-label', `Role for ${person.name}`);
-        const remove = row.querySelector<HTMLButtonElement>('[data-action="remove"]');
-        if (remove) remove.setAttribute('aria-label', `Remove ${person.name}`);
+      const current = known.get(key);
+      const row = current ?? create(item);
+      if (current) update(row, item);
 
+      const at = list.children.item(index);
+      if (at !== row) list.insertBefore(row, at);
+    });
+
+    for (const [key, row] of known) {
+      if (!kept.has(key)) row.remove();
+    }
+  }
+
+  function personMeta(person: CollaborationPerson): string {
+    return person.username
+      ? `@${person.username} · added ${formatTimestamp(person.addedAt)}`
+      : `added ${formatTimestamp(person.addedAt)}`;
+  }
+
+  function updatePersonRow(row: HTMLElement, person: CollaborationPerson): void {
+    row.dataset.role = person.role;
+
+    const name = row.querySelector<HTMLElement>('[data-field="name"]');
+    if (name) name.textContent = person.name;
+    const meta = row.querySelector<HTMLElement>('[data-field="meta"]');
+    if (meta) meta.textContent = personMeta(person);
+
+    const input = row.querySelector<HTMLInputElement>('[data-field="role"]');
+    if (input) {
+      input.setAttribute('aria-label', `Role for ${person.name}`);
+      if (input.value !== person.role) {
+        input.value = person.role;
         const root = row.querySelector<HTMLElement>('[data-msel]');
         if (root) syncMiniSelects(root);
+      }
+    }
 
-        return row;
-      }),
+    const remove = row.querySelector<HTMLButtonElement>('[data-action="remove"]');
+    if (remove) remove.setAttribute('aria-label', `Remove ${person.name}`);
+  }
+
+  function createPersonRow(person: CollaborationPerson): HTMLElement {
+    const row = fill(personTemplate, {
+      name: person.name,
+      meta: personMeta(person),
+      role: person.role,
+    });
+    row.dataset.user = person.userId;
+
+    const root = row.querySelector<HTMLElement>('[data-msel]');
+    if (root) syncMiniSelects(root);
+    updatePersonRow(row, person);
+    return row;
+  }
+
+  function renderPeople(people: readonly CollaborationPerson[]): void {
+    reconcile(
+      peopleList,
+      people,
+      'data-user',
+      (person) => person.userId,
+      createPersonRow,
+      updatePersonRow,
     );
 
     const total = people.length + 1; // plus you
@@ -158,95 +230,195 @@ export function initCollaborateDialog(): void {
     peopleEmpty.hidden = people.length > 0;
   }
 
-  function renderInvitations(pending: CollaborationState['invitations']): void {
+  function invitationMeta(invitation: CollaborationInvitation): string {
+    return `${ROLE_LABELS[invitation.role]} when they sign up · invited ${formatTimestamp(invitation.createdAt)}`;
+  }
+
+  function updateInvitationRow(row: HTMLElement, invitation: CollaborationInvitation): void {
+    const email = row.querySelector<HTMLElement>('[data-field="email"]');
+    if (email) email.textContent = invitation.email;
+    const meta = row.querySelector<HTMLElement>('[data-field="meta"]');
+    if (meta) meta.textContent = invitationMeta(invitation);
+  }
+
+  function createInvitationRow(invitation: CollaborationInvitation): HTMLElement {
+    const row = fill(invitationTemplate, {
+      email: invitation.email,
+      meta: invitationMeta(invitation),
+    });
+    row.dataset.invitation = invitation.id;
+    return row;
+  }
+
+  function renderInvitations(pending: readonly CollaborationInvitation[]): void {
     invitationsBlock.hidden = pending.length === 0;
-    invitationsList.replaceChildren(
-      ...pending.map((invitation) => {
-        const row = fill(invitationTemplate, {
-          email: invitation.email,
-          meta: `${ROLE_LABELS[invitation.role]} when they sign up · invited ${formatTimestamp(invitation.createdAt)}`,
-        });
-        row.dataset.invitation = invitation.id;
-        return row;
-      }),
+    reconcile(
+      invitationsList,
+      pending,
+      'data-invitation',
+      (invitation) => invitation.id,
+      createInvitationRow,
+      updateInvitationRow,
     );
+  }
+
+  function requestMeta(request: CollaborationRequest): string {
+    return request.username
+      ? `@${request.username} - asked ${formatTimestamp(request.createdAt)}`
+      : `asked ${formatTimestamp(request.createdAt)}`;
+  }
+
+  /** The role picker is deliberately untouched: a refresh never discards a pending choice. */
+  function updateRequestRow(row: HTMLElement, request: CollaborationRequest): void {
+    const name = row.querySelector<HTMLElement>('[data-field="name"]');
+    if (name) name.textContent = request.name;
+    const meta = row.querySelector<HTMLElement>('[data-field="meta"]');
+    if (meta) meta.textContent = requestMeta(request);
+
+    const note = row.querySelector<HTMLElement>('[data-field="note"]');
+    if (note) {
+      note.textContent = request.message ?? '';
+      note.hidden = !request.message;
+    }
+  }
+
+  function createRequestRow(request: CollaborationRequest): HTMLElement {
+    const row = fill(requestTemplate, {
+      name: request.name,
+      meta: requestMeta(request),
+      role: 'reader',
+    });
+    row.dataset.request = request.id;
+
+    const root = row.querySelector<HTMLElement>('[data-msel]');
+    if (root) syncMiniSelects(root);
+    updateRequestRow(row, request);
+    return row;
   }
 
   function renderRequests(requests: readonly CollaborationRequest[]): void {
     requestsBlock.hidden = requests.length === 0;
     requestsCount.textContent = requests.length > 0 ? `(${requests.length})` : '';
 
-    requestsList.replaceChildren(
-      ...requests.map((request) => {
-        const row = fill(requestTemplate, {
-          name: request.name,
-          meta: request.username
-            ? `@${request.username} - asked ${formatTimestamp(request.createdAt)}`
-            : `asked ${formatTimestamp(request.createdAt)}`,
-          role: 'reader',
-        });
-
-        row.dataset.request = request.id;
-
-        const note = row.querySelector<HTMLElement>('[data-field="note"]');
-        if (note) {
-          note.textContent = request.message ?? '';
-          note.hidden = !request.message;
-        }
-
-        const root = row.querySelector<HTMLElement>('[data-msel]');
-        if (root) syncMiniSelects(root);
-
-        return row;
-      }),
+    reconcile(
+      requestsList,
+      requests,
+      'data-request',
+      (request) => request.id,
+      createRequestRow,
+      updateRequestRow,
     );
   }
 
-  function renderDocumentLink(documentId: string): void {
-    documentUrlInput.value = new URL(
-      `/?doc=${encodeURIComponent(documentId)}`,
-      window.location.origin,
-    ).toString();
+  /**
+   * Every share link opens the document in the editor. The address is the same
+   * whoever holds it; the reach and the role the link grants decide what they may
+   * do once they are there. The published read-only page under `/d/<slug>` keeps
+   * serving search engines and readers who followed an older link - it is not this
+   * field's job to hand it out.
+   */
+  function documentAddress(next: CollaborationState): string {
+    return `/?doc=${encodeURIComponent(next.id)}`;
   }
 
-  function render(next: CollaborationState): void {
-    state = next;
-    subtitle.textContent = next.title;
-    roleLine.textContent = `Your role here is ${describeAccess(next.role).toLowerCase()}.`;
+  function renderDocumentLink(next: CollaborationState): void {
+    documentUrlInput.value = new URL(documentAddress(next), window.location.origin).toString();
+  }
 
-    readonlyBlock.hidden = next.canManage;
-    manageBlock.hidden = !next.canManage;
+  function syncAccessOptions(): void {
+    const selected = accessInputs.find((input) => input.checked)?.value ?? 'restricted';
+    linkOptions.hidden = selected !== 'link';
+  }
+
+  function renderAccess(next: CollaborationState): void {
+    const access = generalAccessFor(next.visibility);
+    for (const input of accessInputs) input.checked = input.value === access;
+    for (const input of linkRoleInputs) input.checked = input.value === next.linkRole;
+    if (publishedInput) publishedInput.checked = next.visibility === 'public';
+    syncAccessOptions();
+  }
+
+  /** A stable string per section, so `render` repaints only the parts that actually moved. */
+  function fingerprint<T>(values: readonly T[], project: (value: T) => string): string {
+    return values.map(project).join('\n');
+  }
+
+  function sectionChanged<T>(
+    before: readonly T[] | null,
+    after: readonly T[],
+    project: (value: T) => string,
+  ): boolean {
+    if (!before) return true;
+    if (before.length !== after.length) return true;
+    return fingerprint(before, project) !== fingerprint(after, project);
+  }
+
+  const personFields = (person: CollaborationPerson): string =>
+    `${person.userId}:${person.role}:${person.name}:${person.username}:${person.addedAt}`;
+  const invitationFields = (invitation: CollaborationInvitation): string =>
+    `${invitation.id}:${invitation.email}:${invitation.role}:${invitation.createdAt}`;
+  const requestFields = (request: CollaborationRequest): string =>
+    `${request.id}:${request.name}:${request.username}:${request.message}:${request.createdAt}`;
+
+  function addressChanged(before: CollaborationState, after: CollaborationState): boolean {
+    return before.id !== after.id;
+  }
+
+  function accessChanged(before: CollaborationState, after: CollaborationState): boolean {
+    return before.visibility !== after.visibility || before.linkRole !== after.linkRole;
+  }
+
+  function render(next: CollaborationState, previous: CollaborationState | null): void {
+    if (!previous || previous.title !== next.title) subtitle.textContent = next.title;
+    if (!previous || previous.role !== next.role) {
+      roleLine.textContent = `Your role here is ${describeAccess(next.role).toLowerCase()}.`;
+    }
+    if (!previous || previous.canManage !== next.canManage) {
+      readonlyBlock.hidden = next.canManage;
+      manageBlock.hidden = !next.canManage;
+    }
+
+    state = next;
     if (!next.canManage) return;
 
-    renderPeople(next.people);
-    renderInvitations(next.invitations);
-    renderRequests(next.requests);
-    renderDocumentLink(next.id);
-    for (const radio of visibilityForm.querySelectorAll<HTMLInputElement>(
-      'input[name="visibility"]',
-    )) {
-      radio.checked = radio.value === next.visibility;
+    if (sectionChanged(previous?.people ?? null, next.people, personFields)) {
+      renderPeople(next.people);
     }
+    if (sectionChanged(previous?.invitations ?? null, next.invitations, invitationFields)) {
+      renderInvitations(next.invitations);
+    }
+    if (sectionChanged(previous?.requests ?? null, next.requests, requestFields)) {
+      renderRequests(next.requests);
+    }
+    if (!previous || addressChanged(previous, next)) renderDocumentLink(next);
+    if (!previous || accessChanged(previous, next)) renderAccess(next);
   }
 
-  async function refresh(): Promise<void> {
+  async function refresh(options: { skeleton?: boolean } = {}): Promise<void> {
     const document_ = active;
     if (!document_) return;
 
-    skeleton.hidden = false;
-    unavailable.hidden = true;
-    readonlyBlock.hidden = true;
-    manageBlock.hidden = true;
+    const withSkeleton = options.skeleton !== false;
+    const previous = withSkeleton ? null : state;
+
+    if (withSkeleton) {
+      skeleton.hidden = false;
+      unavailable.hidden = true;
+      readonlyBlock.hidden = true;
+      manageBlock.hidden = true;
+    }
+
     const next = await loadCollaboration(document_.id);
     skeleton.hidden = true;
 
     if (!next) {
+      if (!withSkeleton) return;
       state = null;
       unavailable.hidden = false;
       return;
     }
 
-    render(next);
+    render(next, previous);
   }
 
   async function act(
@@ -268,10 +440,12 @@ export function initCollaborateDialog(): void {
     try {
       const feedback = await runShareAction(document_.id, action, fields);
       if (feedback.ok) {
-        options.form?.reset();
-        if (options.form) syncMiniSelects(options.form);
+        if (options.reset !== false) {
+          options.form?.reset();
+          if (options.form) syncMiniSelects(options.form);
+        }
         showNotice(feedback.tone ?? 'success', feedback.message);
-        await refresh();
+        await refresh({ skeleton: false });
       } else {
         showNotice('error', feedback.message);
         options.revert?.();
@@ -307,7 +481,12 @@ export function initCollaborateDialog(): void {
     const id = button?.dataset.docId;
     if (!id) return;
 
-    active = { id, title: button.dataset.docTitle || 'Untitled', collaborative: true, role: 'owner' };
+    active = {
+      id,
+      title: button.dataset.docTitle || 'Untitled',
+      collaborative: true,
+      role: 'owner',
+    };
     openDialog();
   });
 
@@ -328,12 +507,20 @@ export function initCollaborateDialog(): void {
     );
   });
 
+  for (const input of accessInputs) input.addEventListener('change', syncAccessOptions);
+
   visibilityForm.addEventListener('submit', (event) => {
     event.preventDefault();
     const data = new FormData(visibilityForm);
-    void act('visibility', { visibility: String(data.get('visibility') ?? '') }, {
-      form: visibilityForm,
-    });
+    const access: GeneralAccess = data.get('access') === 'link' ? 'link' : 'restricted';
+    const published = data.get('published') !== null;
+
+    const fields: ShareActionFields = { access, published: published ? 1 : 0 };
+    if (access === 'link') {
+      fields.linkRole = data.get('linkRole') === 'editor' ? 'editor' : 'reader';
+    }
+
+    void act('visibility', fields, { form: visibilityForm, reset: false });
   });
 
   requestsList.addEventListener('click', (event) => {

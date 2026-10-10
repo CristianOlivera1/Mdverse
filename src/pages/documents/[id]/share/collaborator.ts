@@ -1,7 +1,3 @@
-/**
- * Owner-only role change/remove: SQL filters non-owners, zero rows => `forbidden`.
- */
-
 import type { APIRoute } from 'astro';
 
 import { readShareInput, shareFeedbackResponse } from '@/lib/api/sharing';
@@ -26,7 +22,6 @@ export const POST: APIRoute = async (context) => {
     return shareFeedbackResponse({ error: 'role_failed' });
   }
 
-  // Block self-removal: owner would lock themselves out.
   if (collaborator === user.id) {
     return shareFeedbackResponse({ error: 'forbidden' });
   }

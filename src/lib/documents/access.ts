@@ -1,29 +1,34 @@
-import type { CollaboratorRole } from '../supabase/types';
+import type { CollaboratorRole, DocumentVisibility } from '../supabase/types';
 import type { DocumentAccess } from './types';
 
-/** Row shape needed to decide access: who owns it, and who is asking. */
 export interface AccessInput {
   readonly ownerId: string;
   readonly viewerId: string;
-  /** Role from `document_collaborators`, when the viewer is one. */
   readonly collaboratorRole?: CollaboratorRole | null;
+
+  readonly visibility?: DocumentVisibility;
+  readonly linkRole?: CollaboratorRole | null;
 }
 
 export function documentAccess({
   ownerId,
   viewerId,
   collaboratorRole,
+  visibility,
+  linkRole,
 }: AccessInput): DocumentAccess {
   if (ownerId === viewerId) return 'owner';
-  return collaboratorRole ?? 'reader';
+  if (collaboratorRole) return collaboratorRole;
+  if (visibility === 'unlisted' || visibility === 'public') {
+    return linkRole === 'editor' ? 'editor' : 'reader';
+  }
+  return 'reader';
 }
 
-/** May change the text (owner, editor or admin). */
 export function canEditDocument(access: DocumentAccess): boolean {
   return access === 'owner' || access === 'editor' || access === 'admin';
 }
 
-/** May hand out access, manage people and delete (owner or admin). */
 export function canManageDocument(access: DocumentAccess): boolean {
   return access === 'owner' || access === 'admin';
 }

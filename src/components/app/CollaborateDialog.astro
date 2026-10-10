@@ -1,7 +1,14 @@
 ---
 import Icon from '@/components/ui/Icon.astro';
 import MiniSelect from '@/components/ui/MiniSelect.astro';
-import { ROLE_HINTS, VISIBILITY_LABELS, VISIBILITIES } from '@/lib/documents/sharing';
+import {
+  GENERAL_ACCESS,
+  GENERAL_ACCESS_LABELS,
+  INVITE_ROLES,
+  LINK_ROLE_LABELS,
+  PUBLISH_LABELS,
+  ROLE_HINTS,
+} from '@/lib/documents/sharing';
 ---
 
 <button
@@ -126,10 +133,6 @@ import { ROLE_HINTS, VISIBILITY_LABELS, VISIBILITIES } from '@/lib/documents/sha
               </span>
             </button>
           </div>
-          <p class="text-[11px] leading-relaxed text-neutral-500">
-            An address with an account gets access immediately. One without an account keeps the
-            invitation until it signs up.
-          </p>
         </form>
       </section>
 
@@ -158,8 +161,8 @@ import { ROLE_HINTS, VISIBILITY_LABELS, VISIBILITIES } from '@/lib/documents/sha
         </h3>
         <ul class="mt-2 space-y-2" data-collab="requests"></ul>
         <p class="mt-2 text-[11px] leading-relaxed text-neutral-500">
-          These people opened a link and cannot read the document yet. Approving grants the role
-          you pick and turns the request into real access.
+          These people opened a link and cannot read the document yet. Approving grants the role you
+          pick and turns the request into real access.
         </p>
       </section>
 
@@ -182,10 +185,6 @@ import { ROLE_HINTS, VISIBILITY_LABELS, VISIBILITIES } from '@/lib/documents/sha
             <span data-copy-label>Copy</span>
           </button>
         </div>
-        <p class="mt-1 text-[11px] leading-relaxed text-neutral-500">
-          A link to the editor. Anyone who already has access opens it here, and anybody else can ask
-          you from there. Use Invite by email, or “Who can reach it”, to let someone in.
-        </p>
       </section>
 
       <section>
@@ -194,34 +193,71 @@ import { ROLE_HINTS, VISIBILITY_LABELS, VISIBILITIES } from '@/lib/documents/sha
           Who can reach it
         </h3>
         <form class="mt-2 space-y-2" data-collab-form="visibility">
-          {VISIBILITIES.map((visibility) => (
+          {GENERAL_ACCESS.map((access) => (
             <label class="flex items-start gap-3 rounded-lg border border-neutral-800 p-3">
               <input
                 type="radio"
-                name="visibility"
-                value={visibility}
+                name="access"
+                value={access}
                 class="mt-0.5"
-                data-collab-visibility={visibility}
+                data-collab-access={access}
               />
               <span class="min-w-0">
                 <span class="block text-sm text-neutral-100">
-                  {VISIBILITY_LABELS[visibility].label}
+                  {GENERAL_ACCESS_LABELS[access].label}
                 </span>
                 <span class="mt-0.5 block text-[11px] leading-relaxed text-neutral-500">
-                  {VISIBILITY_LABELS[visibility].hint}
+                  {GENERAL_ACCESS_LABELS[access].hint}
                 </span>
               </span>
             </label>
           ))}
 
-        <div class="flex justify-end mt-1">
-          <button type="submit" class="hb on" data-collab-submit>
-            <span data-collab-submit-label>Save</span>
-            <span class="msel-spin" data-collab-spinner hidden>
-              <Icon name="lucide:loader-circle" size={14} />
-            </span>
-          </button>
-        </div>
+          <div
+            class="space-y-3 rounded-lg border border-neutral-800 p-3"
+            data-collab="link-options"
+            hidden
+          >
+            <p class="text-[11px] font-medium tracking-wide text-neutral-400 uppercase">
+              What the link gives
+            </p>
+            {INVITE_ROLES.map((role) => (
+              <label class="flex items-start gap-3">
+                <input
+                  type="radio"
+                  name="linkRole"
+                  value={role}
+                  class="mt-0.5"
+                  data-collab-link-role={role}
+                />
+                <span class="min-w-0">
+                  <span class="block text-sm text-neutral-100">{LINK_ROLE_LABELS[role].label}</span>
+                  <span class="mt-0.5 block text-[11px] leading-relaxed text-neutral-500">
+                    {LINK_ROLE_LABELS[role].hint}
+                  </span>
+                </span>
+              </label>
+            ))}
+
+            <label class="flex items-start gap-3 border-t border-neutral-800 pt-3">
+              <input type="checkbox" name="published" class="mt-0.5" data-collab-published />
+              <span class="min-w-0">
+                <span class="block text-sm text-neutral-100">{PUBLISH_LABELS.label}</span>
+                <span class="mt-0.5 block text-[11px] leading-relaxed text-neutral-500">
+                  {PUBLISH_LABELS.hint}
+                </span>
+              </span>
+            </label>
+          </div>
+
+          <div class="flex justify-end mt-1">
+            <button type="submit" class="hb on" data-collab-submit>
+              <span data-collab-submit-label>Save</span>
+              <span class="msel-spin" data-collab-spinner hidden>
+                <Icon name="lucide:loader-circle" size={14} />
+              </span>
+            </button>
+          </div>
         </form>
       </section>
     </div>

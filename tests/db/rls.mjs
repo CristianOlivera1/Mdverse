@@ -1,35 +1,3 @@
-/**
- * Row level security checks against a real Supabase project.
- *
- *   pnpm db:rls
- *
- * Why a script and not a unit test: RLS is enforced by Postgres, so the only
- * honest way to test it is to reach the project with several identities and watch
- * what each of them can actually do. The suite therefore creates two throwaway
- * accounts (confirmed, never emailed), acts as each one through the Data API -
- * exactly the path a browser takes - and deletes them when it finishes.
- *
- * It needs the keys already in `.env`:
- *   PUBLIC_SUPABASE_URL, PUBLIC_SUPABASE_PUBLISHABLE_KEY (anon role),
- *   SUPABASE_SECRET_KEY (admin API: create/delete the test users).
- * No database password and no CLI are involved.
- *
- * What it cannot cover: a *token* holder reading an `unlisted` document, because
- * that resolution is deliberately server-side (phase 5) and never goes through
- * the Data API with the token.
- *
- * Three of the checks exist because the project has already been bitten by them:
- * a stranger inviting themselves through the SECURITY DEFINER RPC (the guard has
- * to ask `is not true`, never `if not <null>`), an editor publishing somebody
- * else's draft (the update policy compares the stored visibility), and that same
- * editor taking the document outright. The second and third regress silently:
- * the first version of the schema was pasted from the plan, whose example update
- * policy is *another* name with an unguarded `with check`, and permissive
- * policies are OR-ed - so a hand-made policy kept answering yes while ours sat
- * next to it, unread, and re-applying the migrations changed nothing. They are
- * pinned here rather than only in the plan.
- */
-
 import { readFileSync } from 'node:fs';
 import { randomUUID } from 'node:crypto';
 import process from 'node:process';
@@ -614,6 +582,55 @@ async function main() {
     await owner.client.rest(`documents?id=eq.${document.id}`, {
       method: 'PATCH',
       body: JSON.stringify({ visibility: 'private' }),
+    });
+
+    // `unlisted` is the reach "anyone with the link": readable without an account
+    // and - the part that used to be inert - it carries a role. `link_role`
+    // decides what a *signed-in* visitor may do; it is never a way for an
+    // anonymous one to write.
+    await owner.client.rest(`documents?id=eq.${document.id}`, {
+      method: 'PATCH',
+      body: JSON.stringify({ visibility: 'unlisted', link_role: 'editor' }),
+    });
+    const linkDocumentRead = await anon.rest(
+      `documents?select=id,visibility,link_role&id=eq.${document.id}`,
+    );
+    check(
+      'an anonymous visitor can read a document shared by link',
+      Array.isArray(linkDocumentRead.body) && linkDocumentRead.body.length === 1,
+      `${linkDocumentRead.status} ${JSON.stringify(linkDocumentRead.body)}`,
+    );
+
+    const linkWrite = await anon.rest(`documents?id=eq.${document.id}`, {
+      method: 'PATCH',
+      headers: { Prefer: 'return=representation' },
+      body: JSON.stringify({ content: 'anon link write' }),
+    });
+    check(
+      'an anonymous visitor cannot write through a link, not even an editor one',
+      linkWrite.status >= 400 || (Array.isArray(linkWrite.body) && linkWrite.body.length === 0),
+      `${linkWrite.status} ${JSON.stringify(linkWrite.body)}`,
+    );
+
+    // A reader of the document cannot widen its own reach: the role travels with
+    // the link, and only a manager changes it.
+    const widenRole = await stranger.client.rest(`documents?id=eq.${document.id}`, {
+      method: 'PATCH',
+      headers: { Prefer: 'return=representation' },
+      body: JSON.stringify({ link_role: 'editor' }),
+    });
+    const storedRole = await owner.client.rest(`documents?id=eq.${document.id}&select=link_role`);
+    check(
+      'a reader cannot widen the role the link hands out',
+      widenRole.status >= 400 ||
+        (Array.isArray(widenRole.body) &&
+          widenRole.body.every((row) => row.link_role === 'reader')),
+      `${widenRole.status} ${JSON.stringify(widenRole.body)} / stored ${JSON.stringify(storedRole.body)}`,
+    );
+
+    await owner.client.rest(`documents?id=eq.${document.id}`, {
+      method: 'PATCH',
+      body: JSON.stringify({ visibility: 'private', link_role: 'reader' }),
     });
 
     // 6. the owner keeps the full picture.

@@ -253,6 +253,18 @@ describe.skipIf(!env)('sharing (live project)', () => {
     expect(published?.role).toBe('reader');
     expect(published?.visibility).toBe('public');
 
+    // A document shared by link is the same reach without the listing: an unlisted
+    // one still answers an anonymous read, which is what makes the editor address
+    // of a link-shared document work without an account.
+    expect(await setVisibility(owner, { documentId, visibility: 'unlisted' })).toEqual({
+      ok: true,
+      value: true,
+    });
+    const linked = await getPublicDocumentById(anonymous, documentId);
+    expect(linked?.id).toBe(documentId);
+    expect(linked?.visibility).toBe('unlisted');
+    expect(linked?.role).toBe('reader');
+
     // Private again: the same anonymous read finds nothing.
     expect(await setVisibility(owner, { documentId, visibility: 'private' })).toEqual({
       ok: true,

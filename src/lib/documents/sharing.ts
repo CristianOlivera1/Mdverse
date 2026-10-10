@@ -17,25 +17,54 @@ export const ROLE_HINTS: Record<InviteRole, string> = {
   editor: 'Edits the text. Cannot publish, delete or change who has access.',
 };
 
-export const VISIBILITY_LABELS: Record<
-  DocumentVisibility,
+export const GENERAL_ACCESS = ['restricted', 'link'] as const;
+export type GeneralAccess = (typeof GENERAL_ACCESS)[number];
+
+export const GENERAL_ACCESS_LABELS: Record<
+  GeneralAccess,
   { readonly label: string; readonly hint: string }
 > = {
-  private: {
-    label: 'Private',
-    hint: 'Only you and the people you invited.',
+  restricted: {
+    label: 'Restricted',
+    hint: 'Only you and the people you invite. Nobody else can open it, link or not.',
   },
-  unlisted: {
+  link: {
     label: 'Anyone with the link',
-    hint: 'Not listed anywhere. It opens only through a link token.',
-  },
-  public: {
-    label: 'Public',
-    hint: 'Anyone can read it, search engines included. The indexable page arrives in the next phase.',
+    hint: 'Anyone who has the address opens it - no invitation needed. Not listed anywhere.',
   },
 };
 
-export const VISIBILITIES: readonly DocumentVisibility[] = ['private', 'unlisted', 'public'];
+export const LINK_ROLE_LABELS: Record<
+  InviteRole,
+  { readonly label: string; readonly hint: string }
+> = {
+  reader: {
+    label: 'Can view',
+    hint: 'Reads the document, signs in to comment. Nobody with the link edits the text.',
+  },
+  editor: {
+    label: 'Can edit',
+    hint: 'Anyone signed in with the link edits the text. Cannot publish or change who has access.',
+  },
+};
+
+export const PUBLISH_LABELS = {
+  label: 'List it publicly',
+  hint: 'Adds a page anyone can open and search engines may index. Editing still needs the role above.',
+} as const;
+
+export function generalAccessFor(visibility: DocumentVisibility): GeneralAccess {
+  return visibility === 'private' ? 'restricted' : 'link';
+}
+
+export function visibilityFor(access: GeneralAccess, published: boolean): DocumentVisibility {
+  if (access === 'restricted') return 'private';
+  return published ? 'public' : 'unlisted';
+}
+
+export function isGeneralAccess(value: unknown): value is GeneralAccess {
+  return typeof value === 'string' && (GENERAL_ACCESS as readonly string[]).includes(value);
+}
 
 export const MAX_INVITES_PER_REQUEST = 10;
 
@@ -67,11 +96,12 @@ export function isInviteRole(value: unknown): value is InviteRole {
   return typeof value === 'string' && (INVITE_ROLES as readonly string[]).includes(value);
 }
 
+export const VISIBILITIES: readonly DocumentVisibility[] = ['private', 'unlisted', 'public'];
+
 export function isVisibility(value: unknown): value is DocumentVisibility {
   return typeof value === 'string' && (VISIBILITIES as readonly string[]).includes(value);
 }
 
-// Owner has no collaborator row yet must rank top or the share UI breaks for owners.
 export function roleRank(role: DocumentAccess): number {
   switch (role) {
     case 'owner':
@@ -144,9 +174,7 @@ export interface InviteSummary {
   readonly invited: number;
   readonly yours: number;
   readonly invalid: number;
-  /** Invitation emails Resend accepted. Only the invite route knows this. */
   readonly emailsSent?: number;
-  /** Invitation emails Resend refused - access happened, the message did not leave. */
   readonly emailsFailed?: number;
 }
 

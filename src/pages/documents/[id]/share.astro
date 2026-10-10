@@ -7,11 +7,15 @@ import { isDocumentId } from '@/lib/documents/ids';
 import { shareNotice } from '@/lib/documents/messages';
 import { getDocument, listCollaborators, listInvitations } from '@/lib/documents/repository';
 import {
+  GENERAL_ACCESS,
+  GENERAL_ACCESS_LABELS,
+  generalAccessFor,
+  INVITE_ROLES,
+  LINK_ROLE_LABELS,
+  PUBLISH_LABELS,
   ROLE_HINTS,
   ROLE_LABELS,
   sortCollaborators,
-  VISIBILITIES,
-  VISIBILITY_LABELS,
 } from '@/lib/documents/sharing';
 
 export const prerender = false;
@@ -50,6 +54,11 @@ const invitations = manageable
   : [];
 const origin = Astro.url.origin;
 const roleOptions = ['reader', 'editor'] as const;
+
+// The address to hand out always opens the editor: the reach and the link role
+// decide what the holder may do there. The published read-only page under
+// `/d/<slug>` remains for search engines, not for this field.
+const shareAddress = `${origin}/?doc=${encodeURIComponent(document.id)}`;
 ---
 
 <AccountLayout
@@ -126,10 +135,6 @@ const roleOptions = ['reader', 'editor'] as const;
               Send invitation
             </button>
           </div>
-          <p class="text-[11px] leading-relaxed text-neutral-500">
-            An address with an account gets access immediately. An address without one keeps the
-            invitation until it signs up - the role is granted the moment it does.
-          </p>
         </form>
       </section>
 
@@ -262,14 +267,14 @@ const roleOptions = ['reader', 'editor'] as const;
           <input
             type="text"
             readonly
-            value={`${origin}/?doc=${encodeURIComponent(document.id)}`}
-            aria-label="Link to the editor"
+            value={shareAddress}
+            aria-label="Address to share"
             class="min-w-0 flex-1 rounded-lg border border-neutral-800 bg-black px-2 py-1.5 font-mono text-[11px] text-neutral-300"
           />
           <button
             type="button"
             class="hb"
-            data-copy={`${origin}/?doc=${encodeURIComponent(document.id)}`}
+            data-copy={shareAddress}
             title="Copy link"
             aria-label="Copy link"
           >
@@ -278,8 +283,9 @@ const roleOptions = ['reader', 'editor'] as const;
           </button>
         </div>
         <p class="mt-2 text-[11px] leading-relaxed text-neutral-500">
-          Anyone who already has access opens it here, and anybody else can ask you from there. Use
-          Invite by email, or “Who can reach it”, to let someone in.
+          This always opens the document in the editor. The reach and the role the link grants
+          decide what the holder may do there - someone without an account still needs the document
+          to be reachable by link.
         </p>
       </section>
 
@@ -290,25 +296,64 @@ const roleOptions = ['reader', 'editor'] as const;
         </h2>
 
         <form method="POST" action={`${action}/visibility`} class="mt-3 space-y-2">
-          {VISIBILITIES.map((visibility) => (
+          {GENERAL_ACCESS.map((access) => (
             <label class="flex items-start gap-3 rounded-lg border border-neutral-800 p-3">
               <input
                 type="radio"
-                name="visibility"
-                value={visibility}
-                checked={document.visibility === visibility}
+                name="access"
+                value={access}
+                checked={generalAccessFor(document.visibility) === access}
                 class="mt-0.5"
               />
               <span class="min-w-0">
                 <span class="block text-sm text-neutral-100">
-                  {VISIBILITY_LABELS[visibility].label}
+                  {GENERAL_ACCESS_LABELS[access].label}
                 </span>
                 <span class="mt-0.5 block text-[11px] leading-relaxed text-neutral-500">
-                  {VISIBILITY_LABELS[visibility].hint}
+                  {GENERAL_ACCESS_LABELS[access].hint}
                 </span>
               </span>
             </label>
           ))}
+
+          <div class="space-y-3 rounded-lg border border-neutral-800 p-3">
+            <p class="text-[11px] font-medium tracking-wide text-neutral-400 uppercase">
+              What the link gives
+            </p>
+            {INVITE_ROLES.map((role) => (
+              <label class="flex items-start gap-3">
+                <input
+                  type="radio"
+                  name="linkRole"
+                  value={role}
+                  checked={document.linkRole === role}
+                  class="mt-0.5"
+                />
+                <span class="min-w-0">
+                  <span class="block text-sm text-neutral-100">{LINK_ROLE_LABELS[role].label}</span>
+                  <span class="mt-0.5 block text-[11px] leading-relaxed text-neutral-500">
+                    {LINK_ROLE_LABELS[role].hint}
+                  </span>
+                </span>
+              </label>
+            ))}
+
+            <label class="flex items-start gap-3 border-t border-neutral-800 pt-3">
+              <input
+                type="checkbox"
+                name="published"
+                checked={document.visibility === 'public'}
+                class="mt-0.5"
+              />
+              <span class="min-w-0">
+                <span class="block text-sm text-neutral-100">{PUBLISH_LABELS.label}</span>
+                <span class="mt-0.5 block text-[11px] leading-relaxed text-neutral-500">
+                  {PUBLISH_LABELS.hint}
+                </span>
+              </span>
+            </label>
+          </div>
+
           <div class="flex justify-end pt-1">
             <button type="submit" class="hb on">
               Save
@@ -330,7 +375,6 @@ const roleOptions = ['reader', 'editor'] as const;
 
   initConfirmForms();
 
-  // Copy button only - every other action is a plain form POST.
   for (const button of document.querySelectorAll<HTMLButtonElement>('button[data-copy]')) {
     button.addEventListener('click', () => {
       const value = button.dataset.copy ?? '';

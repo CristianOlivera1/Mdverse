@@ -1,8 +1,3 @@
-/**
- * Plain-form POST (not fetch): redirects into the editor.
- * Auth-guarded; the built-in same-origin check blocks cross-site posts.
- */
-
 import type { APIRoute } from 'astro';
 
 import { dashboardFeedbackUrl } from '@/lib/documents/messages';

@@ -42,7 +42,9 @@ export const GET: APIRoute = async (context) => {
       document: {
         id: document.id,
         title: document.title,
+        slug: document.slug,
         visibility: document.visibility,
+        linkRole: document.linkRole,
         role: document.role,
         canManage,
       },

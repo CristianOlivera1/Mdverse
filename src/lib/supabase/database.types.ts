@@ -5,7 +5,6 @@ export interface Database {
     Tables: {
       profiles: {
         Row: {
-          /** References `auth.users.id`. */
           id: string;
           username: string;
           display_name: string;
@@ -41,12 +40,11 @@ export interface Database {
           id: string;
           owner_id: string;
           title: string;
-          /** Assigned once on insert; a rename never changes it. */
           slug: string;
           content: string;
           visibility: Database['public']['Enums']['document_visibility'];
+          link_role: Database['public']['Enums']['collaborator_role'];
           last_edited_by: string | null;
-          /** Optimistic concurrency token: the client sends what it read. */
           revision: number;
           created_at: string;
           updated_at: string;
@@ -55,10 +53,10 @@ export interface Database {
           id?: string;
           owner_id: string;
           title?: string;
-          /** Omit to let `documents_set_slug` derive it from the title. */
           slug?: string;
           content?: string;
           visibility?: Database['public']['Enums']['document_visibility'];
+          link_role?: Database['public']['Enums']['collaborator_role'];
           last_edited_by?: string | null;
           revision?: number;
           created_at?: string;
@@ -71,6 +69,7 @@ export interface Database {
           slug?: string;
           content?: string;
           visibility?: Database['public']['Enums']['document_visibility'];
+          link_role?: Database['public']['Enums']['collaborator_role'];
           last_edited_by?: string | null;
           revision?: number;
           created_at?: string;
@@ -191,7 +190,6 @@ export interface Database {
         Row: {
           id: number;
           document_id: string;
-          /** Revision that this snapshot replaced. */
           revision: number;
           content: string;
           title: string;
