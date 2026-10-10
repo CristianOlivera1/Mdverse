@@ -1,13 +1,13 @@
 import { describe, expect, it } from 'vitest';
 
 import {
+  buildStandaloneHtml,
   documentDescription,
-  jsonLdForDocument,
+  documentJsonLd,
   readingMinutes,
   seoTags,
 } from '../../src/lib/documents/publicPage';
 import { isPublicSlug, MAX_SLUG_LENGTH } from '../../src/lib/documents/ids';
-import { buildStandaloneHtml } from '../../src/lib/export';
 import { renderStaticMarkdown, safeHref } from '../../src/lib/markdown/renderStatic';
 
 describe('safeHref', () => {
@@ -141,14 +141,32 @@ describe('public page metadata', () => {
   });
 
   it('keeps the JSON-LD parseable and free of a literal `</script>`', () => {
-    const json = jsonLdForDocument({
+    const json = documentJsonLd({
       ...meta,
       title: 'Closing </script><script>alert(1)</script>',
     });
 
     expect(json).not.toContain('<');
     expect(json).not.toContain('>');
-    expect(JSON.parse(json)).toMatchObject({ '@type': 'Article', headline: expect.any(String) });
+
+    const graph = (JSON.parse(json) as { '@graph': { '@type': string; headline?: string }[] })[
+      '@graph'
+    ];
+    expect(graph.some((node) => node['@type'] === 'Article' && node.headline)).toBe(true);
+    expect(graph.some((node) => node['@type'] === 'BreadcrumbList')).toBe(true);
+    expect(graph.some((node) => node['@type'] === 'Organization')).toBe(true);
+  });
+
+  it('ships the social card, its dimensions and the publisher logo', () => {
+    const tags = seoTags(meta);
+    expect(tags).toContain('content="https://mdverse.example/metadata/og-image.webp"');
+    expect(tags).toContain('<meta property="og:image:width" content="1200">');
+    expect(tags).toContain('<meta property="og:image:height" content="630">');
+    expect(tags).toContain('<meta name="twitter:card" content="summary_large_image">');
+    expect(tags).toContain('<meta property="og:type" content="article">');
+
+    const json = documentJsonLd(meta);
+    expect(json).toContain('/metadata/android-chrome-512x512.png');
   });
 
   it('counts reading time by the minute, never zero', () => {

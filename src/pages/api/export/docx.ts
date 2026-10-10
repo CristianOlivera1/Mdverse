@@ -1,6 +1,7 @@
 import type { APIRoute } from 'astro';
 
 import { apiSession, jsonError, readJsonObject } from '@/lib/api/http';
+import { apiRateLimitedResponse, enforceApiRateLimit } from '@/lib/auth/rate-limit';
 import { buildDocxBlob, fetchDocxImages } from '@/lib/export/docxDocument';
 
 const CONTENT_TYPE = 'application/vnd.openxmlformats-officedocument.wordprocessingml.document';
@@ -9,6 +10,9 @@ const MAX_MARKDOWN_BYTES = 2 * 1024 * 1024;
 export const POST: APIRoute = async (context) => {
   const session = apiSession(context);
   if (!session) return jsonError(401, 'unauthenticated');
+
+  const limit = enforceApiRateLimit('docx', context.request, session.userId);
+  if (!limit.allowed) return apiRateLimitedResponse(limit);
 
   const body = await readJsonObject(context.request);
   if (!body) return jsonError(400, 'invalid_json');

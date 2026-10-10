@@ -48,6 +48,49 @@ describe('documentAccess', () => {
     expect(documentAccess({ ownerId: 'a', viewerId: 'b' })).toBe('reader');
     expect(documentAccess({ ownerId: 'a', viewerId: 'b', collaboratorRole: null })).toBe('reader');
   });
+
+  it('hands the link role to somebody the link reached, and only on a link reach', () => {
+    expect(
+      documentAccess({
+        ownerId: 'a',
+        viewerId: 'b',
+        collaboratorRole: null,
+        visibility: 'unlisted',
+        linkRole: 'editor',
+      }),
+    ).toBe('editor');
+    expect(
+      documentAccess({
+        ownerId: 'a',
+        viewerId: 'b',
+        collaboratorRole: null,
+        visibility: 'public',
+        linkRole: 'reader',
+      }),
+    ).toBe('reader');
+    // A private document keeps `link_role` stored but never hands it out.
+    expect(
+      documentAccess({
+        ownerId: 'a',
+        viewerId: 'b',
+        collaboratorRole: null,
+        visibility: 'private',
+        linkRole: 'editor',
+      }),
+    ).toBe('reader');
+  });
+
+  it('keeps an explicit collaborator row above the link role', () => {
+    expect(
+      documentAccess({
+        ownerId: 'a',
+        viewerId: 'b',
+        collaboratorRole: 'reader',
+        visibility: 'unlisted',
+        linkRole: 'editor',
+      }),
+    ).toBe('reader');
+  });
 });
 
 describe('access capabilities', () => {
@@ -123,6 +166,7 @@ describe('parseCloudDocuments', () => {
     revision: 3,
     role: 'owner',
     visibility: 'private',
+    linkRole: 'reader',
     updatedAt: '2026-10-06T12:00:00.000Z',
     slug: 'a',
   };
@@ -130,9 +174,11 @@ describe('parseCloudDocuments', () => {
   it('keeps well-formed entries', () => {
     expect(isCloudDocument(valid)).toBe(true);
     expect(parseCloudDocuments({ documents: [valid] })).toHaveLength(1);
-    // The visibility travels with the document: the editor needs it to know
-    // whether a link can reach it.
+    // The reach travels with the document: the editor needs it to know whether a
+    // link can reach it, and the role that link hands out.
     expect(isCloudDocument({ ...valid, visibility: undefined })).toBe(false);
+    expect(isCloudDocument({ ...valid, linkRole: undefined })).toBe(false);
+    expect(isCloudDocument({ ...valid, linkRole: 'admin' })).toBe(false);
   });
 
   it('drops malformed entries instead of passing them to the editor', () => {
@@ -144,6 +190,7 @@ describe('parseCloudDocuments', () => {
         { ...valid, content: 42 },
         { ...valid, role: 'nope' },
         { ...valid, visibility: 'secret' },
+        { ...valid, linkRole: 'secret' },
       ],
     };
     expect(parseCloudDocuments(payload)).toEqual([valid]);

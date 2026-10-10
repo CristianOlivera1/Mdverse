@@ -179,9 +179,6 @@ button {
   display: none;
 }
 
-/* Bare `hidden` must win everywhere: author `display` rules (e.g. .hb,
-   .mi) otherwise override the UA `[hidden]{display:none}`, leaving
-   supposedly-hidden controls visible and tappable. */
 [hidden] {
   display: none !important;
 }
@@ -563,16 +560,12 @@ button.mi.danger:hover svg {
   }
 }
 
-/* The index belongs to the preview pane: hide its mobile entry points while
-   the code pane is on screen so the FAB never covers the format toolbar. */
 @media (max-width: 1023.98px) {
   body[data-panel='code'] #toc-fab,
   body[data-panel='code'] #toc-float {
     display: none !important;
   }
 }
-
-/* ── MiniSelect: a styled select built from the shared .pop panel ───────────── */
 
 .msel {
   position: relative;
@@ -627,8 +620,6 @@ button.mi.danger:hover svg {
   visibility: visible;
 }
 
-/* The shared `.mi svg` rule paints every icon gray, which kept every check
-   visible. The check follows its own selected state instead, even on hover. */
 .msel-check svg,
 button.mi:hover > .msel-check svg {
   color: inherit;
@@ -654,8 +645,6 @@ button.mi:hover > .msel-check svg {
   }
 }
 
-/* ── Shared skeleton shimmer ──────────────────────────────────────────────── */
-
 .mskel {
   background: linear-gradient(90deg, #1a1a1a 25%, #242424 45%, #1a1a1a 65%);
   background-size: 200% 100%;
@@ -679,12 +668,8 @@ button.mi:hover > .msel-check svg {
   }
 }
 
-/* ── Confirmation dialog (built on first use by lib/app/confirmDialog.ts) ───── */
-
 .cf-dialog {
   width: min(420px, calc(100vw - 24px));
-  /* Tailwind's preflight zeroes every margin, including the one the browser uses
-     to centre a modal dialog. */
   margin: auto;
   padding: 0;
   color: #e5e5e5;
@@ -715,7 +700,6 @@ button.mi:hover > .msel-check svg {
   }
 }
 
-/* The destructive choice is the only filled button in the dialog. */
 .cf-dialog .cf-danger {
   color: #fecaca;
   background: #7f1d1d;
@@ -726,7 +710,6 @@ button.mi:hover > .msel-check svg {
   background: #b91c1c;
 }
 
-/* Disabled buttons (submit pending, role select busy) read as inert. */
 .hb:disabled,
 .msel-btn:disabled {
   cursor: default;

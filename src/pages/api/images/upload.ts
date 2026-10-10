@@ -1,6 +1,7 @@
 import type { APIRoute } from 'astro';
 
 import { apiSession, jsonError, jsonResponse, type ApiSession } from '@/lib/api/http';
+import { apiRateLimitedResponse, enforceApiRateLimit } from '@/lib/auth/rate-limit';
 import { isDocumentId } from '@/lib/documents/ids';
 import { MAX_IMAGE_BYTES } from '@/lib/editor/imageUpload';
 
@@ -20,6 +21,9 @@ export const POST: APIRoute = async (context) => {
     const session = apiSession(context);
     if (!session) return jsonError(401, 'unauthenticated');
     const { supabase, userId } = session;
+
+    const limit = enforceApiRateLimit('upload', context.request, userId);
+    if (!limit.allowed) return apiRateLimitedResponse(limit);
 
     let form: FormData;
     try {
