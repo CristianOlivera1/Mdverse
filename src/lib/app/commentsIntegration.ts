@@ -47,6 +47,12 @@ function mountAnchorOverlay(): void {
   applyMarkers();
 }
 
+const DESKTOP_QUERY = '(min-width: 768px)';
+
+function isDesktopPush(): boolean {
+  return window.matchMedia(DESKTOP_QUERY).matches;
+}
+
 function setToggleState(open: boolean): void {
   const btn = document.getElementById('comments-toggle-btn');
   if (btn) {
@@ -57,8 +63,13 @@ function setToggleState(open: boolean): void {
   const editorPanes = document.getElementById('editor-panes');
   if (editorPanes) {
     editorPanes.style.transition = 'margin-right 0.22s cubic-bezier(.4,0,.2,1)';
-    editorPanes.style.marginRight = open ? '360px' : '0';
+    editorPanes.style.marginRight = open && isDesktopPush() ? '360px' : '0';
   }
+}
+
+function closeComments(): void {
+  panel?.close();
+  setToggleState(false);
 }
 
 function updateBadge(threads: CommentThread[]): void {
@@ -83,7 +94,20 @@ export function initComments(): void {
       const linesBeforeAnchor = ta.value.slice(0, from).split('\n').length - 1;
       ta.scrollTop = Math.max(0, linesBeforeAnchor * lineHeight - ta.clientHeight / 2);
     },
+    onRequestClose() {
+      closeComments();
+    },
   });
+
+  const desktopMedia = window.matchMedia(DESKTOP_QUERY);
+  const handleViewportChange = (): void => {
+    if (panel?.isOpen) setToggleState(true);
+  };
+  if (typeof desktopMedia.addEventListener === 'function') {
+    desktopMedia.addEventListener('change', handleViewportChange);
+  } else {
+    desktopMedia.addListener(handleViewportChange);
+  }
 
   document.addEventListener('mdverse:active-document', (e) => {
     const detail = (
@@ -142,8 +166,7 @@ export function initComments(): void {
     if (!btn) return;
 
     if (panel?.isOpen) {
-      panel.close();
-      setToggleState(false);
+      closeComments();
     } else {
       if (!activeDocumentId) {
         toast('Open a document to view comments');
@@ -178,8 +201,7 @@ export function initComments(): void {
     }
 
     if (e.key === 'Escape' && panel?.isOpen) {
-      panel.close();
-      setToggleState(false);
+      closeComments();
     }
   });
 }

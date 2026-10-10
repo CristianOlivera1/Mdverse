@@ -17,6 +17,7 @@ import { confirmAction } from '../app/confirmDialog';
 
 interface PanelOptions {
   onHighlightAnchor?: (from: number, to: number) => void;
+  onRequestClose?: () => void;
 }
 
 export interface CommentViewer {
@@ -203,7 +204,10 @@ export function createCommentPanel(host: HTMLElement, opts: PanelOptions = {}): 
   closeBtn.className = `${CLS.iconBtn} ml-auto`;
   closeBtn.title = 'Close comments (Esc)';
   closeBtn.innerHTML = icon('<path d="M18 6 6 18M6 6l12 12"/>', 16);
-  closeBtn.addEventListener('click', () => api.close());
+  closeBtn.addEventListener('click', () => {
+    if (opts.onRequestClose) opts.onRequestClose();
+    else api.close();
+  });
 
   const marksBtn = document.createElement('button');
   marksBtn.type = 'button';
