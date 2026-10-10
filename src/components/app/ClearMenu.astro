@@ -12,7 +12,7 @@ const menuName = `clear${suffix}`;
 <div>
   <button
     type="button"
-    class="hb danger"
+    class="hb danger w-full justify-start!"
     data-menu={menuName}
     aria-haspopup="true"
     aria-expanded="false"
@@ -20,6 +20,7 @@ const menuName = `clear${suffix}`;
     aria-label="Clear"
   >
     <Icon name="lucide:eraser" />
+    <span class="lg:inline">Clear</span>
   </button>
   <div class="pop" data-pop={menuName} hidden>
     <button type="button" class="mi danger" data-command="clear-active">
