@@ -5,6 +5,7 @@ import 'katex/dist/katex.min.css';
 
 import { absoluteUrl, MANIFEST_PATH, OG_IMAGE, socialTags, THEME_COLOR } from '@/lib/seo/meta';
 import { getSiteUrl } from '@/lib/supabase/env';
+import { PUBLIC_TWITTER_SITE } from 'astro:env/client';
 
 interface Props {
   title?: string;
@@ -40,6 +41,7 @@ const social = description
       url: canonicalUrl,
       imageUrl: absoluteUrl(siteUrl, OG_IMAGE.path),
       type: ogType,
+      twitterSite: PUBLIC_TWITTER_SITE || undefined,
     })
   : '';
 ---

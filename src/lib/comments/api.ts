@@ -104,7 +104,8 @@ export async function deleteComment(
 }
 
 export function groupIntoThreads(comments: Comment[]): CommentThread[] {
-  const roots = comments.filter((c) => c.parentId === null && !c.resolved);
+
+  const roots = comments.filter((c) => c.parentId === null);
   const byParent = new Map<string, Comment[]>();
 
   for (const comment of comments) {

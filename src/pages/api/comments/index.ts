@@ -20,7 +20,6 @@ export const GET: APIRoute = async (context) => {
     .from('comments')
     .select('id, document_id, author_id, parent_id, body, anchor, resolved, created_at, updated_at')
     .eq('document_id', documentId)
-    .eq('resolved', false)
     .order('created_at', { ascending: true });
 
   if (error) {

@@ -3,7 +3,7 @@ import { escapeHtml } from '../markdown/toc';
 export const SITE_NAME = 'Mdverse';
 
 export const SITE_DESCRIPTION =
-  'Mdverse is a Markdown editor with live preview, diagrams, code highlighting, comments and real-time collaboration, plus a read-only address for everything you publish.';
+  'Mdverse is a Markdown editor with live preview, diagrams, code highlighting, comments and real-time collaboration.';
 
 export const OG_IMAGE = {
   path: '/metadata/og-image.webp',
@@ -36,6 +36,8 @@ export interface PageMeta {
   readonly imageUrl: string;
   readonly type?: 'website' | 'article';
   readonly locale?: string;
+  /** X/Twitter handle with leading @. Omitted from the tags when unset. */
+  readonly twitterSite?: string;
 }
 
 export function socialTags(meta: PageMeta): string {
@@ -52,6 +54,9 @@ export function socialTags(meta: PageMeta): string {
     `<meta property="og:image:height" content="${OG_IMAGE.height}">`,
     `<meta property="og:image:alt" content="${escapeHtml(OG_IMAGE.alt)}">`,
     `<meta name="twitter:card" content="summary_large_image">`,
+    ...(meta.twitterSite
+      ? [`<meta name="twitter:site" content="${escapeHtml(meta.twitterSite)}">`]
+      : []),
     `<meta name="twitter:title" content="${escapeHtml(meta.title)}">`,
     `<meta name="twitter:description" content="${escapeHtml(meta.description)}">`,
     `<meta name="twitter:image" content="${escapeHtml(meta.imageUrl)}">`,

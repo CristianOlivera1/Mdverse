@@ -49,6 +49,9 @@ const CLS = {
     'rounded-full bg-[#1f1f1f] px-1.5 py-0.5 text-[10px] font-semibold leading-none text-neutral-400',
   scroll: 'flex-1 overflow-y-auto px-3 py-3',
   thread: 'mb-3 rounded-xl border border-[#1f1f1f] bg-[#101010]',
+  threadResolved: 'border-l-2 border-l-emerald-700 opacity-70',
+  resolvedPill:
+    'mb-2 inline-flex items-center gap-1.5 rounded-full border border-emerald-900 bg-emerald-950/40 px-2 py-0.5 text-[11px] font-medium text-emerald-300',
   threadBody: 'px-3 py-2.5',
   threadHead: 'flex items-start gap-2.5',
   avatarThread:
@@ -458,7 +461,7 @@ export function createCommentPanel(host: HTMLElement, opts: PanelOptions = {}): 
       });
       actions.append(jump);
 
-      if (canComment && !comment.pending) {
+      if (canComment && !comment.pending && !thread.root.resolved) {
         const resolveBtn = document.createElement('button');
         resolveBtn.type = 'button';
         resolveBtn.className = CLS.iconBtn;
@@ -678,14 +681,45 @@ export function createCommentPanel(host: HTMLElement, opts: PanelOptions = {}): 
     return row;
   }
 
+  /** Roots the visitor expanded after resolving; a refresh drops them with the server truth. */
+  const expandedResolved = new Set<string>();
+
+  function renderResolvedPill(thread: CommentThread, expanded: boolean): HTMLElement {
+    const pill = document.createElement('button');
+    pill.type = 'button';
+    pill.className = CLS.resolvedPill;
+    pill.title = expanded ? 'Collapse resolved thread' : 'Show resolved thread';
+    pill.setAttribute('aria-expanded', String(expanded));
+    pill.innerHTML =
+      `${icon('<polyline points="20 6 9 17 4 12"/>', 12)}<span>Resolved</span>`;
+    pill.addEventListener('click', () => {
+      if (expanded) expandedResolved.delete(thread.root.id);
+      else expandedResolved.add(thread.root.id);
+      refreshThreadNode(thread);
+    });
+    return pill;
+  }
+
   function renderThread(thread: CommentThread): HTMLElement {
     const wrap = document.createElement('div');
     wrap.className = CLS.thread;
     wrap.dataset.rootId = thread.root.id;
     wrap.dataset.signature = signatureOf(thread);
 
+    const resolved = thread.root.resolved === true;
+    const expanded = !resolved || expandedResolved.has(thread.root.id);
+    if (resolved) wrap.className += ` ${CLS.threadResolved}`;
+
     const body = document.createElement('div');
     body.className = CLS.threadBody;
+
+    if (resolved) {
+      body.append(renderResolvedPill(thread, expanded));
+      if (!expanded) {
+        wrap.append(body);
+        return wrap;
+      }
+    }
 
     if (thread.root.anchor?.quote) {
       const quote = document.createElement('button');
@@ -710,7 +744,7 @@ export function createCommentPanel(host: HTMLElement, opts: PanelOptions = {}): 
     }
     body.append(replies);
 
-    if (canComment && !thread.root.pending && !thread.root.failed) {
+    if (canComment && !thread.root.pending && !thread.root.failed && !thread.root.resolved) {
       const replyRow = renderReplyInput(thread);
       replyRow.className = CLS.replyRow;
       body.append(replyRow);
@@ -751,6 +785,9 @@ export function createCommentPanel(host: HTMLElement, opts: PanelOptions = {}): 
   function renderAll(): void {
     nodes.clear();
     scroll.replaceChildren();
+    for (const id of [...expandedResolved]) {
+      if (!threads.some((thread) => thread.root.id === id)) expandedResolved.delete(id);
+    }
 
     if (!signedIn) {
       scroll.append(anonymousState());
@@ -781,8 +818,9 @@ export function createCommentPanel(host: HTMLElement, opts: PanelOptions = {}): 
   }
 
   function updateCount(): void {
-    count.textContent = String(threads.length);
-    count.hidden = threads.length === 0;
+    const open = threads.filter((thread) => !thread.root.resolved).length;
+    count.textContent = String(open);
+    count.hidden = open === 0;
     document.dispatchEvent(
       new CustomEvent('mdverse:comments-changed', {
         detail: { documentId, threads, markersVisible },
@@ -790,7 +828,6 @@ export function createCommentPanel(host: HTMLElement, opts: PanelOptions = {}): 
     );
   }
 
-  /** Adds or replaces a root thread locally, then renders just that node. */
   function upsertRoot(comment: Comment): void {
     const existing = threads.findIndex((thread) => thread.root.id === comment.id);
     if (existing >= 0) {
@@ -982,17 +1019,16 @@ export function createCommentPanel(host: HTMLElement, opts: PanelOptions = {}): 
   }
 
   async function resolveThread(rootId: string): Promise<void> {
-    const previous = threads;
-    const node = nodes.get(rootId);
-    threads = threads.filter((thread) => thread.root.id !== rootId);
-    node?.remove();
-    nodes.delete(rootId);
+    const thread = threads.find((candidate) => candidate.root.id === rootId);
+    if (!thread || thread.root.resolved) return;
+    thread.root = { ...thread.root, resolved: true };
+    refreshThreadNode(thread);
     updateCount();
 
     const result = await resolveComment(rootId);
     if (!result.ok) {
-      threads = previous;
-      renderAll();
+      thread.root = { ...thread.root, resolved: false };
+      refreshThreadNode(thread);
       updateCount();
       flash(result.error, 'error');
     }

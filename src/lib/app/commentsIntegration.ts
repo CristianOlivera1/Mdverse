@@ -64,7 +64,7 @@ function setToggleState(open: boolean): void {
 function updateBadge(threads: CommentThread[]): void {
   const badge = document.getElementById('comments-badge');
   if (!badge) return;
-  const count = threads.length;
+  const count = threads.filter((thread) => !thread.root.resolved).length;
   badge.textContent = count > 0 ? String(count) : '';
   badge.classList.toggle('hidden', count === 0);
 }

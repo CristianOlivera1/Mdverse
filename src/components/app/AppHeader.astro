@@ -51,12 +51,12 @@ import RequestAccessPopup from './RequestAccessPopup.astro';
     <div class="flex items-center gap-1 max-md:hidden">
       <button
         type="button"
-        class="hb"
+        class="inline-flex items-center justify-center gap-1.5 py-1.5 rounded-md bg-white px-2 text-xs font-semibold text-black transition-colors hover:bg-neutral-200"
         data-command="popout"
         title="Open the preview in another tab"
         aria-label="Open preview in another tab"
       >
-        <Icon name="lucide:external-link" />
+        <Icon name="lucide:external-link" class="w-3.5 h-3.5 shrink-0" />
         <span class="hidden lg:inline">Preview</span>
       </button>
       <ExportMenu />

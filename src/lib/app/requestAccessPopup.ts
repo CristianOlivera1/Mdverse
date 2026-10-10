@@ -8,16 +8,20 @@ export function initRequestAccessPopup(): void {
   const spinner = document.getElementById('rap-spinner') as HTMLElement | null;
   const noticeEl = document.getElementById('rap-notice') as HTMLElement | null;
   const cancelBtn = document.getElementById('rap-cancel') as HTMLButtonElement | null;
+  const signinBlock = document.getElementById('rap-signin') as HTMLElement | null;
+  const signinLink = document.getElementById('rap-signin-link') as HTMLAnchorElement | null;
 
   if (!badge || !popup || !form) return;
 
   let activeDocId: string | null = null;
+  let signedIn = document.body.dataset.signedIn !== 'false';
   let sent = false;
   let closeTimer: number | undefined;
 
   document.addEventListener('mdverse:active-document', (e) => {
-    const detail = (e as CustomEvent<{ id: string; role: string }>).detail;
+    const detail = (e as CustomEvent<{ id: string; role: string; signedIn?: boolean }>).detail;
     activeDocId = detail.id;
+    if (typeof detail.signedIn === 'boolean') signedIn = detail.signedIn;
     if (!popup.hidden) closePopup();
   });
 
@@ -44,7 +48,8 @@ export function initRequestAccessPopup(): void {
     popup!.hidden = false;
     badge!.setAttribute('aria-expanded', 'true');
     positionPopup();
-    messageInput?.focus();
+    syncAuthState();
+    if (signedIn) messageInput?.focus();
   }
 
   function closePopup(): void {
@@ -76,6 +81,19 @@ export function initRequestAccessPopup(): void {
   });
 
   window.addEventListener('resize', () => { if (!popup.hidden) positionPopup(); }, { passive: true });
+
+  // Signed-out visitors get a sign-in CTA instead of a form that could only
+  // fail: the request endpoint requires a session (same pattern as accessGate).
+  function signinNext(): string {
+    const doc = activeDocId ? `/?doc=${encodeURIComponent(activeDocId)}` : '/';
+    return `/login?next=${encodeURIComponent(doc)}`;
+  }
+
+  function syncAuthState(): void {
+    if (signinBlock) signinBlock.hidden = signedIn;
+    if (form) form.hidden = !signedIn;
+    if (signinLink && activeDocId) signinLink.href = signinNext();
+  }
 
   function resetForm(): void {
     sent = false;
@@ -111,6 +129,10 @@ export function initRequestAccessPopup(): void {
 
   form.addEventListener('submit', async (e) => {
     e.preventDefault();
+    if (!signedIn) {
+      window.location.href = signinNext();
+      return;
+    }
     if (!activeDocId) {
       showNotice('error', 'Could not identify the document. Refresh and try again.');
       return;

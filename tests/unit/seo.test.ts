@@ -63,6 +63,17 @@ describe('socialTags', () => {
     expect(tags).toContain('<meta property="og:type" content="website">');
     expect(tags).toContain('<meta property="og:locale" content="en_US">');
   });
+
+  it('emits twitter:site only when a handle is configured', () => {
+    expect(socialTags(meta)).not.toContain('twitter:site');
+    const tags = socialTags({ ...meta, twitterSite: '@mdverse' });
+    expect(tags).toContain('<meta name="twitter:site" content="@mdverse">');
+  });
+
+  it('keeps the site description within the social truncation budget', async () => {
+    const { SITE_DESCRIPTION } = await import('../../src/lib/seo/meta');
+    expect(SITE_DESCRIPTION.length).toBeLessThanOrEqual(160);
+  });
 });
 
 describe('pageSeoTags', () => {
