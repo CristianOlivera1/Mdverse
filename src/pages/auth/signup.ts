@@ -66,37 +66,26 @@ export const POST: APIRoute = async (context) => {
   const admin = createAdminSupabaseClient();
   if (!admin) return context.redirect(loginFeedbackUrl({ error: 'not_configured' }));
 
-  const { error: createError } = await admin.auth.admin.createUser({
-    email,
-    password: String(password),
-    email_confirm: false,
-  });
-
-  if (createError) {
-    if (isAlreadyRegistered(createError)) {
-      return success();
-    }
-    if (isAuthRateLimited(createError)) {
-      logRateLimited('signup', attempt.key, 60);
-      return rateLimitedRedirect(
-        authFeedbackUrl({ to: SIGNUP_PATH, error: 'rate_limited', next, email }),
-        60,
-      );
-    }
-    console.warn('[auth] sign-up failed:', createError.message);
-    return fail('signup_failed');
-  }
-
   try {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const { data: linkData, error: linkError } = await (admin.auth.admin.generateLink as any)({
-      type: 'signup',
+      type: 'magiclink',
       email,
+      password: String(password),
       options: { redirectTo: authCallbackUrl(next) },
     });
 
     if (linkError) {
-      console.warn('[auth] generateLink (signup) failed:', linkError.message);
+      if (isAlreadyRegistered(linkError)) return success();
+      if (isAuthRateLimited(linkError)) {
+        logRateLimited('signup', attempt.key, 60);
+        return rateLimitedRedirect(
+          authFeedbackUrl({ to: SIGNUP_PATH, error: 'rate_limited', next, email }),
+          60,
+        );
+      }
+      console.warn('[auth] sign-up failed:', linkError.message);
+      return fail('signup_failed');
     } else {
       const confirmUrl = (linkData as { properties: { action_link: string } }).properties
         .action_link;
