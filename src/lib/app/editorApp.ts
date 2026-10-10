@@ -813,6 +813,23 @@ export function initEditorApp(): void {
     }
   }
 
+  const DOC_SYNC_CHANNEL = 'mdverse-doc';
+
+  function broadcastDocSync(doc: OpenDocument): void {
+    if (!cloud) return;
+    try {
+      if (!('BroadcastChannel' in window)) return;
+      const channel = new BroadcastChannel(DOC_SYNC_CHANNEL);
+      try {
+        channel.postMessage({ id: doc.id, content: doc.content, title: doc.title });
+      } finally {
+        channel.close();
+      }
+    } catch {
+      // No live preview sync: the tab still loads through its API fallback.
+    }
+  }
+
   function scheduleWork(pane: Pane): void {
     window.clearTimeout(pane.timer);
     pane.timer = window.setTimeout(
@@ -820,6 +837,7 @@ export function initEditorApp(): void {
         const doc = documentById(pane.docId);
         if (!doc) return;
         doc.content = pane.textarea.value;
+        broadcastDocSync(doc);
         persist();
         queueCloudSave(doc);
         renderPane(pane);
@@ -1315,6 +1333,242 @@ export function initEditorApp(): void {
     const title = tab?.querySelector<HTMLElement>('.tab-title');
     const doc = documentById(activeId);
     if (title && doc) beginRename(doc, title);
+  }
+
+  // ─── Tab drag reorder (pointer-based: mouse + touch + pen uniformly) ─────
+  // Pointer Events cover every input type; HTML5 DnD is deliberately not used
+  // because it ignores touch. The `documents` array is the source of truth and
+  // stays untouched until drop: live moves only shuffle DOM nodes, so Escape
+  // or `pointercancel` aborts by rebuilding the strip via renderTabs().
+  // Persistence reuses persist(): in local mode saveOpenDocuments writes the
+  // FULL array (order included) to localStorage, so reload restores the new
+  // order. In cloud mode persist() deliberately skips local caching
+  // (content-leak posture), so a reorder there is session-only by design —
+  // no new storage keys are introduced for it.
+  const TAB_DRAG_SLOP_PX = 4;
+  const TOUCH_ARM_MS = 300;
+  const STRIP_EDGE_PX = 24;
+  const STRIP_EDGE_SCROLL_PX = 12;
+
+  interface PendingTabDrag {
+    readonly tab: HTMLElement;
+    readonly pointerId: number;
+    readonly startX: number;
+    readonly startY: number;
+    armed: boolean;
+    timer: number | undefined;
+  }
+
+  interface ActiveTabDrag {
+    readonly tab: HTMLElement;
+    readonly pointerId: number;
+  }
+
+  let pendingDrag: PendingTabDrag | null = null;
+  let activeDrag: ActiveTabDrag | null = null;
+  // Set on drop after a real drag: the browser still fires the click that
+  // follows pointerup, which must not activate/close a tab.
+  let suppressTabClick = false;
+  // Thin insertion bar, created once and reused across drags (inline styles
+  // only, so no new global CSS is needed; the strip is a flex row).
+  let dragBar: HTMLElement | null = null;
+
+  function tabDragBar(): HTMLElement {
+    if (!dragBar) {
+      dragBar = document.createElement('div');
+      dragBar.setAttribute('aria-hidden', 'true');
+      dragBar.style.cssText =
+        'width:2px;flex:none;align-self:stretch;margin:4px 0;border-radius:2px;background:#3b82f6;';
+    }
+    return dragBar;
+  }
+
+  function clearPendingDrag(): void {
+    if (pendingDrag?.timer !== undefined) window.clearTimeout(pendingDrag.timer);
+    pendingDrag = null;
+  }
+
+  function cleanupTabDragVisuals(tab: HTMLElement): void {
+    tab.style.opacity = '';
+    tab.style.boxShadow = '';
+    tab.style.touchAction = '';
+    tab.removeAttribute('aria-grabbed');
+  }
+
+  function finishTabDrag(): void {
+    tabsHostEl.removeAttribute('aria-dropeffect');
+    dragBar?.remove();
+    document.body.classList.remove('select-none');
+  }
+
+  function abortTabDrag(): void {
+    if (!activeDrag) return;
+    const { tab } = activeDrag;
+    activeDrag = null;
+    clearPendingDrag();
+    cleanupTabDragVisuals(tab);
+    finishTabDrag();
+    // The array was never mutated: rebuild the strip from it.
+    renderTabs();
+  }
+
+  function commitTabDrag(): void {
+    if (!activeDrag) return;
+    const { tab } = activeDrag;
+    activeDrag = null;
+    clearPendingDrag();
+    cleanupTabDragVisuals(tab);
+    dragBar?.remove();
+    // Read the DOM order back into the array BEFORE renderTabs/persist.
+    const byId = new Map(documents.map((doc) => [doc.id, doc]));
+    const reordered = [...tabsHostEl.querySelectorAll<HTMLElement>('[data-tab-id]')]
+      .map((element) => element.dataset.tabId ?? '')
+      .filter((id) => byId.has(id))
+      .map((id) => byId.get(id) as OpenDocument);
+    // Defensive: never lose a document if the DOM ever disagrees.
+    for (const doc of documents) {
+      if (!reordered.includes(doc)) reordered.push(doc);
+    }
+    documents = reordered;
+    finishTabDrag();
+    renderTabs();
+    // Local mode persists the full order (survives reload); cloud mode stays
+    // session-only by design (see note above).
+    persist();
+    suppressTabClick = true;
+  }
+
+  function startTabDrag(pending: PendingTabDrag): void {
+    pendingDrag = null;
+    activeDrag = { tab: pending.tab, pointerId: pending.pointerId };
+    try {
+      pending.tab.setPointerCapture(pending.pointerId);
+    } catch {
+      // No capture (e.g. the pointer is already gone): moves still bubble up.
+    }
+    pending.tab.style.opacity = '0.6';
+    pending.tab.style.boxShadow = '0 8px 24px rgba(0,0,0,0.45)';
+    pending.tab.setAttribute('aria-grabbed', 'true');
+    tabsHostEl.setAttribute('aria-dropeffect', 'move');
+    document.body.classList.add('select-none');
+    tabsHostEl.insertBefore(tabDragBar(), pending.tab);
+  }
+
+  function moveTabDrag(clientX: number): void {
+    if (!activeDrag) return;
+    const { tab } = activeDrag;
+    // Midpoint insertion: the first sibling whose center is past the pointer
+    // is where the dragged tab lands.
+    let before: HTMLElement | null = null;
+    for (const sibling of tabsHostEl.querySelectorAll<HTMLElement>('[data-tab-id]')) {
+      if (sibling === tab) continue;
+      const rect = sibling.getBoundingClientRect();
+      if (clientX < rect.left + rect.width / 2) {
+        before = sibling;
+        break;
+      }
+    }
+    if (before) tabsHostEl.insertBefore(tab, before);
+    else tabsHostEl.append(tab);
+    // Insertion indicator travels on the leading edge of the dragged tab.
+    tabsHostEl.insertBefore(tabDragBar(), tab);
+    // Nudge the strip when dragging past its visible edges.
+    const hostRect = tabsHostEl.getBoundingClientRect();
+    if (clientX < hostRect.left + STRIP_EDGE_PX) tabsHostEl.scrollLeft -= STRIP_EDGE_SCROLL_PX;
+    else if (clientX > hostRect.right - STRIP_EDGE_PX)
+      tabsHostEl.scrollLeft += STRIP_EDGE_SCROLL_PX;
+  }
+
+  function initTabDragReorder(): void {
+    tabsHostEl.addEventListener('pointerdown', (event) => {
+      // A fresh press belongs to a new gesture: a stale suppression flag from
+      // a drag whose click never arrived must not eat this gesture's click.
+      suppressTabClick = false;
+      if (pendingDrag || activeDrag || renaming) return;
+      if (event.pointerType === 'mouse' && event.button !== 0) return;
+      const origin = event.target as HTMLElement | null;
+      // The close affordance never starts a drag.
+      if (origin?.closest?.('[data-close-tab]')) return;
+      const tab = origin?.closest?.('[data-tab-id]');
+      if (!(tab instanceof HTMLElement) || !tab.dataset.tabId) return;
+      if (tab.parentElement !== tabsHostEl) return;
+
+      const pending: PendingTabDrag = {
+        tab,
+        pointerId: event.pointerId,
+        startX: event.clientX,
+        startY: event.clientY,
+        // Mouse arms immediately; touch/pen need the hold below so the strip
+        // keeps scrolling and plain taps keep activating.
+        armed: event.pointerType === 'mouse',
+        timer: undefined,
+      };
+      if (!pending.armed) {
+        pending.timer = window.setTimeout(() => {
+          if (pendingDrag !== pending) return;
+          pending.armed = true;
+          // Claimed before any scroll started, so later moves drive the drag.
+          tab.style.touchAction = 'none';
+        }, TOUCH_ARM_MS);
+      }
+      pendingDrag = pending;
+    });
+
+    tabsHostEl.addEventListener('pointermove', (event) => {
+      if (activeDrag) {
+        if (event.pointerId !== activeDrag.pointerId) return;
+        moveTabDrag(event.clientX);
+        return;
+      }
+      if (!pendingDrag || event.pointerId !== pendingDrag.pointerId) return;
+      const distance = Math.hypot(
+        event.clientX - pendingDrag.startX,
+        event.clientY - pendingDrag.startY,
+      );
+      if (distance <= TAB_DRAG_SLOP_PX) return;
+      if (!pendingDrag.armed) {
+        // Moved before the hold elapsed: it is a scroll, not a drag.
+        const pending = pendingDrag;
+        if (pending.timer !== undefined) window.clearTimeout(pending.timer);
+        if (pending.tab.style.touchAction) pending.tab.style.touchAction = '';
+        pendingDrag = null;
+        return;
+      }
+      const pending = pendingDrag;
+      startTabDrag(pending);
+      moveTabDrag(event.clientX);
+    });
+
+    const endPointer = (event: PointerEvent): void => {
+      if (activeDrag && event.pointerId === activeDrag.pointerId) {
+        if (event.type === 'pointercancel') abortTabDrag();
+        else commitTabDrag();
+        return;
+      }
+      if (pendingDrag && event.pointerId === pendingDrag.pointerId) clearPendingDrag();
+    };
+    tabsHostEl.addEventListener('pointerup', endPointer);
+    tabsHostEl.addEventListener('pointercancel', endPointer);
+
+    document.addEventListener('keydown', (event) => {
+      if (event.key === 'Escape' && activeDrag) {
+        event.preventDefault();
+        abortTabDrag();
+      }
+    });
+
+    // Capture phase runs before the document-level click handler below, so the
+    // click that follows a real drop never activates or closes a tab.
+    document.addEventListener(
+      'click',
+      (event) => {
+        if (!suppressTabClick) return;
+        suppressTabClick = false;
+        event.preventDefault();
+        event.stopPropagation();
+      },
+      true,
+    );
   }
 
   function activate(id: string): void {
@@ -2205,6 +2459,7 @@ export function initEditorApp(): void {
   setZoom(readNumberPref(PREF_KEYS.zoom, 1));
   toggleSyncUi();
   setPanel(document.body.dataset.panel === 'preview' ? 'preview' : 'code');
+  initTabDragReorder();
 
   tocNavs.forEach((nav) =>
     nav.addEventListener('click', (event) => {

@@ -18,9 +18,8 @@ import {
 import { safeRedirectPath } from '@/lib/auth/redirect';
 import { DEFAULT_AUTHENTICATED_PATH } from '@/lib/auth/routes';
 import { authCallbackUrl, getSiteUrl } from '@/lib/supabase/env';
-import { isAlreadyRegistered } from '@/lib/supabase/errors';
+import { isAlreadyRegistered, isAuthRateLimited } from '@/lib/supabase/errors';
 import { createAdminSupabaseClient } from '@/lib/supabase/admin';
-import { createServerSupabaseClient } from '@/lib/supabase/server';
 
 const SIGNUP_PATH = '/signup';
 
@@ -42,7 +41,10 @@ export const POST: APIRoute = async (context) => {
   if (!turnstile.ok) {
     const attempt = authAttemptFor('signup', context.request, email || null);
     logRateLimited('signup', attempt.key, 0);
-    return rateLimitedRedirect(authFeedbackUrl({ to: SIGNUP_PATH, error: 'rate_limited', next, email }), 60);
+    return rateLimitedRedirect(
+      authFeedbackUrl({ to: SIGNUP_PATH, error: 'rate_limited', next, email }),
+      60,
+    );
   }
 
   const attempt = authAttemptFor('signup', context.request, email || null);
@@ -61,52 +63,55 @@ export const POST: APIRoute = async (context) => {
   const check = checkPassword(password, form.get('confirm_password'));
   if (!check.ok && check.problem) return fail(passwordProblemErrorCode(check.problem));
 
-  const supabase = createServerSupabaseClient(context);
-  if (!supabase) return context.redirect(loginFeedbackUrl({ error: 'not_configured' }));
+  const admin = createAdminSupabaseClient();
+  if (!admin) return context.redirect(loginFeedbackUrl({ error: 'not_configured' }));
 
-  const { data, error } = await supabase.auth.signUp({
+  const { error: createError } = await admin.auth.admin.createUser({
     email,
     password: String(password),
-    options: { emailRedirectTo: authCallbackUrl(next) },
+    email_confirm: false,
   });
 
-  if (error) {
-    if (isAlreadyRegistered(error)) {
+  if (createError) {
+    if (isAlreadyRegistered(createError)) {
       return success();
     }
-    console.warn('[auth] sign-up failed:', error.message);
+    if (isAuthRateLimited(createError)) {
+      logRateLimited('signup', attempt.key, 60);
+      return rateLimitedRedirect(
+        authFeedbackUrl({ to: SIGNUP_PATH, error: 'rate_limited', next, email }),
+        60,
+      );
+    }
+    console.warn('[auth] sign-up failed:', createError.message);
     return fail('signup_failed');
   }
 
-  if (data.session) return context.redirect(next);
+  try {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const { data: linkData, error: linkError } = await (admin.auth.admin.generateLink as any)({
+      type: 'signup',
+      email,
+      options: { redirectTo: authCallbackUrl(next) },
+    });
 
-  const admin = createAdminSupabaseClient();
-  if (admin) {
-    try {
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const { data: linkData, error: linkError } = await (admin.auth.admin.generateLink as any)({
-        type: 'signup',
-        email,
-        options: { redirectTo: authCallbackUrl(next) },
-      });
-
-      if (linkError) {
-        console.warn('[auth] generateLink (signup) failed:', linkError.message);
-      } else {
-        const confirmUrl = (linkData as { properties: { action_link: string } }).properties.action_link;
-        keepAlive(
-          context,
-          import('@/lib/email/sender')
-            .then((m) => m.sendConfirmEmail({ to: email, confirmUrl, siteUrl: getSiteUrl() }))
-            .then((sent) => {
-              if (!sent.ok) console.warn('[email] confirm email failed:', sent.error);
-            })
-            .catch((err) => console.warn('[email] confirm email could not be sent:', err)),
-        );
-      }
-    } catch (err) {
-      console.warn('[auth] generateLink (signup) threw:', err);
+    if (linkError) {
+      console.warn('[auth] generateLink (signup) failed:', linkError.message);
+    } else {
+      const confirmUrl = (linkData as { properties: { action_link: string } }).properties
+        .action_link;
+      keepAlive(
+        context,
+        import('@/lib/email/sender')
+          .then((m) => m.sendConfirmEmail({ to: email, confirmUrl, siteUrl: getSiteUrl() }))
+          .then((sent) => {
+            if (!sent.ok) console.warn('[email] confirm email failed:', sent.error);
+          })
+          .catch((err) => console.warn('[email] confirm email could not be sent:', err)),
+      );
     }
+  } catch (err) {
+    console.warn('[auth] generateLink (signup) threw:', err);
   }
 
   return success();

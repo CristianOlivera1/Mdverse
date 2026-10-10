@@ -53,7 +53,11 @@ import {
   shouldEnforceTurnstile,
   TURNSTILE_FIELD,
 } from '../../src/lib/auth/rate-limit';
-import { isAlreadyRegistered, isEmailNotConfirmed } from '../../src/lib/supabase/errors';
+import {
+  isAlreadyRegistered,
+  isAuthRateLimited,
+  isEmailNotConfirmed,
+} from '../../src/lib/supabase/errors';
 
 describe('safeRedirectPath', () => {
   it('keeps same-origin paths, including their query string', () => {
@@ -497,6 +501,19 @@ describe('supabase auth error classification', () => {
     expect(isAlreadyRegistered(error('weak_password', 'Password is too weak'))).toBe(false);
     expect(isAlreadyRegistered(undefined)).toBe(false);
   });
+
+  it('recognizes a rate-limited auth response by status, code, or message', () => {
+    expect(isAuthRateLimited({ ...error('other', 'Sneaky'), status: 429 })).toBe(true);
+    expect(isAuthRateLimited(error('over_request_rate_limit', 'Too many requests'))).toBe(true);
+    expect(isAuthRateLimited(error('other', 'Request rate limit reached'))).toBe(true);
+    expect(
+      isAuthRateLimited({
+        ...error('user_already_exists', 'User already registered'),
+        status: 422,
+      }),
+    ).toBe(false);
+    expect(isAuthRateLimited(null)).toBe(false);
+  });
 });
 
 describe('normalizeSupabaseConfig', () => {
@@ -582,9 +599,7 @@ describe('auth rate limiting (per-isolate buckets)', () => {
       expect(config.capacity).toBeGreaterThan(0);
       expect(config.windowSeconds).toBeGreaterThan(0);
     }
-    expect(AUTH_RATE_LIMITS.signin.capacity).toBeLessThanOrEqual(
-      AUTH_RATE_LIMITS.oauth.capacity,
-    );
+    expect(AUTH_RATE_LIMITS.signin.capacity).toBeLessThanOrEqual(AUTH_RATE_LIMITS.oauth.capacity);
   });
 
   it('allows up to capacity, then blocks with a retry hint', () => {

@@ -160,6 +160,17 @@ export function initPreviewApp(): void {
     target?.scrollIntoView({ block: 'start' });
   }
 
+  async function applyDoc(doc: OpenDocument): Promise<void> {
+    const applied = await renderMarkdown(content, doc.content, { renderDiagram });
+    if (!applied) return;
+    shareId = doc.id;
+    if (shareButton) shareButton.hidden = !isDocumentId(doc.id);
+    buildToc();
+    honorInitialHash();
+    document.title = `${doc.title} · Mdverse`;
+    if (status) status.textContent = `Synced · ${new Date().toLocaleTimeString('en-US')}`;
+  }
+
   async function render(): Promise<void> {
     const result = await loadDocument();
 
@@ -185,15 +196,7 @@ export function initPreviewApp(): void {
       return;
     }
 
-    const doc = result.doc;
-    const applied = await renderMarkdown(content, doc.content, { renderDiagram });
-    if (!applied) return;
-    shareId = doc.id;
-    if (shareButton) shareButton.hidden = !isDocumentId(doc.id);
-    buildToc();
-    honorInitialHash();
-    document.title = `${doc.title} · Mdverse`;
-    if (status) status.textContent = `Synced · ${new Date().toLocaleTimeString('en-US')}`;
+    await applyDoc(result.doc);
   }
 
   function scheduleRender(): void {
@@ -269,6 +272,28 @@ export function initPreviewApp(): void {
     }
     if (event.key === PREF_KEYS.openDocuments || event.key === null) scheduleRender();
   });
+
+  try {
+    if ('BroadcastChannel' in window) {
+      const channel = new BroadcastChannel('mdverse-doc');
+      channel.onmessage = (event: MessageEvent) => {
+        const message = event.data as Partial<OpenDocument> | null | undefined;
+        if (
+          !message ||
+          typeof message.id !== 'string' ||
+          typeof message.content !== 'string' ||
+          typeof message.title !== 'string'
+        ) {
+          return;
+        }
+        const currentId = requestedId ?? shareId;
+        if (!currentId || message.id !== currentId) return;
+        void applyDoc({ id: message.id, title: message.title, content: message.content });
+      };
+    }
+  } catch {
+    // BroadcastChannel unavailable: the preview still loads via API + `storage`.
+  }
 
   void render();
 }
