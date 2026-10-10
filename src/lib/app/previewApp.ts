@@ -31,17 +31,8 @@ export function initPreviewApp(): void {
   let frame = 0;
   let renderTimer: number | undefined;
   let hashConsumed = false;
-  // The cloud id of what is on screen, or null for a draft that only exists in
-  // this browser. Only a cloud document has a preview link worth sharing.
   let shareId: string | null = null;
 
-  /**
-   * Copies the deep link to the document on screen (`/preview?doc=<id>`, keeping
-   * the current heading). It opens for anyone the document already reaches - the
-   * people you invited. For anyone else the owner hands out a link from the
-   * Collaborate dialog, because knowing a document id is not the same as having
-   * access: row level security decides, not the address.
-   */
   function copyPreviewLink(): void {
     const id = shareId;
     if (!id || !isDocumentId(id)) return;
@@ -70,11 +61,6 @@ export function initPreviewApp(): void {
   const readDocuments = (): OpenDocument[] =>
     readJsonPref<OpenDocument[]>(PREF_KEYS.openDocuments, []);
 
-  /**
-   * A `?doc=<id>` that will not open is one of three things and they look alike:
-   * signed out, hidden by RLS, or gone. The distinction is kept, because the
-   * screen that follows is different for the first one.
-   */
   type LoadResult =
     | { kind: 'loaded'; doc: OpenDocument }
     | { kind: 'signed-out'; documentId: string }
@@ -155,8 +141,6 @@ export function initPreviewApp(): void {
     }
   }
 
-  // Deep links (`/preview?doc=<id>#<heading>`) land on the heading once, right
-  // after the first render that produces it. Later renders never yank the view.
   function honorInitialHash(): void {
     if (hashConsumed) return;
     hashConsumed = true;
@@ -272,8 +256,6 @@ export function initPreviewApp(): void {
 
   document.getElementById('toc-close')?.addEventListener('click', () => setToc('closed'));
   document.getElementById('toc-open')?.addEventListener('click', () => setToc('open'));
-  // The sidebar logo reloads this exact URL (query + hash included), so a deep
-  // link like `?doc=<id>#<heading>` refreshes back onto the same section.
   document
     .querySelector('[data-logo-refresh]')
     ?.addEventListener('click', () => window.location.reload());

@@ -3,13 +3,45 @@ import '@/styles/global.css';
 import '@/styles/markdown.css';
 import 'katex/dist/katex.min.css';
 
+import { absoluteUrl, MANIFEST_PATH, OG_IMAGE, socialTags, THEME_COLOR } from '@/lib/seo/meta';
+import { getSiteUrl } from '@/lib/supabase/env';
+
 interface Props {
   title?: string;
   bodyClass?: string;
   dataPanel?: 'code' | 'preview';
+  dataSignedIn?: boolean;
+  description?: string;
+  robots?: string;
+  ogType?: 'website' | 'article';
+  jsonLd?: string;
+  canonical?: string;
 }
 
-const { title = 'Mdverse', bodyClass = '', dataPanel } = Astro.props;
+const {
+  title = 'Mdverse',
+  bodyClass = '',
+  dataPanel,
+  dataSignedIn,
+  description,
+  robots,
+  ogType = 'website',
+  jsonLd,
+  canonical,
+} = Astro.props;
+
+const siteUrl = getSiteUrl();
+const indexed = robots === undefined;
+const canonicalUrl = canonical ?? absoluteUrl(siteUrl, Astro.url.pathname);
+const social = description
+  ? socialTags({
+      title,
+      description,
+      url: canonicalUrl,
+      imageUrl: absoluteUrl(siteUrl, OG_IMAGE.path),
+      type: ogType,
+    })
+  : '';
 ---
 
 <!doctype html>
@@ -17,13 +49,28 @@ const { title = 'Mdverse', bodyClass = '', dataPanel } = Astro.props;
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
-    <link rel="icon" href="/favicon.ico" />
     <meta name="generator" content={Astro.generator} />
+    <meta name="theme-color" content={THEME_COLOR} />
+    <meta name="color-scheme" content="dark" />
+    <link rel="icon" href="/favicon.ico" sizes="32x32" />
+    <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
+    <link rel="icon" type="image/png" sizes="32x32" href="/metadata/favicon-32x32.png" />
+    <link rel="icon" type="image/png" sizes="16x16" href="/metadata/favicon-16x16.png" />
+    <link rel="apple-touch-icon" sizes="180x180" href="/metadata/apple-touch-icon.png" />
+    <link rel="manifest" href={MANIFEST_PATH} />
     <title>{title}</title>
+    {description && <meta name="description" content={description} />}
+    {indexed && <link rel="canonical" href={canonicalUrl} />}
+    {robots && <meta name="robots" content={robots} />}
+    {indexed && social && <Fragment set:html={social} />}
+    {indexed && jsonLd && <script type="application/ld+json" is:inline set:html={jsonLd} />}
     <slot name="head" />
   </head>
-  <body class={bodyClass} data-panel={dataPanel}>
+  <body
+    class={bodyClass}
+    data-panel={dataPanel}
+    data-signed-in={dataSignedIn === undefined ? undefined : String(dataSignedIn)}
+  >
     <slot />
   </body>
 </html>

@@ -3,6 +3,8 @@ import type { CommentThread } from '../comments/api';
 
 let activeDocumentId = '';
 let canComment = false;
+/** Whether this browser has an account; comments need one. */
+let signedIn = true;
 let destroyBubble: (() => void) | null = null;
 
 function toast(msg: string): void {
@@ -52,16 +54,22 @@ export function initComments(): void {
   });
 
   document.addEventListener('mdverse:active-document', (e) => {
-    const detail = (e as CustomEvent<{ id: string; role: string; collaborative: boolean }>).detail;
+    const detail = (
+      e as CustomEvent<{ id: string; role: string; collaborative: boolean; signedIn?: boolean }>
+    ).detail;
     activeDocumentId = detail?.id ?? '';
     const role = detail?.role ?? 'reader';
-    canComment = role === 'owner' || role === 'editor' || role === 'admin';
+    // A visitor without an account can neither read nor write comments, so the
+    // panel is told not to ask the API anything. `signedIn` comes from the
+    // editor, which in turn takes it from the page the server rendered.
+    signedIn = detail?.signedIn !== false;
+    canComment = signedIn && (role === 'owner' || role === 'editor' || role === 'admin');
 
-    panel.setDocument(activeDocumentId, canComment);
+    panel.setDocument(activeDocumentId, canComment, signedIn);
 
     destroyBubble?.();
     const ta = activeTextarea();
-    if (ta && activeDocumentId) {
+    if (signedIn && ta && activeDocumentId) {
       destroyBubble = createSelectionBubble(ta, (anchor) => {
         if (!canComment) {
           toast('You need editor access to add comments');
@@ -72,7 +80,7 @@ export function initComments(): void {
       });
     }
 
-    panel.refresh();
+    if (signedIn) panel.refresh();
   });
 
   document.dispatchEvent(new CustomEvent('mdverse:request-active-document'));
@@ -108,6 +116,10 @@ export function initComments(): void {
       const { selectionStart, selectionEnd } = ta;
       if (selectionStart !== selectionEnd) {
         e.preventDefault();
+        if (!signedIn) {
+          toast('Sign in to comment');
+          return;
+        }
         if (!canComment) {
           toast('You need editor access to add comments');
           return;

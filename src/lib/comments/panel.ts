@@ -12,7 +12,7 @@ interface PanelOptions {
 export interface CommentPanel {
   open(anchor?: { from: number; to: number; quote: string }): void;
   close(): void;
-  setDocument(documentId: string, canComment: boolean): void;
+  setDocument(documentId: string, canComment: boolean, signedIn?: boolean): void;
   refresh(): void;
   readonly isOpen: boolean;
 }
@@ -50,7 +50,7 @@ const CLS = {
     'flex h-6 w-6 shrink-0 items-center justify-center rounded-md text-neutral-600 transition hover:bg-[#1f1f1f] hover:text-neutral-200',
   composer: 'border-t border-[#1f1f1f] px-3 py-3',
   anchorChip:
-    'mb-2 flex items-center gap-2 rounded-lg border-l-2 border-[#2563eb] bg-[#101010] px-2.5 py-1.5 text-[11px] text-neutral-500',
+    'mb-2 flex items-center gap-2 border-l-2 border-[#2563eb] bg-[#101010] px-2.5 py-1.5 text-[11px] text-neutral-500',
   composerInput:
     'w-full resize-none rounded-xl border border-[#2a2a2a] bg-[#141414] px-3 py-2 text-[13px] leading-relaxed text-neutral-200 outline-none transition focus:border-[#3b3b3b] placeholder:text-neutral-600',
   composerRow: 'mt-2 flex items-center justify-between gap-2',
@@ -111,6 +111,7 @@ const ICON_JUMPS = icon('<path d="M7 17 17 7"/><path d="M7 7h10v10"/>');
 export function createCommentPanel(host: HTMLElement, opts: PanelOptions = {}): CommentPanel {
   let documentId = '';
   let canComment = false;
+  let signedIn = true;
   let threads: CommentThread[] = [];
   let candidates: MentionCandidate[] = [];
   let pendingAnchor: { from: number; to: number; quote: string } | null = null;
@@ -478,6 +479,18 @@ export function createCommentPanel(host: HTMLElement, opts: PanelOptions = {}): 
     return empty;
   }
 
+  /** The whole panel for a visitor with no account: an explanation, no requests. */
+  function anonymousState(): HTMLElement {
+    const box = document.createElement('div');
+    box.className = CLS.empty;
+
+    const next = encodeURIComponent(`${window.location.pathname}${window.location.search}`);
+    box.innerHTML =
+      '<div class="text-[13px] font-medium text-neutral-500">Comments need an account</div>' +
+      `<div class="text-[12px]"><a class="text-[#3b9eff] hover:underline" href="/login?next=${next}">Sign in</a> to read and write comments.</div>`;
+    return box;
+  }
+
   function loadingState(): HTMLElement {
     const el = document.createElement('div');
     el.className = CLS.hint;
@@ -489,6 +502,10 @@ export function createCommentPanel(host: HTMLElement, opts: PanelOptions = {}): 
     nodes.clear();
     scroll.replaceChildren();
 
+    if (!signedIn) {
+      scroll.append(anonymousState());
+      return;
+    }
     if (loading && threads.length === 0) {
       scroll.append(loadingState());
       return;
@@ -539,15 +556,6 @@ export function createCommentPanel(host: HTMLElement, opts: PanelOptions = {}): 
     updateCount();
   }
 
-  /**
-   * Swaps the optimistic placeholder for the server-confirmed comment.
-   *
-   * The server owns the ids, so a confirmed comment never shares the
-   * `pending-…` id of its placeholder: looking it up by id would only ever
-   * find the optimistic node and leave it stranded next to its own server copy
-   * ("You · sending…" beside the real author). The thread is re-keyed here and
-   * the old DOM node is replaced in place, so the list never reorders.
-   */
   function replaceRoot(optimisticId: string, comment: Comment): void {
     const index = threads.findIndex((thread) => thread.root.id === optimisticId);
     if (index < 0) {
@@ -574,7 +582,7 @@ export function createCommentPanel(host: HTMLElement, opts: PanelOptions = {}): 
   }
 
   async function loadComments(): Promise<void> {
-    if (!documentId) return;
+    if (!documentId || !signedIn) return;
     loading = true;
     if (threads.length === 0) renderAll();
 
@@ -593,14 +601,13 @@ export function createCommentPanel(host: HTMLElement, opts: PanelOptions = {}): 
   }
 
   async function loadCandidates(): Promise<void> {
-    if (!documentId) return;
+    if (!documentId || !signedIn) return;
     candidates = await fetchMentionCandidates(documentId);
     for (const thread of threads) refreshThreadNode(thread);
   }
 
-  /** Fetches and reconciles: only threads whose content changed are rebuilt. */
   async function reconcile(): Promise<void> {
-    if (!documentId) return;
+    if (!documentId || !signedIn) return;
     const comments = await fetchComments(documentId);
     const next = groupIntoThreads(comments);
     sortThreads();
@@ -651,12 +658,6 @@ export function createCommentPanel(host: HTMLElement, opts: PanelOptions = {}): 
     };
   }
 
-  /**
-   * Wraps `createComment` so a transport failure surfaces as a failed comment
-   * instead of a rejected promise. Without it, a fetch that throws (or an
-   * empty/non-JSON response) leaves the optimistic node frozen on "sending…"
-   * forever and never re-enables the submit button.
-   */
   async function postComment(
     input: Parameters<typeof createComment>[0],
   ): Promise<{ ok: true; comment: Comment } | { ok: false; error: string }> {
@@ -668,6 +669,7 @@ export function createCommentPanel(host: HTMLElement, opts: PanelOptions = {}): 
   }
 
   async function sendReply(rootId: string, body: string): Promise<void> {
+    if (!signedIn) return;
     const thread = threads.find((entry) => entry.root.id === rootId);
     if (!thread) return;
 
@@ -690,6 +692,10 @@ export function createCommentPanel(host: HTMLElement, opts: PanelOptions = {}): 
   async function submitComment(): Promise<void> {
     const body = textarea.value.trim();
     if (!body || !documentId) return;
+    if (!signedIn) {
+      flash('Sign in to comment', 'error');
+      return;
+    }
 
     const anchor = pendingAnchor;
     submitBtn.disabled = true;
@@ -753,7 +759,7 @@ export function createCommentPanel(host: HTMLElement, opts: PanelOptions = {}): 
         anchorChip.hidden = false;
         textarea.focus();
       }
-      if (documentId && loadedFor !== documentId && !loading) void loadComments();
+      if (signedIn && documentId && loadedFor !== documentId && !loading) void loadComments();
     },
 
     close() {
@@ -763,10 +769,11 @@ export function createCommentPanel(host: HTMLElement, opts: PanelOptions = {}): 
       closeMentionMenu();
     },
 
-    setDocument(id, canEdit) {
-      if (id === documentId && canEdit === canComment) return;
+    setDocument(id, canEdit, signedInNow = true) {
+      if (id === documentId && canEdit === canComment && signedInNow === signedIn) return;
       documentId = id;
       canComment = canEdit;
+      signedIn = signedInNow;
       threads = [];
       nodes.clear();
       drafts.clear();
@@ -774,12 +781,14 @@ export function createCommentPanel(host: HTMLElement, opts: PanelOptions = {}): 
       loadedFor = '';
       updateCount();
       scroll.replaceChildren();
-      if (documentId) void loadCandidates();
-      if (open && documentId) void loadComments();
+      composer.hidden = !signedIn;
+      renderAll();
+      if (signedIn && documentId) void loadCandidates();
+      if (signedIn && open && documentId) void loadComments();
     },
 
     refresh() {
-      if (documentId) void reconcile();
+      if (signedIn && documentId) void reconcile();
     },
   };
 
@@ -852,8 +861,6 @@ export function createSelectionBubble(
       for (const prop of MIRROR_PROPS) mirror.style[prop] = style[prop];
       mirror.textContent = value.slice(0, selectionEnd);
       const marker = document.createElement('span');
-      // Zero-width space: forces a measurable (invisible) glyph exactly at the
-      // caret, even when the selection ends at a soft-wrap boundary.
       marker.textContent = String.fromCharCode(8203);
       mirror.append(marker);
       document.body.append(mirror);
@@ -880,8 +887,6 @@ export function createSelectionBubble(
       return;
     }
 
-    // h-7 w-7 bubble anchored over the selection end (where the pointer or
-    // caret released), flipped below when the viewport top is too close.
     const SIZE = 28;
     const MARGIN = 8;
     const point = caretViewportPoint();
@@ -901,8 +906,6 @@ export function createSelectionBubble(
     bubble.style.display = 'flex';
   }
 
-  // Pointer-anchored variant: a mouseup/touchend already carries the exact
-  // release coordinates, so the primary flows never depend on mirror measuring.
   function showAt(clientX: number, clientY: number): void {
     const { selectionStart, selectionEnd, value } = textarea;
     if (selectionStart === selectionEnd || !value.slice(selectionStart, selectionEnd).trim()) {
@@ -923,7 +926,6 @@ export function createSelectionBubble(
   }
 
   function onPointerUp(event: MouseEvent): void {
-    // Synchronous: at mouseup the selection is already committed.
     showAt(event.clientX, event.clientY);
   }
   function onTouchEnd(event: TouchEvent): void {

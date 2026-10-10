@@ -6,7 +6,6 @@ import Icon from '../ui/Icon.astro';
   <input data-r="find-input" placeholder="Find" aria-label="Find" />
   <input data-r="replace-input" placeholder="Replace with" aria-label="Replace with" />
 
-  <!-- Match case -->
   <button
     type="button"
     class="hb"
@@ -18,12 +17,11 @@ import Icon from '../ui/Icon.astro';
     <Icon name="lucide:case-sensitive" />
   </button>
 
-  <!-- Whole word (like VSCode [W] button) -->
   <button
     type="button"
     class="hb"
     data-command="toggle-word"
-    title='Match whole word (Alt+W) — "texto" won&apos;t match "textos"'
+    title='Match whole word (Alt+W) - "texto" won&apos;t match "textos"'
     aria-label="Match whole word"
     aria-pressed="false"
   >
@@ -35,16 +33,13 @@ import Icon from '../ui/Icon.astro';
       aria-hidden="true"
       style="font-size:0"
     >
-      <!-- "ab" letters -->
       <text x="0" y="11" font-family="monospace" font-size="9" font-weight="700">
         ab
       </text>
-      <!-- underline = word boundary indicator, same as VSCode -->
       <rect x="0" y="13" width="16" height="1.5" rx="0.5" />
     </svg>
   </button>
 
-  <!-- Regex mode -->
   <button
     type="button"
     class="hb"

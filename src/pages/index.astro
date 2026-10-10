@@ -5,13 +5,36 @@ import StatusBar from '../components/app/StatusBar.astro';
 import Icon from '../components/ui/Icon.astro';
 import Toast from '../components/ui/Toast.astro';
 import Layout from '../layouts/Layout.astro';
+import {
+  jsonLdGraph,
+  organizationNode,
+  SITE_DESCRIPTION,
+  softwareApplicationNode,
+  websiteNode,
+} from '@/lib/seo/meta';
+import { getSiteUrl } from '@/lib/supabase/env';
+
+const signedIn = Boolean(Astro.locals.user);
+
+const siteUrl = getSiteUrl();
+const title = 'Mdverse - Markdown editor with live preview and sharing';
+const jsonLd = jsonLdGraph([
+  organizationNode(siteUrl),
+  websiteNode(siteUrl),
+  softwareApplicationNode(siteUrl),
+]);
 ---
 
 <Layout
-  title="Mdverse"
+  title={title}
+  description={SITE_DESCRIPTION}
+  jsonLd={jsonLd}
   bodyClass="h-screen w-screen bg-black text-neutral-200 font-sans overflow-hidden"
   dataPanel="code"
+  dataSignedIn={signedIn}
 >
+  <h1 class="sr-only">{title}</h1>
+
   <div id="app" class="h-full flex flex-col">
     <AppHeader />
     <main id="editor-panes" class="flex flex-col flex-1 min-h-0 min-w-0"></main>
@@ -38,11 +61,8 @@ import Layout from '../layouts/Layout.astro';
     <EditorPane />
   </template>
 
-  {/* Host element for the slide-in comments panel - rendered into body so it
-      can overlay everything without clipping. The panel.ts module populates it. */}
   <div id="comment-panel-host" aria-live="polite"></div>
 
-  {/* Hidden file input for image uploads triggered from the toolbar */}
   <input
     id="image-file-input"
     type="file"

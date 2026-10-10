@@ -80,6 +80,26 @@ describe('comment panel optimistic root', () => {
     expect(host.textContent).not.toContain('sending');
   });
 
+  it('asks the API nothing and offers a way in when the visitor has no account', async () => {
+    const fetchSpy = vi.fn(async () => json([]));
+    vi.stubGlobal('fetch', fetchSpy);
+
+    const host = document.createElement('div');
+    document.body.append(host);
+    const panel = createCommentPanel(host);
+    panel.setDocument(DOCUMENT_ID, false, false);
+    panel.open();
+    await flush();
+
+    // This is the regression: a signed-out editor used to fire
+    // `GET /api/comments` and `/mentions` for every document and log a 401 each.
+    expect(fetchSpy).not.toHaveBeenCalled();
+    expect(host.textContent).toContain('Comments need an account');
+    expect(host.querySelector('a[href^="/login"]')).not.toBeNull();
+    // Nothing this visitor could post, so the composer is not offered either.
+    expect((host.querySelector('form') as HTMLFormElement).hidden).toBe(true);
+  });
+
   it('marks the comment failed and re-enables the button when the request throws', async () => {
     vi.stubGlobal(
       'fetch',
