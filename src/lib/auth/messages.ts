@@ -14,6 +14,8 @@ export const AUTH_ERROR_CODES = [
   'signup_failed',
   'reset_failed',
   'update_failed',
+  'same_password',
+  'reauthentication_needed',
   'oauth',
   'provider',
   'callback',
@@ -23,7 +25,6 @@ export const AUTH_ERROR_CODES = [
 
 export type AuthErrorCode = (typeof AUTH_ERROR_CODES)[number];
 
-/** Success notices, keyed by the `sent` query parameter. */
 export const AUTH_SENT_CODES = ['confirm', 'resent', 'reset'] as const;
 
 export type AuthSentCode = (typeof AUTH_SENT_CODES)[number];
@@ -49,6 +50,9 @@ const ERROR_MESSAGES: Record<AuthErrorCode, string> = {
   signup_failed: 'We could not create your account. Please try again in a moment.',
   reset_failed: 'We could not complete that request. Please try again in a moment.',
   update_failed: 'We could not update your password. Please try again in a moment.',
+  same_password: 'That is already your password. Choose a different one.',
+  reauthentication_needed:
+    'This project requires a fresh sign-in before a password can be changed. Sign out and sign in again, then retry.',
   oauth: 'The provider rejected the sign-in. Please try again.',
   provider: 'That sign-in provider is not supported.',
   callback: 'This sign-in link is incomplete. Please request a new one.',

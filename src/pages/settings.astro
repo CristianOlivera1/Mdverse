@@ -17,7 +17,6 @@ const notice = profileNotice({
   error: params.get('error'),
 });
 
-// Brand marks where they exist, a neutral icon otherwise.
 const PROVIDER_ICONS: Record<string, IconName> = {
   email: 'lucide:mail',
   github: 'simple-icons:github',
@@ -140,18 +139,21 @@ const NOTICE_TONES = {
           ))}
         </dd>
       </div>
-      <div>
-        <dt class="text-neutral-500">Password</dt>
-        <dd class="mt-1">
-          <a
-            href="/reset-password"
-            class="inline-flex items-center gap-1.5 text-sky-300 hover:text-sky-200"
-          >
-            <Icon name="lucide:key-round" size={13} />
-            Change password
-          </a>
-        </dd>
-      </div>
+  
+      {account.hasPassword && (
+        <div>
+          <dt class="text-neutral-500">Password</dt>
+          <dd class="mt-1">
+            <a
+              href="/reset-password"
+              class="inline-flex items-center gap-1.5 text-sky-300 hover:text-sky-200"
+            >
+              <Icon name="lucide:key-round" size={13} />
+              Change password
+            </a>
+          </dd>
+        </div>
+      )}
     </dl>
 
     {!account.emailVerified && (

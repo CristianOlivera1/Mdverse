@@ -122,9 +122,23 @@ export function clientIpFromHeaders(headers: Headers): string | null {
   return null;
 }
 
-export function bucketKey(route: AuthRouteKind, parts: readonly string[]): string {
+export function bucketKey(route: string, parts: readonly string[]): string {
   return `${route}:${parts.map(hashForLog).join(':')}`;
 }
+
+export type ApiRouteKind = 'docx' | 'upload' | 'public-export';
+
+export const API_RATE_LIMITS: Record<ApiRouteKind, RateLimitConfig> = {
+  docx: { capacity: 20, windowSeconds: 600 },
+  upload: { capacity: 30, windowSeconds: 600 },
+  'public-export': { capacity: 60, windowSeconds: 600 },
+};
+
+const apiStores: Record<ApiRouteKind, BucketStore> = {
+  docx: new Map(),
+  upload: new Map(),
+  'public-export': new Map(),
+};
 
 const attemptStores: Record<AuthRouteKind, BucketStore> = {
   signin: new Map(),
@@ -168,13 +182,49 @@ export function enforceEmailCooldown(
 }
 
 export function logRateLimited(
-  route: AuthRouteKind,
+  route: AuthRouteKind | ApiRouteKind,
   key: string,
   retryAfterSeconds: number,
 ): void {
   console.warn(
     `[auth] rate_limited route=${route} key=${key} retry_after=${retryAfterSeconds}s`,
   );
+}
+
+export function apiAttemptKey(
+  kind: ApiRouteKind,
+  request: Request,
+  identifier?: string | null,
+): string {
+  const ip = clientIpFromHeaders(request.headers) ?? 'unknown';
+  return bucketKey(kind, identifier ? [ip, identifier] : [ip]);
+}
+
+export function enforceApiRateLimit(
+  kind: ApiRouteKind,
+  request: Request,
+  identifier?: string | null,
+  nowMs: number = Date.now(),
+): RateLimitVerdict {
+  const key = apiAttemptKey(kind, request, identifier);
+  const verdict = checkRateLimit(apiStores[kind], key, API_RATE_LIMITS[kind], nowMs);
+  if (!verdict.allowed) logRateLimited(kind, key, verdict.retryAfterSeconds);
+  return verdict;
+}
+
+export function apiRateLimitedResponse(
+  verdict: RateLimitVerdict,
+  contentType: string = 'application/json; charset=utf-8',
+  body: string = JSON.stringify({ error: 'rate_limited' }),
+): Response {
+  return new Response(body, {
+    status: 429,
+    headers: {
+      'Content-Type': contentType,
+      'Retry-After': String(Math.max(1, Math.ceil(verdict.retryAfterSeconds))),
+      'Cache-Control': 'private, no-cache, no-store, must-revalidate, max-age=0',
+    },
+  });
 }
 
 const TURNSTILE_VERIFY_URL = 'https://challenges.cloudflare.com/turnstile/v0/siteverify';

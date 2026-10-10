@@ -19,11 +19,7 @@ const NOTICE_TONES = {
 } as const;
 ---
 
-<Layout title={title} bodyClass="min-h-screen bg-black text-neutral-200 font-sans">
-  <Fragment slot="head">
-    <meta name="robots" content="noindex" />
-  </Fragment>
-
+<Layout title={title} bodyClass="min-h-screen bg-black text-neutral-200 font-sans" robots="noindex">
   <main class="min-h-screen flex flex-col justify-center px-4 sm:px-8 py-10 relative">
     <div class="absolute top-6 left-4 sm:left-8">
       <button
@@ -124,12 +120,6 @@ const NOTICE_TONES = {
       node.addEventListener('input', sync);
     }
 
-    // Submit gating (progressive enhancement): keep every auth POST submit
-    // disabled until the form is natively valid, so typos never burn
-    // rate-limit budget on a round trip the server would reject anyway. The
-    // server stays authoritative — without JS the buttons stay enabled and
-    // every rule is enforced there. Server-disabled (unconfigured) submits
-    // are never re-enabled here.
     for (const form of document.querySelectorAll('form[method="POST"]')) {
       if (!(form instanceof HTMLFormElement)) continue;
       const submit = form.querySelector<HTMLButtonElement>('button[type="submit"]');

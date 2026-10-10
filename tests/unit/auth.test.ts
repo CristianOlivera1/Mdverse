@@ -1,6 +1,11 @@
 import { describe, expect, it } from 'vitest';
 
-import { describeProvider, toAccountSummary } from '../../src/lib/auth/account';
+import {
+  describeProvider,
+  hasPasswordIdentity,
+  providersOf,
+  toAccountSummary,
+} from '../../src/lib/auth/account';
 import {
   authFeedbackUrl,
   authNotice,
@@ -233,6 +238,9 @@ describe('toAccountSummary', () => {
       createdAt: '2026-10-07T12:00:00Z',
       emailVerified: false,
       providers: [],
+      // No provider information at all: read as an email account, so the profile
+      // keeps offering the recovery link instead of claiming there is no password.
+      hasPassword: true,
     });
   });
 
@@ -277,6 +285,52 @@ describe('toAccountSummary', () => {
     expect(describeProvider('github')).toBe('GitHub');
     expect(describeProvider('google')).toBe('Google');
     expect(describeProvider('saml')).toBe('saml');
+  });
+
+  it('knows an OAuth-only account has no password to change', () => {
+    // The exact bug: a Google-only account was offered "Change password".
+    const googleOnly = toAccountSummary(
+      { ...user, identities: [{ provider: 'google' }], app_metadata: { providers: ['google'] } },
+      null,
+    );
+    expect(googleOnly?.providers).toEqual(['google']);
+    expect(googleOnly?.hasPassword).toBe(false);
+
+    const githubOnly = toAccountSummary(
+      { ...user, app_metadata: { provider: 'github', providers: ['github'] } },
+      null,
+    );
+    expect(githubOnly?.hasPassword).toBe(false);
+
+    // Linking a password to an OAuth account flips it back.
+    const both = toAccountSummary(
+      {
+        ...user,
+        identities: [{ provider: 'github' }, { provider: 'email' }],
+        app_metadata: { providers: ['email', 'github'] },
+      },
+      null,
+    );
+    expect(both?.hasPassword).toBe(true);
+  });
+
+  it('treats the email provider as the password one, and defaults to it', () => {
+    const base = { id: 'u', created_at: '2026-10-06T12:00:00Z' };
+
+    expect(hasPasswordIdentity(null)).toBe(false);
+    // Nothing loaded: assume the email case rather than asserting there is no password.
+    expect(hasPasswordIdentity({ ...base, email: 'a@b.com' })).toBe(true);
+    expect(hasPasswordIdentity({ ...base, identities: [{ provider: 'google' }] })).toBe(false);
+    expect(hasPasswordIdentity({ ...base, identities: [{ provider: 'email' }] })).toBe(true);
+  });
+
+  it('reports linked providers without duplicates', () => {
+    const base = { id: 'u', created_at: '2026-10-06T12:00:00Z' };
+
+    expect(
+      providersOf({ ...base, identities: [{ provider: 'github' }, { provider: 'github' }] }),
+    ).toEqual(['github']);
+    expect(providersOf(base)).toEqual([]);
   });
 });
 
@@ -326,6 +380,20 @@ describe('auth notices', () => {
     expect(isAuthErrorCode('nope')).toBe(false);
     expect(isAuthSentCode('reset')).toBe(true);
     expect(isAuthSentCode('1')).toBe(false);
+  });
+
+  it('explains the password-update refusals instead of only offering a retry', () => {
+    // Both codes are actionable: neither gets better by trying again, which is
+    // what the generic `update_failed` copy told the user to do.
+    const same = authNotice({ error: 'same_password' });
+    expect(same?.tone).toBe('error');
+    expect(same?.message).toContain('already your password');
+
+    const reauth = authNotice({ error: 'reauthentication_needed' });
+    expect(reauth?.tone).toBe('error');
+    expect(reauth?.message).toContain('sign in again');
+    // And the generic one still reads as a retry.
+    expect(authNotice({ error: 'update_failed' })?.message).toContain('try again');
   });
 
   it('gives every password problem its own message', () => {
@@ -471,11 +539,11 @@ describe('buildAuthCallbackUrl', () => {
     expect(buildAuthCallbackUrl('http://localhost:4321/', '/settings')).toBe(
       'http://localhost:4321/auth/callback?next=%2Fsettings',
     );
-    expect(buildAuthCallbackUrl('https://mdverse.pages.dev')).toBe(
-      'https://mdverse.pages.dev/auth/callback?next=%2Fdashboard',
+    expect(buildAuthCallbackUrl('https://mdverse.dev')).toBe(
+      'https://mdverse.dev/auth/callback?next=%2Fdashboard',
     );
-    expect(buildAuthCallbackUrl('https://mdverse.pages.dev', 'https://evil.example')).toBe(
-      'https://mdverse.pages.dev/auth/callback?next=%2Fdashboard',
+    expect(buildAuthCallbackUrl('https://mdverse.dev', 'https://evil.example')).toBe(
+      'https://mdverse.dev/auth/callback?next=%2Fdashboard',
     );
   });
 });
@@ -603,7 +671,7 @@ describe('honeypot and identifier hygiene', () => {
   });
 
   it('keys attempts without leaking the raw identifier', () => {
-    const request = new Request('https://mdverse.pages.dev/auth/signin', {
+    const request = new Request('https://mdverse.dev/auth/signin', {
       headers: { 'cf-connecting-ip': '1.2.3.4' },
     });
     const attempt = authAttemptFor('signin', request, 'ana@mail.com');
