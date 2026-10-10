@@ -19,7 +19,7 @@
 
 <p align="center"><a href="https://mdverse.dev"><strong>Live demo</strong></a> · <a href="#quickstart">Get started</a> · <a href="https://mdverse.dev/dashboard">Open dashboard</a></p>
 
-<img width="1607" height="920" alt="openvid-1791518338477 (1)" src="https://github.com/user-attachments/assets/5078e6a5-8d31-4165-b618-de09dfd4ba06" />
+<img width="1179" height="675" alt="Frame 1116606771 (1)" src="https://github.com/user-attachments/assets/9833b93e-4808-48a5-95c9-f69493cb1ad1" />
 
 ## Why Mdverse
 
