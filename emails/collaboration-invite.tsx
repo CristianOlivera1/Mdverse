@@ -13,15 +13,10 @@ import {
 } from './_shared';
 
 export interface CollaborationInviteEmailProps {
-  /** Name or email of the person being invited */
   inviteeName?: string | null;
-  /** Name/title of the document being shared */
   documentTitle: string;
-  /** Display name of the person who sent the invite */
   inviterName: string;
-  /** Role being granted: 'editor' | 'reader' */
   role: 'editor' | 'reader';
-  /** Direct link to the document or signup page */
   inviteUrl: string;
   siteUrl?: string;
 }

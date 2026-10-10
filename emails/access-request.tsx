@@ -1,5 +1,5 @@
 import * as React from 'react';
-import { Section, Text } from 'react-email';
+import { Section, Text} from 'react-email';
 import {
   ContentSection,
   DEFAULT_SITE_URL,
@@ -7,23 +7,16 @@ import {
   EmailHeading,
   EmailParagraph,
   EmailShell,
-  MutedInfo,
   sharedStrong,
   theme,
 } from './_shared';
 
 export interface AccessRequestEmailProps {
-  /** Display name of the owner receiving the request */
   ownerName?: string | null;
-  /** Display name of the person asking */
   requesterName: string;
-  /** Email of the person asking, so the owner knows who it is */
   requesterEmail?: string | null;
-  /** Title of the document being requested */
   documentTitle: string;
-  /** Optional note written by the requester */
   message?: string | null;
-  /** Opens the editor with the collaboration dialog already open */
   reviewUrl: string;
   siteUrl?: string;
 }
@@ -38,9 +31,12 @@ export default function AccessRequestEmail({
   siteUrl = DEFAULT_SITE_URL,
 }: AccessRequestEmailProps) {
   const greeting = ownerName ? `Hi ${ownerName},` : 'Hi there,';
-  const who = requesterEmail ? `${requesterName} (${requesterEmail})` : requesterName;
+  const who = requesterEmail
+    ? `${requesterName} (${requesterEmail})`
+    : requesterName;
 
   return (
+
     <EmailShell
       preview={`${requesterName} is asking for access to "${documentTitle}" in Mdverse.`}
       siteUrl={siteUrl}
@@ -48,10 +44,13 @@ export default function AccessRequestEmail({
     >
       <ContentSection>
         <EmailHeading>Somebody is asking for access</EmailHeading>
+
         <EmailParagraph>{greeting}</EmailParagraph>
+
         <EmailParagraph>
-          <strong style={sharedStrong}>{who}</strong> opened a link to a document you own and does
-          not have access to yet. They are asking you to let them in:
+          <strong style={sharedStrong}>{who}</strong> opened a link to a
+          document you own and does not have access to yet. They are asking
+          you to let them in:
         </EmailParagraph>
       </ContentSection>
 
@@ -62,10 +61,6 @@ export default function AccessRequestEmail({
 
       <EmailButton href={reviewUrl}>Review the request</EmailButton>
 
-      <MutedInfo>
-        Approving grants the role you choose and turns the request into real access. Denying just
-        closes it - they can ask again later.
-      </MutedInfo>
     </EmailShell>
   );
 }
@@ -79,8 +74,6 @@ AccessRequestEmail.PreviewProps = {
   reviewUrl: `${DEFAULT_SITE_URL}/?doc=00000000-0000-0000-0000-000000000000&collaborate=1`,
   siteUrl: DEFAULT_SITE_URL,
 } satisfies AccessRequestEmailProps;
-
-/* Document card + the requester's own words, quoted and quiet. */
 
 const cardSection: React.CSSProperties = {
   backgroundColor: theme.bodyBg,

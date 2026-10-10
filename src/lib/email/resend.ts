@@ -7,9 +7,6 @@ let warnedMissingKey = false;
 
 export function getResendClient(): Resend {
   if (!_resend) {
-    // Fail loud like the reference implementation: a missing key makes EVERY
-    // send fail, and the per-send catch below would otherwise bury that fact
-    // in one warning per attempt.
     if (!RESEND_API_KEY && !warnedMissingKey) {
       warnedMissingKey = true;
       console.error(
@@ -28,10 +25,10 @@ export function getFromEmail(): string {
   if (!warnedFallbackFrom) {
     warnedFallbackFrom = true;
     console.error(
-      '[email] RESEND_FROM_EMAIL is not set, falling back to noreply@resend.dev: Resend delivers those ONLY to the account owner address. Every invite/confirmation to anyone else gets a 403. Verify a domain in Resend and set RESEND_FROM_EMAIL="Name <mail@yourdomain>".',
+      '[email] RESEND_FROM_EMAIL is not set, falling back to hi@resend.dev: Resend delivers those ONLY to the account owner address. Every invite/confirmation to anyone else gets a 403. Verify a domain in Resend and set RESEND_FROM_EMAIL="Name <mail@yourdomain>".',
     );
   }
-  return 'Mdverse <noreply@resend.dev>';
+  return 'Mdverse <hi@resend.dev>';
 }
 
 export function getReplyToEmail(): string | undefined {

@@ -2,13 +2,16 @@ import * as React from 'react';
 import {
   Body,
   Button,
+  Column,
   Container,
   Head,
   Heading,
   Hr,
   Html,
+  Img,
   Link,
   Preview,
+  Row,
   Section,
   Text,
 } from 'react-email';
@@ -38,34 +41,59 @@ interface EmailShellProps {
   children: React.ReactNode;
 }
 
-export function EmailShell({ preview, siteUrl = DEFAULT_SITE_URL, footerNote, children }: EmailShellProps) {
+export function EmailShell({
+  preview,
+  siteUrl = DEFAULT_SITE_URL,
+  footerNote,
+  children,
+}: EmailShellProps) {
   return (
     <Html lang="en">
       <Head />
+      <Preview>{preview}</Preview>
+
       <Body style={body}>
-        <Preview>{preview}</Preview>
         <Container style={container}>
           <Section style={header}>
-            <Text style={brandRow}>
-              <span style={logoTile}>M</span>
-              {` `}
-              <span style={wordmark}>Mdverse</span>
-            </Text>
+            <Link href={siteUrl} style={logoLink}>
+              <Img
+                src={`${siteUrl}/images/logo.png`}
+                width="300"
+                height="50"
+                alt="Mdverse"
+                style={logo}
+              />
+            </Link>
           </Section>
-
-          <Hr style={divider} />
 
           {children}
 
           <Hr style={divider} />
 
           <Section style={footer}>
+            <Row>
+              <Column align="left">
+                <Link href={siteUrl} style={footerLink}>
+                  Website
+                </Link>
+              </Column>
+
+              <Column align="right">
+                <Link
+                  href="https://github.com/CristianOlivera1/mdverse"
+                  style={footerLink}
+                >
+                  GitHub
+                </Link>
+              </Column>
+            </Row>
+
             <Text style={footerText}>
-              <Link href={siteUrl} style={footerLink}>
-                Mdverse
-              </Link>
-              {' - '}
               {footerNote}
+            </Text>
+
+            <Text style={copyright}>
+              © {new Date().getFullYear()} Mdverse
             </Text>
           </Section>
         </Container>
@@ -73,8 +101,6 @@ export function EmailShell({ preview, siteUrl = DEFAULT_SITE_URL, footerNote, ch
     </Html>
   );
 }
-
-/* ─── Building blocks ────────────────────────────────────────────────────── */
 
 export function EmailHeading({ children }: { children: React.ReactNode }) {
   return (
@@ -119,8 +145,6 @@ export function ContentSection({ children }: { children: React.ReactNode }) {
   return <Section style={contentSection}>{children}</Section>;
 }
 
-/* ─── Styles (inline style objects only - email-client safe) ─────────────── */
-
 const body: React.CSSProperties = {
   backgroundColor: theme.bodyBg,
   fontFamily: theme.fontStack,
@@ -139,43 +163,50 @@ const container: React.CSSProperties = {
 };
 
 const header: React.CSSProperties = {
-  padding: '24px 32px',
-};
-
-const brandRow: React.CSSProperties = {
-  fontSize: '15px',
-  lineHeight: '28px',
-  margin: '0',
-};
-
-const logoTile: React.CSSProperties = {
-  backgroundColor: '#ffffff',
-  borderRadius: '6px',
-  color: '#000000',
-  display: 'inline-block',
-  fontSize: '15px',
-  fontWeight: '700',
-  height: '28px',
-  lineHeight: '28px',
-  marginRight: '10px',
-  textAlign: 'center',
-  verticalAlign: 'middle',
-  width: '28px',
-};
-
-const wordmark: React.CSSProperties = {
-  color: theme.strong,
-  fontSize: '15px',
-  fontWeight: '600',
-  letterSpacing: '-0.2px',
-  verticalAlign: 'middle',
+  padding: '14px 22px',
 };
 
 const divider: React.CSSProperties = {
-  borderColor: theme.border,
-  borderStyle: 'solid',
+  borderColor: 'rgba(255, 255, 255, 0.08)',
+  borderTop: '1px solid rgba(255, 255, 255, 0.08)',
   margin: '0',
-  width: '100%',
+};
+
+const logoLink: React.CSSProperties = {
+  display: 'inline-block',
+  textDecoration: 'none',
+};
+
+const logo: React.CSSProperties = {
+  display: 'block',
+  width: '170px',
+  height: '60px',
+  objectFit: 'contain',
+};
+
+const footer: React.CSSProperties = {
+  padding: '20px 32px 24px',
+};
+
+const footerLink: React.CSSProperties = {
+  color: theme.bodyText,
+  fontSize: '12px',
+  textDecoration: 'none',
+};
+
+const footerText: React.CSSProperties = {
+  color: theme.muted,
+  fontSize: '12px',
+  lineHeight: '1.6',
+  margin: '20px 0 0',
+};
+
+const copyright: React.CSSProperties = {
+  color: theme.muted,
+  fontSize: '11px',
+  lineHeight: '1.5',
+  margin: '8px 0 0',
+  textAlign: 'center',
 };
 
 export const contentSection: React.CSSProperties = {
@@ -242,23 +273,6 @@ const infoText: React.CSSProperties = {
   fontSize: '13px',
   lineHeight: '1.6',
   margin: '0 0 24px',
-};
-
-const footer: React.CSSProperties = {
-  padding: '20px 32px 24px',
-};
-
-const footerText: React.CSSProperties = {
-  color: theme.muted,
-  fontSize: '13px',
-  lineHeight: '1.6',
-  margin: '0',
-};
-
-const footerLink: React.CSSProperties = {
-  color: theme.strong,
-  fontSize: '13px',
-  textDecoration: 'none',
 };
 
 export const sharedStrong: React.CSSProperties = {
