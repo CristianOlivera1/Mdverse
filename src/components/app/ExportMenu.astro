@@ -11,14 +11,14 @@ const menuName = `export${suffix}`;
 <div>
   <button
     type="button"
-    class="hb"
+    class="hb w-full justify-start!"
     data-menu={menuName}
     aria-haspopup="true"
     aria-expanded="false"
     title="Copy and export"
   >
     <Icon name="lucide:download" />
-    <span class="hidden lg:inline">Export</span>
+    <span class="lg:inline">Export</span>
     <span data-export-chevron class="inline-flex opacity-60">
       <Icon name="lucide:chevron-down" size={12} />
     </span>
@@ -47,7 +47,9 @@ const menuName = `export${suffix}`;
     <div class="pop-sep"></div>
     <button type="button" class="mi" data-command="export-docx">
       <Icon name="lucide:file-text" />
-      <span>Export to DOCX <span class="opacity-50 text-[11px]">beta</span></span>
+      <span>
+        Export to DOCX <span class="opacity-50 text-[11px]">beta</span>
+      </span>
     </button>
   </div>
 </div>
