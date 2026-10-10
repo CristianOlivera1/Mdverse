@@ -1,11 +1,17 @@
 import { createCommentPanel, createSelectionBubble } from '../comments/panel';
+import type { CommentPanel } from '../comments/panel';
+import { createAnchorOverlay } from '../comments/anchors';
+import type { AnchorOverlay } from '../comments/anchors';
 import type { CommentThread } from '../comments/api';
 
 let activeDocumentId = '';
 let canComment = false;
-/** Whether this browser has an account; comments need one. */
 let signedIn = true;
 let destroyBubble: (() => void) | null = null;
+let panel: CommentPanel | null = null;
+let overlay: AnchorOverlay | null = null;
+let threads: CommentThread[] = [];
+let markersVisible = true;
 
 function toast(msg: string): void {
   document.dispatchEvent(new CustomEvent('mdverse:toast', { detail: msg }));
@@ -13,6 +19,32 @@ function toast(msg: string): void {
 
 function activeTextarea(): HTMLTextAreaElement | null {
   return document.querySelector<HTMLTextAreaElement>('[data-pane]:not([style*="none"]) [data-r="textarea"]');
+}
+
+function applyMarkers(): void {
+  if (!overlay) return;
+  overlay.setVisible(markersVisible);
+  overlay.setThreads(markersVisible ? threads : []);
+  overlay.refresh();
+}
+
+function mountAnchorOverlay(): void {
+  const textarea = activeTextarea();
+  if (!textarea) return;
+
+  overlay = createAnchorOverlay(textarea, {
+    onActivate(thread, anchor) {
+      const ta = activeTextarea();
+      if (ta) {
+        ta.focus();
+        ta.setSelectionRange(anchor.from, anchor.to);
+      }
+      panel?.open();
+      setToggleState(true);
+      panel?.focusThread(thread.root.id);
+    },
+  });
+  applyMarkers();
 }
 
 function setToggleState(open: boolean): void {
@@ -41,7 +73,7 @@ export function initComments(): void {
   const host = document.getElementById('comment-panel-host');
   if (!host) return;
 
-  const panel = createCommentPanel(host, {
+  panel = createCommentPanel(host, {
     onHighlightAnchor(from, to) {
       const ta = activeTextarea();
       if (!ta) return;
@@ -55,17 +87,23 @@ export function initComments(): void {
 
   document.addEventListener('mdverse:active-document', (e) => {
     const detail = (
-      e as CustomEvent<{ id: string; role: string; collaborative: boolean; signedIn?: boolean }>
+      e as CustomEvent<{
+        id: string;
+        role: string;
+        collaborative: boolean;
+        signedIn?: boolean;
+        userId?: string;
+      }>
     ).detail;
     activeDocumentId = detail?.id ?? '';
     const role = detail?.role ?? 'reader';
-    // A visitor without an account can neither read nor write comments, so the
-    // panel is told not to ask the API anything. `signedIn` comes from the
-    // editor, which in turn takes it from the page the server rendered.
     signedIn = detail?.signedIn !== false;
     canComment = signedIn && (role === 'owner' || role === 'editor' || role === 'admin');
 
-    panel.setDocument(activeDocumentId, canComment, signedIn);
+    panel?.setDocument(activeDocumentId, canComment, signedIn, {
+      userId: detail?.userId ?? '',
+      role,
+    });
 
     destroyBubble?.();
     const ta = activeTextarea();
@@ -75,26 +113,35 @@ export function initComments(): void {
           toast('You need editor access to add comments');
           return;
         }
-        panel.open(anchor);
+        panel?.open(anchor);
         setToggleState(true);
       });
     }
 
-    if (signedIn) panel.refresh();
+    overlay?.destroy();
+    overlay = null;
+    threads = [];
+    mountAnchorOverlay();
+
+    if (signedIn) panel?.refresh();
   });
 
   document.dispatchEvent(new CustomEvent('mdverse:request-active-document'));
 
   document.addEventListener('mdverse:comments-changed', (e) => {
-    const detail = (e as CustomEvent<{ threads: CommentThread[] }>).detail;
-    updateBadge(detail.threads ?? []);
+    const detail = (e as CustomEvent<{ threads?: CommentThread[]; markersVisible?: boolean }>)
+      .detail;
+    threads = detail?.threads ?? [];
+    if (typeof detail?.markersVisible === 'boolean') markersVisible = detail.markersVisible;
+    updateBadge(threads);
+    applyMarkers();
   });
 
   document.addEventListener('click', (e) => {
     const btn = (e.target as HTMLElement).closest<HTMLElement>('[data-command="toggle-comments"]');
     if (!btn) return;
 
-    if (panel.isOpen) {
+    if (panel?.isOpen) {
       panel.close();
       setToggleState(false);
     } else {
@@ -102,7 +149,7 @@ export function initComments(): void {
         toast('Open a document to view comments');
         return;
       }
-      panel.open();
+      panel?.open();
       setToggleState(true);
     }
   });
@@ -125,12 +172,12 @@ export function initComments(): void {
           return;
         }
         const quote = ta.value.slice(selectionStart, selectionEnd).trim().slice(0, 200);
-        panel.open({ from: selectionStart, to: selectionEnd, quote });
+        panel?.open({ from: selectionStart, to: selectionEnd, quote });
         setToggleState(true);
       }
     }
 
-    if (e.key === 'Escape' && panel.isOpen) {
+    if (e.key === 'Escape' && panel?.isOpen) {
       panel.close();
       setToggleState(false);
     }

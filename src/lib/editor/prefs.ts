@@ -7,6 +7,7 @@ export const PREF_KEYS = {
   activeTab: `${PREFIX}active-tab`,
   openDocuments: `${PREFIX}open-documents`,
   toc: `${PREFIX}toc`,
+  commentMarks: `${PREFIX}comment-marks`,
   documentContent: (id: string) => `${PREFIX}doc:${id}:content`,
   documentTitle: (id: string) => `${PREFIX}doc:${id}:title`,
 } as const;

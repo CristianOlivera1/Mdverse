@@ -1358,16 +1358,6 @@ export function initEditorApp(): void {
     if (pane) paintFindHighlights(pane);
     announceActiveDocument();
   }
-
-  /**
-   * Whether this browser has an account behind it.
-   *
-   * `data-signed-in` is rendered by the server, which resolved the session from
-   * the cookies before this script ran: `'false'` is an answer, so the editor
-   * skips the document list instead of asking for it and collecting a 401 on
-   * every refresh. A page that does not say (`undefined`) falls back to what the
-   * client learned by asking, which is the old behaviour.
-   */
   const declaredSignedIn = document.body.dataset.signedIn;
 
   function hasAccount(): boolean {
@@ -1376,7 +1366,6 @@ export function initEditorApp(): void {
     return cloud !== null;
   }
 
-  /** The header's collaboration dialog follows whichever tab is on screen. */
   function announceActiveDocument(): void {
     const doc = documentById(activeId);
     if (!doc) return;
@@ -1392,6 +1381,7 @@ export function initEditorApp(): void {
           collaborative: cloud !== null,
           signedIn: hasAccount(),
           role: doc.role ?? 'owner',
+          userId: viewerId || cloud?.viewer?.id || '',
         },
       }),
     );

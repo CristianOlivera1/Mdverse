@@ -17,6 +17,7 @@ export interface Comment {
   readonly resolved: boolean;
   readonly createdAt: string;
   readonly updatedAt: string;
+  readonly edited?: boolean;
   readonly pending?: boolean;
   readonly failed?: boolean;
 }
@@ -58,10 +59,31 @@ export async function createComment(
 }
 
 
+export async function updateComment(
+  id: string,
+  body: string,
+): Promise<{ ok: true; comment: Comment } | { ok: false; error: string }> {
+  const response = await fetch(`/api/comments/${encodeURIComponent(id)}`, {
+    method: 'PATCH',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ body }),
+  });
+
+  if (!response.ok) {
+    const data = (await response.json().catch(() => ({}))) as { error?: string };
+    return { ok: false, error: data.error ?? 'Failed to edit comment' };
+  }
+
+  const comment = (await response.json()) as Comment;
+  return { ok: true, comment };
+}
+
 export async function resolveComment(
   id: string,
 ): Promise<{ ok: true } | { ok: false; error: string }> {
-  const response = await fetch(`/api/comments/${id}/resolve`, { method: 'POST' });
+  const response = await fetch(`/api/comments/${encodeURIComponent(id)}/resolve`, {
+    method: 'POST',
+  });
   if (!response.ok) {
     const data = (await response.json().catch(() => ({}))) as { error?: string };
     return { ok: false, error: data.error ?? 'Failed to resolve comment' };
@@ -73,7 +95,7 @@ export async function resolveComment(
 export async function deleteComment(
   id: string,
 ): Promise<{ ok: true } | { ok: false; error: string }> {
-  const response = await fetch(`/api/comments/${id}`, { method: 'DELETE' });
+  const response = await fetch(`/api/comments/${encodeURIComponent(id)}`, { method: 'DELETE' });
   if (!response.ok) {
     const data = (await response.json().catch(() => ({}))) as { error?: string };
     return { ok: false, error: data.error ?? 'Failed to delete comment' };

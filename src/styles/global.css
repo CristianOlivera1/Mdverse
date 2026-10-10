@@ -32,6 +32,10 @@ textarea {
   caret-color: transparent;
 }
 
+.code-pane.has-comment-rail .ed-ta {
+  padding-right: 44px;
+}
+
 .pv-pane.prose-sm {
   font-size: calc(0.875rem * var(--z));
 }

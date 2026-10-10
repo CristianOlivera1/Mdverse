@@ -1,19 +1,40 @@
-import { createComment, fetchComments, groupIntoThreads, resolveComment, timeAgo } from './api';
+import {
+  createComment,
+  deleteComment,
+  fetchComments,
+  groupIntoThreads,
+  resolveComment,
+  timeAgo,
+  updateComment,
+} from './api';
 import type { Comment, CommentThread } from './api';
 import { fetchMentionCandidates, renderCommentBody } from './mentions';
 import type { MentionCandidate } from './mentions';
 import { avatarAura } from '../auth/avatarAura';
 import { initials } from '../auth/profile';
+import { PREF_KEYS, readPref, writePref } from '../editor/prefs';
+import { confirmAction } from '../app/confirmDialog';
 
 interface PanelOptions {
   onHighlightAnchor?: (from: number, to: number) => void;
 }
 
+export interface CommentViewer {
+  readonly userId: string;
+  readonly role: string;
+}
+
 export interface CommentPanel {
   open(anchor?: { from: number; to: number; quote: string }): void;
   close(): void;
-  setDocument(documentId: string, canComment: boolean, signedIn?: boolean): void;
+  setDocument(
+    documentId: string,
+    canComment: boolean,
+    signedIn?: boolean,
+    viewer?: CommentViewer,
+  ): void;
   refresh(): void;
+  focusThread(id: string): void;
   readonly isOpen: boolean;
 }
 
@@ -42,6 +63,10 @@ const CLS = {
   comment: 'mt-1.5 text-[13px] leading-relaxed text-neutral-300 whitespace-pre-wrap break-words',
   quote:
     'mb-2 flex w-full items-center gap-1.5 rounded-md border border-[#1f1f1f] bg-[#0b0b0b] px-2 py-1 text-left text-[11px] text-neutral-500 transition hover:text-neutral-300',
+  editBox: 'mt-1.5',
+  editRow: 'mt-1.5 flex items-center justify-end gap-2',
+  ghostBtn:
+    'inline-flex h-7 items-center rounded-lg px-2.5 text-[12px] text-neutral-500 transition hover:bg-[#1f1f1f] hover:text-neutral-200',
   replyRow: 'mt-2.5 flex items-center gap-2 border-t border-[#1f1f1f] pt-2.5',
   reply: 'ml-7 mt-2.5 border-l border-[#1f1f1f] pl-3',
   input:
@@ -76,7 +101,7 @@ function escHtml(value: string): string {
   return value.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
 }
 
-function renderAuraAvatar(seed: string, name: string, sizeClass: string): HTMLElement {
+export function renderAuraAvatar(seed: string, name: string, sizeClass: string): HTMLElement {
   const aura = avatarAura(seed || name, name, 'sm');
   const avatar = document.createElement('span');
   avatar.className = sizeClass;
@@ -107,6 +132,29 @@ function icon(paths: string, size = 20): string {
 const ICON_CHECK = icon('<polyline points="20 6 9 17 4 12"/>');
 const ICON_SEND = icon('<path d="m22 2-7 20-4-9-9-4Z"/><path d="M22 2 11 13"/>');
 const ICON_JUMPS = icon('<path d="M7 17 17 7"/><path d="M7 7h10v10"/>');
+const ICON_PENCIL = icon(
+  '<path d="M21.174 6.812a1 1 0 0 0-3.986-3.987L3.842 16.174a2 2 0 0 0-.5.83l-1.321 4.352a.5.5 0 0 0 .623.622l4.353-1.32a2 2 0 0 0 .83-.497z"/>' +
+    '<path d="m15 5 4 4"/>',
+  16,
+);
+const ICON_TRASH = icon(
+  '<path d="M3 6h18"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6"/>' +
+    '<path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/>' +
+    '<path d="M10 11v6"/><path d="M14 11v6"/>',
+  16,
+);
+const ICON_EYE = icon(
+  '<path d="M2.062 12.348a1 1 0 0 1 0-.696 10.75 10.75 0 0 1 19.876 0 1 1 0 0 1 0 .696 10.75 10.75 0 0 1-19.876 0"/>' +
+    '<circle cx="12" cy="12" r="3"/>',
+  16,
+);
+const ICON_EYE_OFF = icon(
+  '<path d="M10.733 5.076a10.744 10.744 0 0 1 11.205 6.575 1 1 0 0 1 0 .696 10.747 10.747 0 0 1-1.444 2.49"/>' +
+    '<path d="M14.084 14.158a3 3 0 0 1-4.242-4.242"/>' +
+    '<path d="M17.479 17.499a10.75 10.75 0 0 1-15.417-5.151 1 1 0 0 1 0-.696 10.75 10.75 0 0 1 4.446-5.143"/>' +
+    '<path d="m2 2 20 20"/>',
+  16,
+);
 
 export function createCommentPanel(host: HTMLElement, opts: PanelOptions = {}): CommentPanel {
   let documentId = '';
@@ -118,6 +166,11 @@ export function createCommentPanel(host: HTMLElement, opts: PanelOptions = {}): 
   let open = false;
   let loading = false;
   let loadedFor = '';
+  /** Whose comments may be rewritten, and who may delete anybody's. */
+  let viewerId = '';
+  let viewerRole = 'reader';
+  /** Marks in the editor start on; the header keeps a switch for them. */
+  let markersVisible = readPref(PREF_KEYS.commentMarks) !== '0';
 
   /** Reply draft per root id, so a reconcile never eats what the user typed. */
   const drafts = new Map<string, string>();
@@ -149,7 +202,25 @@ export function createCommentPanel(host: HTMLElement, opts: PanelOptions = {}): 
   closeBtn.innerHTML = icon('<path d="M18 6 6 18M6 6l12 12"/>', 16);
   closeBtn.addEventListener('click', () => api.close());
 
-  header.append(title, count, closeBtn);
+  const marksBtn = document.createElement('button');
+  marksBtn.type = 'button';
+  marksBtn.className = CLS.iconBtn;
+  marksBtn.addEventListener('click', () => {
+    markersVisible = !markersVisible;
+    writePref(PREF_KEYS.commentMarks, markersVisible ? '1' : '0');
+    paintMarksButton();
+    updateCount();
+  });
+
+  function paintMarksButton(): void {
+    marksBtn.innerHTML = markersVisible ? ICON_EYE : ICON_EYE_OFF;
+    marksBtn.title = markersVisible ? 'Hide marks in the editor' : 'Show marks in the editor';
+    marksBtn.setAttribute('aria-pressed', String(markersVisible));
+    marksBtn.setAttribute('aria-label', marksBtn.title);
+  }
+  paintMarksButton();
+
+  header.append(title, count, marksBtn, closeBtn);
 
   const scroll = document.createElement('div');
   scroll.className = CLS.scroll;
@@ -322,7 +393,15 @@ export function createCommentPanel(host: HTMLElement, opts: PanelOptions = {}): 
   }
 
   function signatureOf(thread: CommentThread): string {
-    return `${thread.root.id}:${thread.root.resolved}:${thread.replies.map((reply) => reply.id).join(',')}`;
+    // The bodies and `updated_at` are in the signature so an edit made elsewhere
+    // repaints on the next reconcile instead of sitting stale on screen.
+    return [
+      thread.root.id,
+      thread.root.resolved,
+      thread.root.updatedAt,
+      thread.root.body,
+      ...thread.replies.map((reply) => `${reply.id}:${reply.updatedAt}:${reply.body}`),
+    ].join('\u0000');
   }
 
   function renderAvatar(comment: Comment): HTMLElement {
@@ -336,7 +415,18 @@ export function createCommentPanel(host: HTMLElement, opts: PanelOptions = {}): 
     return body;
   }
 
-  function renderLeaf(comment: Comment, isRoot: boolean): HTMLElement {
+  function canEditComment(comment: Comment): boolean {
+    return (
+      Boolean(viewerId) && comment.authorId === viewerId && !comment.pending && !comment.failed
+    );
+  }
+
+  function canDeleteComment(comment: Comment): boolean {
+    if (!viewerId || comment.pending || comment.failed) return false;
+    return comment.authorId === viewerId || viewerRole === 'owner' || viewerRole === 'admin';
+  }
+
+  function renderLeaf(comment: Comment, isRoot: boolean, thread: CommentThread): HTMLElement {
     const wrap = document.createElement('div');
     wrap.dataset.commentId = comment.id;
 
@@ -347,13 +437,16 @@ export function createCommentPanel(host: HTMLElement, opts: PanelOptions = {}): 
     meta.className = 'min-w-0 flex-1';
     meta.innerHTML =
       `<div class="${CLS.author}">${escHtml(comment.authorName)}</div>` +
-      `<div class="${CLS.time}">${timeAgo(comment.createdAt)}${comment.pending ? ' · sending…' : ''}</div>`;
+      `<div class="${CLS.time}">${timeAgo(comment.createdAt)}${comment.edited ? ' · edited' : ''}${comment.pending ? ' · sending…' : ''}</div>`;
 
     head.append(renderAvatar(comment), meta);
 
+    const body = renderBody(comment);
+
+    const actions = document.createElement('div');
+    actions.className = 'flex shrink-0 items-center gap-1';
+
     if (isRoot) {
-      const actions = document.createElement('div');
-      actions.className = 'flex shrink-0 items-center gap-1';
       const jump = document.createElement('button');
       jump.type = 'button';
       jump.className = CLS.iconBtn;
@@ -374,10 +467,33 @@ export function createCommentPanel(host: HTMLElement, opts: PanelOptions = {}): 
         resolveBtn.addEventListener('click', () => void resolveThread(comment.id));
         actions.append(resolveBtn);
       }
-      head.append(actions);
     }
 
-    wrap.append(head, renderBody(comment));
+    if (canEditComment(comment)) {
+      const editBtn = document.createElement('button');
+      editBtn.type = 'button';
+      editBtn.className = CLS.iconBtn;
+      editBtn.title = 'Edit comment';
+      editBtn.setAttribute('aria-label', 'Edit comment');
+      editBtn.innerHTML = ICON_PENCIL;
+      editBtn.addEventListener('click', () => startEdit(comment, body, wrap));
+      actions.append(editBtn);
+    }
+
+    if (canDeleteComment(comment)) {
+      const deleteBtn = document.createElement('button');
+      deleteBtn.type = 'button';
+      deleteBtn.className = `${CLS.iconBtn} hover:!text-red-400`;
+      deleteBtn.title = 'Delete comment';
+      deleteBtn.setAttribute('aria-label', 'Delete comment');
+      deleteBtn.innerHTML = ICON_TRASH;
+      deleteBtn.addEventListener('click', () => void removeComment(comment, thread));
+      actions.append(deleteBtn);
+    }
+
+    if (actions.childElementCount > 0) head.append(actions);
+
+    wrap.append(head, body);
 
     if (comment.failed) {
       const failed = document.createElement('div');
@@ -387,6 +503,140 @@ export function createCommentPanel(host: HTMLElement, opts: PanelOptions = {}): 
     }
 
     return wrap;
+  }
+
+  /**
+   * Swaps the read-only body for a textarea. Cancel puts the old node back, so
+   * nothing else in the thread is rebuilt and a half-typed reply is untouched.
+   */
+  function startEdit(comment: Comment, body: HTMLElement, wrap: HTMLElement): void {
+    if (wrap.dataset.editing === '1') return;
+    wrap.dataset.editing = '1';
+
+    const box = document.createElement('div');
+    box.className = CLS.editBox;
+
+    const input = document.createElement('textarea');
+    input.rows = 2;
+    input.maxLength = 4000;
+    input.className = CLS.composerInput;
+    input.value = comment.body;
+    input.setAttribute('aria-label', 'Edit comment');
+
+    const row = document.createElement('div');
+    row.className = CLS.editRow;
+
+    const cancel = document.createElement('button');
+    cancel.type = 'button';
+    cancel.className = CLS.ghostBtn;
+    cancel.textContent = 'Cancel';
+
+    const save = document.createElement('button');
+    save.type = 'button';
+    save.className = CLS.primary;
+    save.textContent = 'Save';
+
+    function stop(): void {
+      wrap.dataset.editing = '';
+      box.replaceWith(body);
+    }
+
+    async function commit(): Promise<void> {
+      const next = input.value.trim();
+      if (!next) return;
+      if (next === comment.body) {
+        stop();
+        return;
+      }
+      save.disabled = true;
+      const result = await updateComment(comment.id, next);
+      if (!result.ok) {
+        save.disabled = false;
+        flash(result.error, 'error');
+        return;
+      }
+      replaceComment(result.comment);
+    }
+
+    cancel.addEventListener('click', stop);
+    save.addEventListener('click', () => void commit());
+    input.addEventListener('keydown', (event) => {
+      if (event.key === 'Escape') {
+        event.stopPropagation();
+        stop();
+      } else if (event.key === 'Enter' && (event.ctrlKey || event.metaKey)) {
+        event.preventDefault();
+        void commit();
+      }
+    });
+
+    row.append(cancel, save);
+    box.append(input, row);
+    body.replaceWith(box);
+    input.focus();
+    input.setSelectionRange(input.value.length, input.value.length);
+  }
+
+  /** Puts an edited comment back into its thread and repaints that thread only. */
+  function replaceComment(updated: Comment): void {
+    for (const thread of threads) {
+      if (thread.root.id === updated.id) {
+        thread.root = { ...updated, edited: true };
+        refreshThreadNode(thread);
+        return;
+      }
+      const index = thread.replies.findIndex((reply) => reply.id === updated.id);
+      if (index >= 0) {
+        thread.replies[index] = { ...updated, edited: true };
+        refreshThreadNode(thread);
+        return;
+      }
+    }
+  }
+
+  /**
+   * Takes the comment off screen first, then asks. A refused delete puts it back
+   * exactly where it was, so a reader who tapped the wrong bin loses nothing.
+   */
+  async function removeComment(comment: Comment, thread: CommentThread): Promise<void> {
+    const isRoot = comment.parentId === null;
+    const confirmed = await confirmAction({
+      title: isRoot ? 'Delete this comment?' : 'Delete this reply?',
+      message:
+        isRoot && thread.replies.length > 0
+          ? 'Its replies go with it, for everyone. This cannot be undone.'
+          : 'It disappears for everyone. This cannot be undone.',
+      confirmLabel: 'Delete',
+      danger: true,
+    });
+    if (!confirmed) return;
+
+    const snapshot: CommentThread = { root: thread.root, replies: thread.replies };
+
+    if (isRoot) {
+      threads = threads.filter((entry) => entry.root.id !== thread.root.id);
+      nodes.get(thread.root.id)?.remove();
+      nodes.delete(thread.root.id);
+      if (threads.length === 0) renderAll();
+    } else {
+      thread.replies = thread.replies.filter((reply) => reply.id !== comment.id);
+      refreshThreadNode(thread);
+    }
+    updateCount();
+
+    const result = await deleteComment(comment.id);
+    if (result.ok) return;
+
+    if (isRoot) {
+      threads.push(snapshot);
+      sortThreads();
+      renderAll();
+    } else {
+      thread.replies = snapshot.replies;
+      refreshThreadNode(thread);
+    }
+    updateCount();
+    flash(result.error, 'error');
   }
 
   function renderReplyInput(thread: CommentThread): HTMLElement {
@@ -449,12 +699,12 @@ export function createCommentPanel(host: HTMLElement, opts: PanelOptions = {}): 
       body.append(quote);
     }
 
-    body.append(renderLeaf(thread.root, true));
+    body.append(renderLeaf(thread.root, true, thread));
 
     const replies = document.createElement('div');
     replies.dataset.replies = thread.root.id;
     for (const reply of thread.replies) {
-      const leaf = renderLeaf(reply, false);
+      const leaf = renderLeaf(reply, false, thread);
       leaf.className = CLS.reply;
       replies.append(leaf);
     }
@@ -534,7 +784,9 @@ export function createCommentPanel(host: HTMLElement, opts: PanelOptions = {}): 
     count.textContent = String(threads.length);
     count.hidden = threads.length === 0;
     document.dispatchEvent(
-      new CustomEvent('mdverse:comments-changed', { detail: { documentId, threads } }),
+      new CustomEvent('mdverse:comments-changed', {
+        detail: { documentId, threads, markersVisible },
+      }),
     );
   }
 
@@ -635,7 +887,18 @@ export function createCommentPanel(host: HTMLElement, opts: PanelOptions = {}): 
       }
     }
 
-    if (threads.length === 0) renderAll();
+    // New threads used to be pushed with no node at all, which left the panel
+    // blank for a document whose comments were fetched while it was closed.
+    if (threads.length === 0 || nodes.size === 0) {
+      renderAll();
+    } else {
+      for (const thread of threads) {
+        if (nodes.has(thread.root.id)) continue;
+        const node = renderThread(thread);
+        nodes.set(thread.root.id, node);
+        scroll.append(node);
+      }
+    }
     loadedFor = documentId;
     updateCount();
   }
@@ -769,11 +1032,22 @@ export function createCommentPanel(host: HTMLElement, opts: PanelOptions = {}): 
       closeMentionMenu();
     },
 
-    setDocument(id, canEdit, signedInNow = true) {
-      if (id === documentId && canEdit === canComment && signedInNow === signedIn) return;
+    setDocument(id, canEdit, signedInNow = true, viewer) {
+      const nextViewerId = viewer?.userId ?? '';
+      const nextViewerRole = viewer?.role ?? 'reader';
+      if (
+        id === documentId &&
+        canEdit === canComment &&
+        signedInNow === signedIn &&
+        nextViewerId === viewerId &&
+        nextViewerRole === viewerRole
+      )
+        return;
       documentId = id;
       canComment = canEdit;
       signedIn = signedInNow;
+      viewerId = nextViewerId;
+      viewerRole = nextViewerRole;
       threads = [];
       nodes.clear();
       drafts.clear();
@@ -789,6 +1063,15 @@ export function createCommentPanel(host: HTMLElement, opts: PanelOptions = {}): 
 
     refresh() {
       if (signedIn && documentId) void reconcile();
+    },
+
+    focusThread(id) {
+      if (!open) api.open();
+      const node = nodes.get(id);
+      if (!node) return;
+      node.scrollIntoView({ block: 'nearest' });
+      node.classList.add('ring-1', 'ring-[#2563eb]');
+      window.setTimeout(() => node.classList.remove('ring-1', 'ring-[#2563eb]'), 1400);
     },
   };
 
