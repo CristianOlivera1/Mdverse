@@ -29,7 +29,7 @@ export const theme = {
   monoStack: "ui-monospace, SFMono-Regular, Menlo, Consolas, monospace",
 } as const;
 
-export const DEFAULT_SITE_URL = 'https://mdverse.pages.dev';
+export const DEFAULT_SITE_URL = 'https://mdverse.dev';
 
 interface EmailShellProps {
   preview: string;

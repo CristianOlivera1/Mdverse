@@ -19,6 +19,7 @@
     "format:check": "prettier --check .",
     "test": "vitest run",
     "test:watch": "vitest",
+    "budget": "node scripts/check-bundle-budget.mjs",
     "test:db": "vitest run --config vitest.integration.config.ts",
     "db:start": "supabase start",
     "db:stop": "supabase stop",

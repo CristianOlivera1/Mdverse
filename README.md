@@ -17,7 +17,7 @@
 
 <p align="center">Write Markdown with live preview, organized in named documents.</p>
 
-<p align="center"><a href="https://mdverse.pages.dev"><strong>Live demo</strong></a> · <a href="#quickstart">Get started</a> · <a href="https://mdverse.pages.dev/dashboard">Open dashboard</a></p>
+<p align="center"><a href="https://mdverse.dev"><strong>Live demo</strong></a> · <a href="#quickstart">Get started</a> · <a href="https://mdverse.dev/dashboard">Open dashboard</a></p>
 
 <img width="1607" height="920" alt="openvid-1791518338477 (1)" src="https://github.com/user-attachments/assets/5078e6a5-8d31-4165-b618-de09dfd4ba06" />
 
@@ -91,4 +91,4 @@ pnpm dev # http://localhost:4321
 
 ## Try it now
 
-Open the **[live demo](https://mdverse.pages.dev)**, write your first note, then sign in to keep it forever.
+Open the **[live demo](https://mdverse.dev)**, write your first note, then sign in to keep it forever.

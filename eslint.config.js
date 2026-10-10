@@ -18,7 +18,9 @@ export default defineConfig([
   ...tseslint.configs.recommended,
   ...astro.configs['flat/recommended'],
   {
-    files: ['tests/db/**/*.mjs'],
+    // Node-side scripts (the DB harness and the asset budget gate) run outside
+    // the browser and are allowed to use the terminal.
+    files: ['scripts/**/*.mjs', 'tests/db/**/*.mjs'],
     languageOptions: {
       globals: {
         console: 'readonly',

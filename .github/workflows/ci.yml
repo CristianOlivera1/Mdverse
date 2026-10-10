@@ -38,5 +38,11 @@ jobs:
       - name: Check formatting
         run: pnpm format:check
 
+      - name: Unit tests
+        run: pnpm test
+
       - name: Build
         run: pnpm build
+
+      - name: Bundle budget
+        run: pnpm budget
