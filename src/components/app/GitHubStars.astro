@@ -29,30 +29,29 @@ const href = `https://github.com/${owner}/${repo}`;
     <span data-gh-stars hidden class="ml-auto tabular-nums text-neutral-500"></span>
   </a>
 ) : (
-<span class="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 z-20 hidden md:block">
-<a
-  href={href}
-  target="_blank"
-  rel="noopener noreferrer"
-  class="hb"
-  title="View source on GitHub"
-  aria-label="View source on GitHub"
-  data-gh-owner={owner}
-  data-gh-repo={repo}
->
-  <Icon name="simple-icons:github" />
-  <span
-    data-gh-stars
-    hidden
-    aria-hidden="true"
-    class="min-[480px]:inline max-[479px]:hidden tabular-nums"
-  ></span>
-</a>
-</span>
+  <span class="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 z-20 hidden md:block">
+    <a
+      href={href}
+      target="_blank"
+      rel="noopener noreferrer"
+      class="hb"
+      title="View source on GitHub"
+      aria-label="View source on GitHub"
+      data-gh-owner={owner}
+      data-gh-repo={repo}
+    >
+      <Icon name="simple-icons:github" />
+      <span
+        data-gh-stars
+        hidden
+        aria-hidden="true"
+        class="min-[480px]:inline max-[479px]:hidden tabular-nums"
+      ></span>
+    </a>
+  </span>
 )}
 
 <script>
-
   (function (): void {
     const flag = '__ghStarsBooted';
     if ((window as unknown as Record<string, unknown>)[flag]) return;
@@ -153,8 +152,7 @@ const href = `https://github.com/${owner}/${repo}`;
           paint(root, stars);
           writeCache(key, stars);
         },
-        function () {
-        },
+        function () {},
       );
     }
 

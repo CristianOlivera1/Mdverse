@@ -13,13 +13,14 @@ const zoomId = `zoom-value${suffix}`;
 <div>
   <button
     type="button"
-    class="hb"
+    class="hb w-full justify-start!"
     data-menu={menuName}
     aria-haspopup="true"
     aria-expanded="false"
     title="View settings"
   >
     <Icon name="lucide:sliders-horizontal" />
+    <span class="lg:inline">Settings</span>
   </button>
   <div class="pop" data-pop={menuName} hidden>
     <button
