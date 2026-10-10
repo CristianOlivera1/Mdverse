@@ -44,7 +44,7 @@ export function cspOrigins(supabaseUrl: string | null | undefined): CspOrigins {
 export function cspDeploymentDirectives(supabaseUrl: string | null | undefined): string[] {
   const { https, wss } = cspOrigins(supabaseUrl);
   const connect = ["'self'", https, wss, 'https://api.github.com'].filter(Boolean).join(' ');
-  const images = ["'self'", 'data:', 'blob:', https].filter(Boolean).join(' ');
+  const images = ["'self'", 'data:', 'blob:', 'https:'].join(' ');
   return [`connect-src ${connect}`, `img-src ${images}`];
 }
 

@@ -119,6 +119,14 @@ async function replaceMermaidBlocks(
   }
 }
 
+function hardenImages(root: Element): void {
+  root.querySelectorAll<HTMLImageElement>('img').forEach((img) => {
+    img.setAttribute('referrerpolicy', 'no-referrer');
+    img.setAttribute('loading', 'lazy');
+    img.setAttribute('decoding', 'async');
+  });
+}
+
 export async function renderMarkdown(
   target: RenderTarget,
   markdown: string,
@@ -144,6 +152,7 @@ export async function renderMarkdown(
 
     assignHeadingIds(staged);
     linkExternalAnchors(staged);
+    hardenImages(staged);
     highlightCodeBlocks(staged);
     wrapTables(staged);
     await replaceMermaidBlocks(staged, renderDiagram, interactive);

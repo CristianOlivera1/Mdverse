@@ -126,16 +126,18 @@ export function bucketKey(route: string, parts: readonly string[]): string {
   return `${route}:${parts.map(hashForLog).join(':')}`;
 }
 
-export type ApiRouteKind = 'docx' | 'upload' | 'public-export';
+export type ApiRouteKind = 'docx' | 'docx-anon' | 'upload' | 'public-export';
 
 export const API_RATE_LIMITS: Record<ApiRouteKind, RateLimitConfig> = {
   docx: { capacity: 20, windowSeconds: 600 },
+  'docx-anon': { capacity: 5, windowSeconds: 600 },
   upload: { capacity: 30, windowSeconds: 600 },
   'public-export': { capacity: 60, windowSeconds: 600 },
 };
 
 const apiStores: Record<ApiRouteKind, BucketStore> = {
   docx: new Map(),
+  'docx-anon': new Map(),
   upload: new Map(),
   'public-export': new Map(),
 };

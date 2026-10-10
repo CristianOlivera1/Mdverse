@@ -9,9 +9,9 @@ const MAX_MARKDOWN_BYTES = 2 * 1024 * 1024;
 
 export const POST: APIRoute = async (context) => {
   const session = apiSession(context);
-  if (!session) return jsonError(401, 'unauthenticated');
 
-  const limit = enforceApiRateLimit('docx', context.request, session.userId);
+  const limit = enforceApiRateLimit('docx', context.request, session?.userId);
+  
   if (!limit.allowed) return apiRateLimitedResponse(limit);
 
   const body = await readJsonObject(context.request);

@@ -10,11 +10,29 @@ const ALLOWED_MIME = new Set([
   'image/png',
   'image/gif',
   'image/webp',
-  'image/svg+xml',
   'image/avif',
 ]);
 
 const BUCKET = 'doc-images';
+
+const EXT: Record<string, string> = {
+  'image/jpeg': 'jpg',
+  'image/png': 'png',
+  'image/gif': 'gif',
+  'image/webp': 'webp',
+  'image/avif': 'avif',
+};
+
+function sniffImageMime(b: Uint8Array): string | null {
+  const ascii = (from: number, to: number) => String.fromCharCode(...b.subarray(from, to));
+  if (b.length < 12) return null;
+  if (b[0] === 0xff && b[1] === 0xd8 && b[2] === 0xff) return 'image/jpeg';
+  if (b[0] === 0x89 && ascii(1, 4) === 'PNG') return 'image/png';
+  if (ascii(0, 3) === 'GIF') return 'image/gif';
+  if (ascii(0, 4) === 'RIFF' && ascii(8, 12) === 'WEBP') return 'image/webp';
+  if (ascii(4, 8) === 'ftyp' && ['avif', 'avis'].includes(ascii(8, 12))) return 'image/avif';
+  return null;
+}
 
 export const POST: APIRoute = async (context) => {
   try {
@@ -24,6 +42,9 @@ export const POST: APIRoute = async (context) => {
 
     const limit = enforceApiRateLimit('upload', context.request, userId);
     if (!limit.allowed) return apiRateLimitedResponse(limit);
+
+    const declared = Number(context.request.headers.get('content-length') ?? '0');
+    if (declared > MAX_IMAGE_BYTES + 64 * 1024) return jsonError(413, 'file_too_large');
 
     let form: FormData;
     try {
@@ -38,23 +59,21 @@ export const POST: APIRoute = async (context) => {
     if (!(file instanceof File)) return jsonError(400, 'file_missing');
     if (!isDocumentId(documentId)) return jsonError(400, 'invalid_document_id');
 
-    if (!ALLOWED_MIME.has(file.type)) return jsonError(415, 'unsupported_format');
     if (file.size > MAX_IMAGE_BYTES) return jsonError(413, 'file_too_large');
 
     const hasAccess = await checkEditAccess(supabase, documentId, userId);
     if (!hasAccess) return jsonError(403, 'forbidden');
 
-    const ext = file.type === 'image/svg+xml'
-      ? 'svg'
-      : (file.type.split('/')[1] ?? 'bin');
-    const storagePath = `${userId}/${documentId}/${Date.now()}-${Math.random().toString(36).slice(2, 8)}.${ext}`;
-
     const buffer = await file.arrayBuffer();
+    const mime = sniffImageMime(new Uint8Array(buffer));
+    if (!mime || !ALLOWED_MIME.has(mime)) return jsonError(415, 'unsupported_format');
+
+    const storagePath = `${userId}/${documentId}/${crypto.randomUUID()}.${EXT[mime]}`;
 
     const { error: uploadError } = await supabase.storage
       .from(BUCKET)
       .upload(storagePath, buffer, {
-        contentType: file.type,
+        contentType: mime,
         cacheControl: '31536000',
         upsert: false,
       });
@@ -70,7 +89,7 @@ export const POST: APIRoute = async (context) => {
       const { error: adminErr } = await adminClient.storage
         .from(BUCKET)
         .upload(storagePath, buffer, {
-          contentType: file.type,
+          contentType: mime,
           cacheControl: '31536000',
           upsert: false,
         });

@@ -25,7 +25,7 @@ const EXT: Record<string, string> = {
 export function validateImageFile(file: File): ImageUploadResult | null {
   if (!ALLOWED_TYPES.has(file.type)) return { ok: false, reason: 'wrong_type' };
   if (file.size > MAX_IMAGE_BYTES) return { ok: false, reason: 'too_large' };
-  return null; // valid
+  return null;
 }
 
 async function sanitizeSvg(file: File): Promise<File | null> {

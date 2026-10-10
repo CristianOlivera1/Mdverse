@@ -62,7 +62,7 @@ export function renderStaticMarkdown(
     image(token: Tokens.Image) {
       const src = safeHref(token.href);
       const title = token.title ? ` title="${escapeHtml(token.title)}"` : '';
-      return `<img src="${escapeHtml(src)}" alt="${escapeHtml(token.text)}"${title} />`;
+      return `<img src="${escapeHtml(src)}" alt="${escapeHtml(token.text)}"${title} referrerpolicy="no-referrer" loading="lazy" decoding="async" />`;
     },
   };
 
