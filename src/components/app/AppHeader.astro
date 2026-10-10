@@ -1,12 +1,14 @@
 ---
 import Icon from '../ui/Icon.astro';
 import DocumentTabs from './DocumentTabs.astro';
+import GitHubStars from './GitHubStars.astro';
 import CollaborateDialog from './CollaborateDialog.astro';
 import PresenceBar from './PresenceBar.astro';
 import ExportMenu from './ExportMenu.astro';
 import ViewMenu from './ViewMenu.astro';
 import ClearMenu from './ClearMenu.astro';
 import AccountMenu from '../auth/AccountMenu.astro';
+import RequestAccessPopup from './RequestAccessPopup.astro';
 ---
 
 <header class="relative flex items-center justify-between h-12 px-2 sm:px-3 border-b border-neutral-800 shrink-0 gap-1.5 sm:gap-3 select-none">
@@ -17,6 +19,8 @@ import AccountMenu from '../auth/AccountMenu.astro';
       class="w-full h-full object-cover opacity-70 sm:opacity-90 mask-b-from-80% mask-b-to-99%"
     />
   </div>
+
+  <GitHubStars />
 
   <div class="flex items-center gap-0 sm:gap-1.5 lg:gap-3 min-w-0 z-10">
     <a href="/" class="max-sm:hidden flex items-center shrink-0" aria-label="Mdverse Home">
@@ -101,18 +105,25 @@ import AccountMenu from '../auth/AccountMenu.astro';
             Collaborate
           </button>
         </div>
+        <div class="pop-sep"></div>
+        <GitHubStars variant="menu" />
       </div>
     </div>
 
-    <span
+    <button
       id="role-badge"
+      type="button"
       class="hb role-badge"
       hidden
-      title="Only the owner and editors can save changes"
+      title="View only - click to request edit access"
+      aria-haspopup="dialog"
+      aria-expanded="false"
+      aria-controls="request-access-pop"
     >
       <Icon name="lucide:lock" />
       <span class="hidden lg:inline">View only</span>
-    </span>
+    </button>
+    <RequestAccessPopup />
 
     <span class="hidden sm:inline sep"></span>
     <AccountMenu />

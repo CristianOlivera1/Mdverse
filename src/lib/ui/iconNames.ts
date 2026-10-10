@@ -58,6 +58,7 @@ export const ICONIFY_ICONS = {
     'settings',
     'shield-check',
     'sliders-horizontal',
+    'star',
     'strikethrough',
     'table',
     'trash',

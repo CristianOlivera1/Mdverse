@@ -901,7 +901,7 @@ export function initEditorApp(): void {
   // 1. Create a hidden mirror <div> that replicates the textarea's text and
   //    typography exactly (including wrapping).
   // 2. For each match, wrap the matching text nodes in a <mark> element and
-  //    call getBoundingClientRect() on it — the browser resolves the position
+  //    call getBoundingClientRect() on it - the browser resolves the position
   //    including padding, border, scroll offsets, zoom and font metrics.
   // 3. Convert from viewport coords to pane-relative coords and paint a
   //    highlight box in the overlay layer.
@@ -1197,7 +1197,7 @@ export function initEditorApp(): void {
       });
       refreshFind(pane);
       flashReplaceSuccess(pane, replaceCount);
-      // Don't restore disabled here on success — flashReplaceSuccess already did it.
+      // Don't restore disabled here on success - flashReplaceSuccess already did it.
       return;
     } finally {
       // Always hide the spinner and reset aria-busy.
@@ -1359,6 +1359,23 @@ export function initEditorApp(): void {
     announceActiveDocument();
   }
 
+  /**
+   * Whether this browser has an account behind it.
+   *
+   * `data-signed-in` is rendered by the server, which resolved the session from
+   * the cookies before this script ran: `'false'` is an answer, so the editor
+   * skips the document list instead of asking for it and collecting a 401 on
+   * every refresh. A page that does not say (`undefined`) falls back to what the
+   * client learned by asking, which is the old behaviour.
+   */
+  const declaredSignedIn = document.body.dataset.signedIn;
+
+  function hasAccount(): boolean {
+    if (declaredSignedIn === 'true') return true;
+    if (declaredSignedIn === 'false') return false;
+    return cloud !== null;
+  }
+
   /** The header's collaboration dialog follows whichever tab is on screen. */
   function announceActiveDocument(): void {
     const doc = documentById(activeId);
@@ -1373,6 +1390,7 @@ export function initEditorApp(): void {
           id: doc.id,
           title: doc.title,
           collaborative: cloud !== null,
+          signedIn: hasAccount(),
           role: doc.role ?? 'owner',
         },
       }),
@@ -1787,7 +1805,7 @@ export function initEditorApp(): void {
     );
 
     // Debounced (120ms): the count is an exact lazy pass and the repaint
-    // touches up to 300 pooled nodes — neither belongs on every keystroke.
+    // touches up to 300 pooled nodes - neither belongs on every keystroke.
     // The replace field only moves the count line (same single pass, via
     // `updateFindCount`), so it stays immediate.
     pane.findInput.addEventListener('input', () => {
@@ -1796,7 +1814,7 @@ export function initEditorApp(): void {
     });
     pane.replaceInput.addEventListener('input', () => updateFindCount(pane));
     // Scroll repaint rides its own rAF-throttled listener (passive), mirroring
-    // how the collab overlay repaints — independent of the sync-scroll pipe.
+    // how the collab overlay repaints - independent of the sync-scroll pipe.
     let findScrollQueued = false;
     textarea.addEventListener(
       'scroll',
@@ -1957,7 +1975,7 @@ export function initEditorApp(): void {
               const lineRange = commands.selectLineRange(state);
               const lineText = textarea.value.slice(lineRange.start, lineRange.end);
               void navigator.clipboard.writeText(lineText + '\n').catch(() =>
-                toast('Copy failed — check clipboard permissions'),
+                toast('Copy failed - check clipboard permissions'),
               );
               handled = true;
             }
@@ -2097,8 +2115,9 @@ export function initEditorApp(): void {
 
   /**
    * A `?doc=<id>` that is not in this account's tabs can still be one it is
-   * allowed to *read*: a document published as `public` is visible to anyone,
-   * RLS included, but `listDocuments` keeps it out of the tab list on purpose -
+   * allowed to *read*: a document published as `public`, or shared by link as
+   * `unlisted`, is visible to anyone holding the address, RLS included, but
+   * `listDocuments` keeps it out of the tab list on purpose -
    * else "my documents" would fill up with strangers' pages. The preview already
    * reads such a document straight from the API; this gives the editor the same
    * reach, as a read-only tab that is never persisted to the account. A signed-out
@@ -2125,12 +2144,14 @@ export function initEditorApp(): void {
     } catch {
       pendingHash = null;
     }
-    const session = await openCloudDocuments();
+    // No session in the markup means no session to ask about: the request would
+    // only ever answer 401.
+    const session = declaredSignedIn === 'false' ? null : await openCloudDocuments();
 
     if (!session) {
       // Signed out, a `?doc=` link can still be readable: a document published as
-      // `public` answers the anonymous request. Load it before seeding, so a
-      // visitor who only followed a link does not also get a welcome draft.
+      // `public`, or shared by link, answers the anonymous request. Load it before
+      // seeding, so a visitor who only followed a link does not also get a draft.
       await openReadableDocument(requested);
       bootDocuments();
       booted = true;

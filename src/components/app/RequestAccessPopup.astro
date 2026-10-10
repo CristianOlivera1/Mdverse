@@ -1,0 +1,155 @@
+---
+import Icon from '../ui/Icon.astro';
+---
+
+<div
+  id="request-access-pop"
+  role="dialog"
+  aria-labelledby="rap-heading"
+  aria-modal="false"
+  hidden
+  class="rap"
+>
+  <div class="rap-arrow" aria-hidden="true"></div>
+
+  <h3 id="rap-heading" class="rap-heading">
+    <Icon name="lucide:lock" size={13} />
+    Request edit access
+  </h3>
+
+  <p class="rap-desc">
+    You can view this document but can't edit it. Send a request to the owner
+    - they'll receive an email and can grant you access.
+  </p>
+
+  <form id="request-access-form" class="rap-form">
+    <textarea
+      id="rap-message"
+      name="message"
+      rows="2"
+      maxlength="300"
+      placeholder="Add a short note (optional)"
+      class="rap-textarea"
+      aria-label="Optional message for the document owner"
+    ></textarea>
+
+    <div class="rap-actions">
+      <button type="submit" class="hb on" id="rap-submit">
+        <span id="rap-submit-label">Send request</span>
+        <span class="msel-spin" id="rap-spinner" hidden>
+          <Icon name="lucide:loader-circle" size={14} />
+        </span>
+      </button>
+      <button type="button" class="hb" id="rap-cancel">Cancel</button>
+    </div>
+
+    <p id="rap-notice" class="rap-notice" role="status" aria-live="polite" hidden></p>
+  </form>
+</div>
+
+<style>
+  .rap {
+    position: fixed;
+    z-index: 200;
+    width: min(320px, calc(100vw - 16px));
+    background: #0e0e0e;
+    border: 1px solid #2a2a2a;
+    border-radius: 12px;
+    box-shadow: 0 16px 48px #000c, 0 0 0 1px #ffffff08;
+    padding: 14px 16px 16px;
+    color: #e5e5e5;
+  }
+
+  .rap[hidden] { display: none; }
+
+  .rap-arrow {
+    position: absolute;
+    top: -6px;
+    right: 20px;
+    width: 10px;
+    height: 10px;
+    background: #0e0e0e;
+    border-left: 1px solid #2a2a2a;
+    border-top: 1px solid #2a2a2a;
+    transform: rotate(45deg);
+    border-radius: 2px 0 0 0;
+  }
+
+  .rap-heading {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 12px;
+    font-weight: 600;
+    color: #e5e5e5;
+    margin: 0 0 8px;
+  }
+
+  .rap-desc {
+    font-size: 11px;
+    line-height: 1.6;
+    color: #737373;
+    margin: 0 0 12px;
+  }
+
+  .rap-form {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+  }
+
+  .rap-textarea {
+    width: 100%;
+    resize: none;
+    background: #000;
+    border: 1px solid #2a2a2a;
+    border-radius: 8px;
+    padding: 8px 10px;
+    font-size: 12px;
+    color: #e5e5e5;
+    font-family: inherit;
+    transition: border-color 0.15s;
+    box-sizing: border-box;
+  }
+
+  .rap-textarea::placeholder { color: #4a4a4a; }
+  .rap-textarea:focus {
+    outline: none;
+    border-color: #525252;
+  }
+
+  .rap-actions {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+  }
+
+  .rap-notice {
+    font-size: 11px;
+    line-height: 1.5;
+    padding: 6px 10px;
+    border-radius: 6px;
+    margin: 0;
+  }
+
+  .rap-notice[data-tone="success"] {
+    background: #052e16;
+    border: 1px solid #166534;
+    color: #86efac;
+  }
+  .rap-notice[data-tone="error"] {
+    background: #2d0d0d;
+    border: 1px solid #7f1d1d;
+    color: #fca5a5;
+  }
+  .rap-notice[data-tone="info"] {
+    background: #0c1a2e;
+    border: 1px solid #1e3a5f;
+    color: #93c5fd;
+  }
+</style>
+
+<script>
+  import { initRequestAccessPopup } from '@/lib/app/requestAccessPopup';
+  initRequestAccessPopup();
+</script>

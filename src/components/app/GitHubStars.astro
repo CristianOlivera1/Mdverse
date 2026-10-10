@@ -1,0 +1,183 @@
+---
+import { PUBLIC_GITHUB_OWNER, PUBLIC_GITHUB_REPO } from 'astro:env/client';
+
+import Icon from '../ui/Icon.astro';
+
+interface Props {
+  owner?: string;
+  repo?: string;
+  variant?: 'header' | 'menu';
+}
+
+const { owner = PUBLIC_GITHUB_OWNER, repo = PUBLIC_GITHUB_REPO, variant = 'header' } = Astro.props;
+const href = `https://github.com/${owner}/${repo}`;
+---
+
+{variant === 'menu' ? (
+  <a
+    href={href}
+    target="_blank"
+    rel="noopener noreferrer"
+    class="mi"
+    title="View source on GitHub"
+    aria-label="View source on GitHub"
+    data-gh-owner={owner}
+    data-gh-repo={repo}
+  >
+    <Icon name="simple-icons:github" />
+    <span>Star on GitHub</span>
+    <span data-gh-stars hidden class="ml-auto tabular-nums text-neutral-500"></span>
+  </a>
+) : (
+<span class="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 z-20 hidden md:block">
+<a
+  href={href}
+  target="_blank"
+  rel="noopener noreferrer"
+  class="hb"
+  title="View source on GitHub"
+  aria-label="View source on GitHub"
+  data-gh-owner={owner}
+  data-gh-repo={repo}
+>
+  <Icon name="simple-icons:github" />
+  <span
+    data-gh-stars
+    hidden
+    aria-hidden="true"
+    class="min-[480px]:inline max-[479px]:hidden tabular-nums"
+  ></span>
+</a>
+</span>
+)}
+
+<script>
+
+  (function (): void {
+    const flag = '__ghStarsBooted';
+    if ((window as unknown as Record<string, unknown>)[flag]) return;
+    (window as unknown as Record<string, unknown>)[flag] = true;
+
+    const NAME_PATTERN = /^[A-Za-z0-9_.-]+$/;
+    const CACHE_TTL_MS = 15 * 60 * 1000; // 15min
+    let compactFormat: Intl.NumberFormat | null = null;
+    try {
+      compactFormat = new Intl.NumberFormat('en', { notation: 'compact' });
+    } catch {
+      compactFormat = null;
+    }
+    const inflight = new Map<string, Promise<number>>();
+
+    function cacheKey(owner: string, repo: string): string {
+      return 'mdverse:gh-stars:' + owner + '/' + repo;
+    }
+
+    function readCache(key: string): { stars: number; updatedAt: number } | null {
+      try {
+        const raw = window.localStorage.getItem(key);
+        if (!raw) return null;
+        const parsed: unknown = JSON.parse(raw);
+        if (
+          !parsed ||
+          typeof parsed !== 'object' ||
+          typeof (parsed as { stars?: unknown }).stars !== 'number' ||
+          typeof (parsed as { updatedAt?: unknown }).updatedAt !== 'number'
+        ) {
+          return null;
+        }
+        const entry = parsed as { stars: number; updatedAt: number };
+        return { stars: entry.stars, updatedAt: entry.updatedAt };
+      } catch {
+        return null;
+      }
+    }
+
+    function writeCache(key: string, stars: number): void {
+      try {
+        window.localStorage.setItem(key, JSON.stringify({ stars: stars, updatedAt: Date.now() }));
+      } catch {
+        // Storage full or unavailable: the count simply won't persist.
+      }
+    }
+
+    function paint(root: Element, stars: number): void {
+      const count = root.querySelector('[data-gh-stars]');
+      if (!count) return;
+      count.textContent = compactFormat ? compactFormat.format(stars) : String(stars);
+      count.removeAttribute('hidden');
+      const label = 'View source on GitHub (' + stars.toLocaleString('en') + ' stars)';
+      root.setAttribute('title', label);
+      root.setAttribute('aria-label', label);
+    }
+
+    function fetchStars(owner: string, repo: string): Promise<number> {
+      const flightKey = owner + '/' + repo;
+      const pending = inflight.get(flightKey);
+      if (pending) return pending;
+      const request: Promise<number> = fetch('https://api.github.com/repos/' + owner + '/' + repo, {
+        headers: { Accept: 'application/vnd.github+json' },
+      })
+        .then(function (response) {
+          if (!response.ok) throw new Error('GitHub API responded with ' + response.status);
+          return response.json() as Promise<unknown>;
+        })
+        .then(
+          function (data: unknown) {
+            inflight.delete(flightKey);
+            const stars =
+              data && typeof data === 'object'
+                ? (data as { stargazers_count?: unknown }).stargazers_count
+                : undefined;
+            if (typeof stars !== 'number') throw new Error('Unexpected GitHub API shape');
+            return stars;
+          },
+          function (error: unknown) {
+            inflight.delete(flightKey);
+            throw error;
+          },
+        );
+      inflight.set(flightKey, request);
+      return request;
+    }
+
+    function enhance(root: Element): void {
+      const owner = root.getAttribute('data-gh-owner') || '';
+      const repo = root.getAttribute('data-gh-repo') || '';
+      if (!NAME_PATTERN.test(owner) || !NAME_PATTERN.test(repo)) return;
+      const key = cacheKey(owner, repo);
+      const cached = readCache(key);
+      if (cached) paint(root, cached.stars);
+      if (cached && Date.now() - cached.updatedAt < CACHE_TTL_MS) return;
+      fetchStars(owner, repo).then(
+        function (stars: number) {
+          paint(root, stars);
+          writeCache(key, stars);
+        },
+        function () {
+        },
+      );
+    }
+
+    function run(): void {
+      const roots = document.querySelectorAll('[data-gh-owner][data-gh-repo]');
+      for (let index = 0; index < roots.length; index += 1) {
+        try {
+          enhance(roots[index]);
+        } catch {
+          // One bad root must never break the header (or the other roots).
+        }
+      }
+    }
+
+    if ('requestIdleCallback' in window) {
+      window.requestIdleCallback(
+        function () {
+          run();
+        },
+        { timeout: 2000 },
+      );
+    } else {
+      setTimeout(run, 1);
+    }
+  })();
+</script>
