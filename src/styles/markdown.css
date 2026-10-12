@@ -269,6 +269,21 @@
   list-style: none;
 }
 
+.prose input[type='checkbox'] {
+  width: 1rem;
+  height: 1rem;
+  margin: 0 0.5rem 0 0;
+  vertical-align: -2px;
+  flex-shrink: 0;
+  accent-color: #2563eb;
+  cursor: pointer;
+}
+
+.prose input[type='checkbox']:disabled {
+  opacity: 1;
+  cursor: default;
+}
+
 .kd-math-block {
   display: block;
   margin: 1.1em 0;
