@@ -2,6 +2,15 @@
 import Icon from '../ui/Icon.astro';
 ---
 
+<button
+  type="button"
+  class="hb shrink-0"
+  data-command="new-document"
+  title="New document"
+  aria-label="New document"
+>
+  <Icon name="lucide:plus" />
+</button>
 <div class="flex min-w-0 flex-1 items-center gap-0.5" data-tabs-wrap>
   <button
     type="button"
@@ -30,12 +39,3 @@ import Icon from '../ui/Icon.astro';
     <Icon name="lucide:chevron-right" />
   </button>
 </div>
-<button
-  type="button"
-  class="hb shrink-0"
-  data-command="new-document"
-  title="New document"
-  aria-label="New document"
->
-  <Icon name="lucide:plus" />
-</button>
