@@ -2,15 +2,37 @@
 import Icon from '../ui/Icon.astro';
 ---
 
-<div
-  class="seg max-w-[40vw] sm:max-w-[45vw] overflow-x-auto no-sb"
-  id="editor-tabs"
-  role="tablist"
-  aria-label="Documents"
-></div>
+<div class="flex min-w-0 flex-1 items-center gap-0.5" data-tabs-wrap>
+  <button
+    type="button"
+    class="hb tabs-nav shrink-0"
+    data-tabs-prev
+    title="Scroll tabs left"
+    aria-label="Scroll tabs left"
+    hidden
+  >
+    <Icon name="lucide:chevron-left" />
+  </button>
+  <div
+    class="seg max-w-[30vw] min-w-0 flex-1 overflow-x-auto no-sb sm:max-w-[32vw] lg:max-w-[36vw]"
+    id="editor-tabs"
+    role="tablist"
+    aria-label="Documents"
+  ></div>
+  <button
+    type="button"
+    class="hb tabs-nav shrink-0"
+    data-tabs-next
+    title="Scroll tabs right"
+    aria-label="Scroll tabs right"
+    hidden
+  >
+    <Icon name="lucide:chevron-right" />
+  </button>
+</div>
 <button
   type="button"
-  class="hb"
+  class="hb shrink-0"
   data-command="new-document"
   title="New document"
   aria-label="New document"

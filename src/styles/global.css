@@ -421,6 +421,44 @@ button.mi.danger:hover svg {
   height: 12px;
 }
 
+.tab {
+  flex-shrink: 0;
+  scroll-margin-inline: 12px;
+}
+
+.tabs-nav {
+  flex: none;
+  min-width: 24px;
+  padding: 0 4px;
+}
+
+#editor-tabs[data-over-left='true'] {
+  -webkit-mask-image: linear-gradient(to right, transparent, black 24px);
+  mask-image: linear-gradient(to right, transparent, black 24px);
+}
+
+#editor-tabs[data-over-right='true'] {
+  -webkit-mask-image: linear-gradient(to left, transparent, black 24px);
+  mask-image: linear-gradient(to left, transparent, black 24px);
+}
+
+#editor-tabs[data-over-left='true'][data-over-right='true'] {
+  -webkit-mask-image: linear-gradient(
+    to right,
+    transparent,
+    black 24px,
+    black calc(100% - 24px),
+    transparent
+  );
+  mask-image: linear-gradient(
+    to right,
+    transparent,
+    black 24px,
+    black calc(100% - 24px),
+    transparent
+  );
+}
+
 @media (min-width: 768px) {
   .code-pane {
     flex: 0 0 var(--split);

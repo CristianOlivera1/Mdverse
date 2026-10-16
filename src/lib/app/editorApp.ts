@@ -1285,6 +1285,9 @@ export function initEditorApp(): void {
         tabsHostEl.insertBefore(tab, tabsHostEl.children[index] ?? null);
       }
     });
+
+    updateTabsOverflow();
+    revealActiveTab();
   }
 
   function beginRename(doc: OpenDocument, titleElement: HTMLElement): void {
@@ -1569,6 +1572,77 @@ export function initEditorApp(): void {
       },
       true,
     );
+  }
+
+  const TABS_SCROLL_PX = 240;
+  const TABS_OVERFLOW_SLACK_PX = 1;
+  let tabsResizeTimer: number | undefined;
+
+  function tabsChevron(direction: 'prev' | 'next'): HTMLButtonElement | null {
+    return document.querySelector<HTMLButtonElement>(`[data-tabs-${direction}]`);
+  }
+
+  function tabsSmoothBehavior(): ScrollBehavior {
+    return window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth';
+  }
+
+  function updateTabsOverflow(): void {
+    const maxLeft = tabsHostEl.scrollWidth - tabsHostEl.clientWidth;
+    const canScroll = maxLeft > TABS_OVERFLOW_SLACK_PX;
+    const canLeft = canScroll && tabsHostEl.scrollLeft > TABS_OVERFLOW_SLACK_PX;
+    const canRight = canScroll && tabsHostEl.scrollLeft < maxLeft - TABS_OVERFLOW_SLACK_PX;
+    const prev = tabsChevron('prev');
+    const next = tabsChevron('next');
+    if (prev) prev.hidden = !canLeft;
+    if (next) next.hidden = !canRight;
+    tabsHostEl.toggleAttribute('data-over-left', canLeft);
+    tabsHostEl.toggleAttribute('data-over-right', canRight);
+  }
+
+  function revealActiveTab(): void {
+    if (activeDrag) return;
+    const active = tabsHostEl.querySelector<HTMLElement>('.tab.on');
+    if (!active) return;
+    const hostRect = tabsHostEl.getBoundingClientRect();
+    const tabRect = active.getBoundingClientRect();
+    if (tabRect.left < hostRect.left || tabRect.right > hostRect.right) {
+      active.scrollIntoView({ block: 'nearest', inline: 'nearest' });
+    }
+  }
+
+  function initTabsOverflow(): void {
+    tabsHostEl.addEventListener(
+      'scroll',
+      () => {
+        updateTabsOverflow();
+      },
+      { passive: true },
+    );
+    // A vertical wheel over a horizontally-overflowing strip scrolls it
+    // sideways. Only hijacked when the vertical intent dominates and the
+    // strip actually overflows, so page/trackpad gestures stay intact.
+    tabsHostEl.addEventListener(
+      'wheel',
+      (event: WheelEvent) => {
+        if (activeDrag) return;
+        if (Math.abs(event.deltaY) <= Math.abs(event.deltaX)) return;
+        if (tabsHostEl.scrollWidth <= tabsHostEl.clientWidth) return;
+        tabsHostEl.scrollLeft += event.deltaY;
+        event.preventDefault();
+      },
+      { passive: false },
+    );
+    tabsChevron('prev')?.addEventListener('click', () => {
+      tabsHostEl.scrollBy({ left: -TABS_SCROLL_PX, behavior: tabsSmoothBehavior() });
+    });
+    tabsChevron('next')?.addEventListener('click', () => {
+      tabsHostEl.scrollBy({ left: TABS_SCROLL_PX, behavior: tabsSmoothBehavior() });
+    });
+    window.addEventListener('resize', () => {
+      window.clearTimeout(tabsResizeTimer);
+      tabsResizeTimer = window.setTimeout(updateTabsOverflow, 120);
+    });
+    updateTabsOverflow();
   }
 
   function activate(id: string): void {
@@ -2460,6 +2534,7 @@ export function initEditorApp(): void {
   toggleSyncUi();
   setPanel(document.body.dataset.panel === 'preview' ? 'preview' : 'code');
   initTabDragReorder();
+  initTabsOverflow();
 
   tocNavs.forEach((nav) =>
     nav.addEventListener('click', (event) => {

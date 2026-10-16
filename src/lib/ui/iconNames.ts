@@ -7,6 +7,8 @@ export const ICONIFY_ICONS = {
     'case-sensitive',
     'check',
     'chevron-down',
+    'chevron-left',
+    'chevron-right',
     'chevron-up',
     'circle-x',
     'clock',
