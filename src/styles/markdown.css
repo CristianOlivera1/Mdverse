@@ -121,6 +121,77 @@
   font-variant-numeric: tabular-nums;
 }
 
+.diagram-bar button svg {
+  display: block;
+  pointer-events: none;
+}
+
+.diagram-bar [data-diagram='fullscreen'] {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 26px;
+  padding: 0;
+}
+
+.mermaid-box:fullscreen {
+  display: flex;
+  flex-direction: column;
+  width: 100vw;
+  height: 100vh;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+}
+
+.mermaid-box:fullscreen .diagram-viewport {
+  flex: 1;
+  width: 100%;
+  height: auto;
+  max-height: none;
+}
+
+.mermaid-box:fullscreen .diagram-bar {
+  position: fixed;
+  bottom: 16px;
+  left: 50%;
+  right: auto;
+  transform: translateX(-50%);
+  background: #0b0b0bf2;
+}
+
+/* CSS overlay fallback for engines without the Fullscreen API. */
+body:has(.mermaid-box.is-fullscreen-fallback) {
+  overflow: hidden;
+}
+
+.mermaid-box.is-fullscreen-fallback {
+  position: fixed;
+  inset: 0;
+  z-index: 9999;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  background: #050505;
+}
+
+.mermaid-box.is-fullscreen-fallback .diagram-viewport {
+  width: 100%;
+  height: 100%;
+  max-height: none;
+}
+
+.mermaid-box.is-fullscreen-fallback .diagram-bar {
+  position: fixed;
+  bottom: 16px;
+  left: 50%;
+  right: auto;
+  transform: translateX(-50%);
+  background: #0b0b0bf2;
+}
+
 .mermaid-err {
   text-align: left;
   color: #f87171;
