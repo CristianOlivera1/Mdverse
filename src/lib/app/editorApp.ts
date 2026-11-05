@@ -1597,6 +1597,9 @@ export function initEditorApp(): void {
 
     form.append(input);
     tab.replaceWith(form);
+    input.addEventListener('blur', () => {
+      window.setTimeout(() => submitCollectionRename(form), 0);
+    });
     input.focus();
     input.select();
   }
@@ -1656,14 +1659,35 @@ export function initEditorApp(): void {
     await addDocument(created.id);
   }
 
-  async function renameCollection(id: string, name: string): Promise<void> {
-    if (!collections.some((entry) => entry.id === id)) return;
+  function submitCollectionRename(form: HTMLFormElement): void {
+    if (form.dataset.submitting === 'true' || form.dataset.cancelled === 'true') return;
+
+    const id = form.dataset.collectionRenameInline ?? '';
+    const name = form.querySelector<HTMLInputElement>('input')?.value.trim() ?? '';
+    const collection = collections.find((entry) => entry.id === id);
+    if (!collection || !name) {
+      renderTabs();
+      return;
+    }
+    if (collection.name === name) {
+      renderTabs();
+      return;
+    }
+
+    form.dataset.submitting = 'true';
+    void renameCollection(id, name).then((renamed) => {
+      if (!renamed) delete form.dataset.submitting;
+    });
+  }
+
+  async function renameCollection(id: string, name: string): Promise<boolean> {
+    if (!collections.some((entry) => entry.id === id)) return false;
 
     if (cloud) {
       const updated = await cloud.renameCollection(id, name);
       if (!updated) {
         toast('Could not rename the collection');
-        return;
+        return false;
       }
       collections = collections.map((entry) => (entry.id === updated.id ? updated : entry));
     } else {
@@ -1672,6 +1696,7 @@ export function initEditorApp(): void {
 
     persist();
     renderTabs();
+    return true;
   }
 
   async function deleteCollectionById(id: string): Promise<void> {
@@ -1751,6 +1776,11 @@ export function initEditorApp(): void {
       { passive: false },
     );
     window.addEventListener('resize', updateCollectionTabsScroll);
+    document.addEventListener('click', (event) => {
+      const form = pickerElement<HTMLFormElement>('[data-collection-rename-inline]');
+      if (!form || form.contains(event.target as Node)) return;
+      window.setTimeout(() => submitCollectionRename(form), 0);
+    });
 
     document.addEventListener('submit', (event) => {
       const form = event.target as HTMLFormElement;
@@ -1758,13 +1788,7 @@ export function initEditorApp(): void {
       const collectionRename = form.closest<HTMLFormElement>('[data-collection-rename-inline]');
       if (collectionRename) {
         event.preventDefault();
-        const id = collectionRename.dataset.collectionRenameInline ?? '';
-        const name = collectionRename.querySelector('input')?.value.trim();
-        if (!id || !name) {
-          renderTabs();
-          return;
-        }
-        void renameCollection(id, name);
+        submitCollectionRename(collectionRename);
         return;
       }
 
@@ -2593,11 +2617,15 @@ export function initEditorApp(): void {
   });
 
   document.addEventListener('keydown', (event) => {
-    if (
-      event.key === 'Escape' &&
-      ((event.target as HTMLElement).closest('[data-document-rename-inline]') ||
-        (event.target as HTMLElement).closest('[data-collection-rename-inline]'))
-    ) {
+    const target = event.target as HTMLElement;
+    const collectionRename = target.closest<HTMLFormElement>('[data-collection-rename-inline]');
+    if (event.key === 'Escape' && collectionRename) {
+      collectionRename.dataset.cancelled = 'true';
+      event.preventDefault();
+      renderTabs();
+      return;
+    }
+    if (event.key === 'Escape' && target.closest('[data-document-rename-inline]')) {
       event.preventDefault();
       renderTabs();
       return;
