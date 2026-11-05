@@ -1280,6 +1280,7 @@ export function initEditorApp(): void {
 
   let lastCollectionClick = { id: '', at: 0 };
   let collectionClickTimer: number | undefined;
+  const collectionDoubleClickDelay = 600;
 
   const TRASH_ICON =
     '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" ' +
@@ -2534,7 +2535,8 @@ export function initEditorApp(): void {
       // `detail` covers the native double click; the timestamp covers the case
       // where re-rendering the strip makes the browser lose the second click.
       const doubleClick =
-        event.detail >= 2 || (lastCollectionClick.id === id && now - lastCollectionClick.at < 600);
+        event.detail >= 2 ||
+        (lastCollectionClick.id === id && now - lastCollectionClick.at < collectionDoubleClickDelay);
 
       if (doubleClick) {
         window.clearTimeout(collectionClickTimer);
@@ -2551,7 +2553,7 @@ export function initEditorApp(): void {
         lastCollectionClick = { id: '', at: 0 };
         closeMenus();
         void openDocuments(id);
-      }, 300);
+      }, collectionDoubleClickDelay);
       return;
     }
 
