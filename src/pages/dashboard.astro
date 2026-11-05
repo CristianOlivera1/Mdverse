@@ -6,7 +6,8 @@ import { toAccountSummary } from '@/lib/auth/account';
 import { describeAccess } from '@/lib/documents/access';
 import { describeSize, firstLine, formatTimestamp } from '@/lib/documents/format';
 import { documentNotice } from '@/lib/documents/messages';
-import { listDocuments, MAX_LISTED_DOCUMENTS } from '@/lib/documents/repository';
+import { listCollections, listDocuments, MAX_LISTED_DOCUMENTS } from '@/lib/documents/repository';
+import type { CloudDocument } from '@/lib/documents/types';
 
 export const prerender = false;
 
@@ -14,7 +15,10 @@ const { user, supabase } = Astro.locals;
 const account = toAccountSummary(user, Astro.locals.profile);
 if (!account || !user || !supabase) return Astro.redirect('/login?next=/dashboard');
 
-const documents = await listDocuments(supabase, user.id);
+const [documents, collections] = await Promise.all([
+  listDocuments(supabase, user.id),
+  listCollections(supabase, user.id),
+]);
 const params = Astro.url.searchParams;
 const notice = documentNotice({
   error: params.get('error'),
@@ -26,6 +30,43 @@ const notice = documentNotice({
 
 const owned = documents.filter((document) => document.role === 'owner');
 const shared = documents.filter((document) => document.role !== 'owner');
+
+// Grouped the way the editor's collection tabs are. A document whose collection
+// is gone falls back to the default one, exactly like the editor does.
+const defaultCollectionId =
+  collections.find((entry) => entry.isDefault)?.id ?? collections[0]?.id ?? '';
+const collectionOf = (document: CloudDocument): string =>
+  document.collectionId && collections.some((entry) => entry.id === document.collectionId)
+    ? document.collectionId
+    : defaultCollectionId;
+
+// Collections the user created come first; the default one is the bucket that
+// predates collections, so it is listed last and only when it holds something.
+const firstUserCollectionId = collections.find((entry) => !entry.isDefault)?.id ?? '';
+
+/**
+ * The editor stops showing the default collection as soon as there is one of the
+ * user's own: its documents are folded into the first collection. Mirrored here
+ * so both screens agree on where a document lives.
+ */
+const visibleCollectionId = (document: CloudDocument): string => {
+  const id = collectionOf(document);
+  return id === defaultCollectionId && firstUserCollectionId ? firstUserCollectionId : id;
+};
+
+const sections = [...collections]
+  .sort((a, b) => Number(a.isDefault) - Number(b.isDefault))
+  .map((collection) => ({
+    id: collection.id,
+    name: collection.name,
+    documents: owned.filter((document) => visibleCollectionId(document) === collection.id),
+  }))
+  .filter((section) => section.documents.length > 0);
+
+// Creating from here goes where the editor would put it: the legacy default
+// bucket is only offered while it is the only collection there is.
+const userCollections = collections.filter((entry) => !entry.isDefault);
+const createTargets = userCollections.length > 0 ? userCollections : collections;
 
 const editorUrl = (id: string): string => `/?doc=${encodeURIComponent(id)}`;
 ---
@@ -58,6 +99,18 @@ const editorUrl = (id: string): string => `/?doc=${encodeURIComponent(id)}`;
         aria-label="Title of the new document"
         class="min-w-0 flex-1 rounded-lg border border-neutral-800 bg-black px-3 py-2 text-sm text-neutral-100 placeholder:text-neutral-600 focus:border-neutral-600 focus:outline-none"
       />
+      <label class="sr-only" for="new-document-collection">
+        Collection
+      </label>
+      <select
+        id="new-document-collection"
+        name="collectionId"
+        class="rounded-lg border border-neutral-800 bg-black px-2 py-2 text-xs text-neutral-200 focus:border-neutral-600 focus:outline-none"
+      >
+        {createTargets.map((collection) => (
+          <option value={collection.id}>{collection.name}</option>
+        ))}
+      </select>
       <button type="submit" class="hb hf on">
         <Icon name="lucide:file-plus" />
         New document
@@ -99,109 +152,118 @@ const editorUrl = (id: string): string => `/?doc=${encodeURIComponent(id)}`;
         {owned.length === 0 ? (
           <p class="mt-3 text-xs text-neutral-500">Nothing of your own yet.</p>
         ) : (
-          <ul class="mt-3 space-y-2">
-            {owned.map((document) => (
-              <li class="rounded-xl border border-neutral-800 bg-neutral-950/60 p-3">
-                <div class="flex flex-wrap items-start justify-between gap-3">
-                  <div class="min-w-0">
-                    <a
-                      href={editorUrl(document.id)}
-                      class="text-sm font-medium text-neutral-50 hover:text-white hover:underline"
-                    >
-                      {document.title}
-                    </a>
-                    <p class="mt-0.5 flex flex-wrap items-center gap-x-2 text-[11px] text-neutral-500">
-                      <span class="inline-flex items-center gap-1">
-                        <Icon name="lucide:clock" size={11} />
-                        {formatTimestamp(document.updatedAt)}
-                      </span>
-                      <span>·</span>
-                      <span>revision {document.revision}</span>
-                      <span>·</span>
-                      <span>{describeSize(document.content)}</span>
-                    </p>
-                    {firstLine(document.content) && (
-                      <p class="mt-1 truncate text-xs text-neutral-400">
-                        {firstLine(document.content)}
-                      </p>
-                    )}
-                  </div>
+          sections.map((section) => (
+            <div class="mt-4">
+              <h3 class="flex items-center gap-2 text-[11px] font-medium text-neutral-400">
+                <Icon name="lucide:list-tree" size={12} />
+                {section.name}
+                <span class="text-neutral-600">({section.documents.length})</span>
+              </h3>
+              <ul class="mt-2 space-y-2">
+                {section.documents.map((document) => (
+                  <li class="rounded-xl border border-neutral-800 bg-neutral-950/60 p-3">
+                    <div class="flex flex-wrap items-start justify-between gap-3">
+                      <div class="min-w-0">
+                        <a
+                          href={editorUrl(document.id)}
+                          class="text-sm font-medium text-neutral-50 hover:text-white hover:underline"
+                        >
+                          {document.title}
+                        </a>
+                        <p class="mt-0.5 flex flex-wrap items-center gap-x-2 text-[11px] text-neutral-500">
+                          <span class="inline-flex items-center gap-1">
+                            <Icon name="lucide:clock" size={11} />
+                            {formatTimestamp(document.updatedAt)}
+                          </span>
+                          <span>·</span>
+                          <span>revision {document.revision}</span>
+                          <span>·</span>
+                          <span>{describeSize(document.content)}</span>
+                        </p>
+                        {firstLine(document.content) && (
+                          <p class="mt-1 truncate text-xs text-neutral-400">
+                            {firstLine(document.content)}
+                          </p>
+                        )}
+                      </div>
 
-                  <div class="flex shrink-0 items-center gap-1">
-                    <a href={editorUrl(document.id)} class="hb">
-                      <Icon name="lucide:terminal" />
-                      Edit
-                    </a>
-                    <a
-                      href={`/documents/${encodeURIComponent(document.id)}/history`}
-                      class="hb"
-                      title="Version history"
-                    >
-                      <Icon name="lucide:history" />
-                      History
-                    </a>
-                    <button
-                      type="button"
-                      class="hb"
-                      title="Who can reach this document"
-                      aria-haspopup="dialog"
-                      data-collab-open
-                      data-doc-id={document.id}
-                      data-doc-title={document.title}
-                    >
-                      <Icon name="lucide:user-plus" />
-                      Share
-                    </button>
-                    <form
-                      method="POST"
-                      action={`/documents/${encodeURIComponent(document.id)}/delete`}
-                      data-confirm={`Delete “${document.title}”? The document and its version history are gone for everyone you shared it with.`}
-                      data-confirm-title="Delete this document?"
-                      data-confirm-label="Delete"
-                      data-confirm-danger
-                    >
-                      <button
-                        type="submit"
-                        class="hb danger"
-                        title="Delete this document"
-                        aria-label={`Delete ${document.title}`}
+                      <div class="flex shrink-0 items-center gap-1">
+                        <a href={editorUrl(document.id)} class="hb">
+                          <Icon name="lucide:terminal" />
+                          Edit
+                        </a>
+                        <a
+                          href={`/documents/${encodeURIComponent(document.id)}/history`}
+                          class="hb"
+                          title="Version history"
+                        >
+                          <Icon name="lucide:history" />
+                          History
+                        </a>
+                        <button
+                          type="button"
+                          class="hb"
+                          title="Who can reach this document"
+                          aria-haspopup="dialog"
+                          data-collab-open
+                          data-doc-id={document.id}
+                          data-doc-title={document.title}
+                        >
+                          <Icon name="lucide:user-plus" />
+                          Share
+                        </button>
+                        <form
+                          method="POST"
+                          action={`/documents/${encodeURIComponent(document.id)}/delete`}
+                          data-confirm={`Delete “${document.title}”? The document and its version history are gone for everyone you shared it with.`}
+                          data-confirm-title="Delete this document?"
+                          data-confirm-label="Delete"
+                          data-confirm-danger
+                        >
+                          <button
+                            type="submit"
+                            class="hb danger"
+                            title="Delete this document"
+                            aria-label={`Delete ${document.title}`}
+                          >
+                            <Icon name="lucide:trash" />
+                          </button>
+                        </form>
+                      </div>
+                    </div>
+
+                    <details class="mt-2">
+                      <summary class="cursor-pointer text-[11px] text-neutral-500 hover:text-neutral-300">
+                        Rename
+                      </summary>
+                      <form
+                        method="POST"
+                        action={`/documents/${encodeURIComponent(document.id)}/rename`}
+                        class="mt-2 flex flex-wrap items-center gap-2"
                       >
-                        <Icon name="lucide:trash" />
-                      </button>
-                    </form>
-                  </div>
-                </div>
-
-                <details class="mt-2">
-                  <summary class="cursor-pointer text-[11px] text-neutral-500 hover:text-neutral-300">
-                    Rename
-                  </summary>
-                  <form
-                    method="POST"
-                    action={`/documents/${encodeURIComponent(document.id)}/rename`}
-                    class="mt-2 flex flex-wrap items-center gap-2"
-                  >
-                    <input type="hidden" name="revision" value={String(document.revision)} />
-                    <input
-                      type="text"
-                      name="title"
-                      value={document.title}
-                      maxlength="120"
-                      aria-label="New title"
-                      class="min-w-0 flex-1 rounded-lg border border-neutral-800 bg-black px-3 py-1.5 text-xs text-neutral-100 focus:border-neutral-600 focus:outline-none"
-                    />
-                    <button type="submit" class="hb">
-                      Save name
-                    </button>
-                  </form>
-                  <p class="mt-1 text-[10px] text-neutral-600">
-                    Renaming never changes the address ({document.slug}), so links you already
-                    shared keep working.
-                  </p>
-                </details>
-              </li>
-            ))}
-          </ul>
+                        <input type="hidden" name="revision" value={String(document.revision)} />
+                        <input
+                          type="text"
+                          name="title"
+                          value={document.title}
+                          maxlength="120"
+                          aria-label="New title"
+                          class="min-w-0 flex-1 rounded-lg border border-neutral-800 bg-black px-3 py-1.5 text-xs text-neutral-100 focus:border-neutral-600 focus:outline-none"
+                        />
+                        <button type="submit" class="hb">
+                          Save name
+                        </button>
+                      </form>
+                      <p class="mt-1 text-[10px] text-neutral-600">
+                        Renaming never changes the address ({document.slug}), so links you already
+                        shared keep working.
+                      </p>
+                    </details>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          ))
         )}
       </section>
 
