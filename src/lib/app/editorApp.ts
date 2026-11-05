@@ -1229,61 +1229,19 @@ export function initEditorApp(): void {
   }
 
   function collectionOf(doc: OpenDocument): string {
-    // Shared documents are not part of this account's collections; grouping
-    // them keeps the owner's private names out of a collaborator's picker.
+
     if (doc.role !== undefined && doc.role !== 'owner') return SHARED_COLLECTION;
-    // A document can point at a collection that is no longer in the list (a
-    // delete in another tab, a stale cache). Falling back to the default keeps
-    // the document reachable instead of hiding it from every picker.
+ 
     const id = doc.collectionId;
-    return id && collections.some((entry) => entry.id === id) ? id : fallbackCollectionId();
+    return id && collections.some((entry) => entry.id === id) ? id : defaultCollectionId();
   }
 
   function defaultCollectionId(): string {
     return collections.find((entry) => entry.isDefault)?.id ?? collections[0]?.id ?? '';
   }
 
-  /** The collections the account created; the default one is only a fallback. */
-  function userCollections(): CloudCollection[] {
-    return collections.filter((entry) => !entry.isDefault);
-  }
-
-  /** Where a document goes when the collection it names is gone. */
-  function fallbackCollectionId(): string {
-    return userCollections()[0]?.id ?? defaultCollectionId();
-  }
-
-  /**
-   * "General" is where documents landed before collections existed, and keeping
-   * it as a tab loses meaning as soon as there is a collection of the user's
-   * own. It stops being a tab then, and its documents move to the first one
-   * created, so nothing becomes unreachable.
-   */
-  function adoptDefaultCollection(): void {
-    const target = userCollections()[0]?.id;
-    const fallback = defaultCollectionId();
-    if (!target || !fallback || target === fallback) return;
-
-    let moved = false;
-    for (const doc of documents) {
-      if (collectionOf(doc) !== fallback) continue;
-      doc.collectionId = target;
-      moved = true;
-      // The owner's copy lives on the server too; filing it there keeps the
-      // next reload from reporting a different collection.
-      if (cloud && doc.role === 'owner') {
-        void cloud.move(doc.id, target).then((result) => {
-          if (result.ok && result.revision > 0) revisions.set(doc.id, result.revision);
-        });
-      }
-    }
-
-    if (moved) persist();
-  }
-
   function collectionChoices(): CollectionChoice[] {
-    const visible = userCollections().length > 0 ? userCollections() : collections;
-    const choices: CollectionChoice[] = visible.map((entry) => ({
+    const choices: CollectionChoice[] = collections.map((entry) => ({
       id: entry.id,
       name: entry.name,
       isDefault: entry.isDefault,
@@ -1527,7 +1485,7 @@ export function initEditorApp(): void {
     const collection = currentCollection();
     const doc = documentById(activeId);
 
-    const name = collection?.name ?? 'General';
+    const name = collection?.name ?? 'Collection 1';
     const documentsLabel = pickerElement<HTMLElement>('[data-documents-label]');
     if (documentsLabel) documentsLabel.textContent = name;
 
@@ -1621,15 +1579,14 @@ export function initEditorApp(): void {
     beginDocumentRename(doc.id);
   }
 
-  /** "Collection", "Collection 2", … — a new tab never asks for a name first. */
+  /** "Collection 2", "Collection 3", … — Collection 1 is the default one. */
   function nextCollectionName(): string {
-    const taken = new Set(collections.map((entry) => entry.name.toLowerCase()));
-    if (!taken.has('collection')) return 'Collection';
-    for (let index = 2; index <= collections.length + 2; index++) {
+    const taken = new Set(collections.map((entry) => entry.name.trim().toLowerCase()));
+    for (let index = 2; index <= collections.length + 3; index++) {
       const candidate = `Collection ${index}`;
       if (!taken.has(candidate.toLowerCase())) return candidate;
     }
-    return `Collection ${collections.length + 2}`;
+    return `Collection ${collections.length + 3}`;
   }
 
   async function createCollection(): Promise<void> {
@@ -1650,8 +1607,6 @@ export function initEditorApp(): void {
     }
 
     collections = [...collections, created];
-    // The first collection of the account takes over whatever "General" held.
-    adoptDefaultCollection();
     persist();
     renderTabs();
     closeMenus();
@@ -1705,7 +1660,7 @@ export function initEditorApp(): void {
 
     const confirmed = await confirmAction({
       title: `Delete “${collection.name}”?`,
-      message: 'Its documents move to your first collection. Nothing is deleted.',
+      message: 'Its documents move to Collection 1. Nothing is deleted.',
       confirmLabel: 'Delete',
       danger: true,
     });
@@ -1717,7 +1672,7 @@ export function initEditorApp(): void {
     }
 
     collections = collections.filter((entry) => entry.id !== collection.id);
-    const fallback = fallbackCollectionId();
+    const fallback = defaultCollectionId();
     for (const doc of documents) {
       if (doc.collectionId === collection.id) doc.collectionId = fallback;
     }
@@ -1889,7 +1844,7 @@ export function initEditorApp(): void {
     const requested = collectionId ?? activeCollectionId();
     const target = collections.some((entry) => entry.id === requested)
       ? requested
-      : fallbackCollectionId();
+      : defaultCollectionId();
 
     if (cloud) {
       try {
@@ -2721,7 +2676,6 @@ export function initEditorApp(): void {
       // seeding, so a visitor who only followed a link does not also get a draft.
       await openReadableDocument(requested);
       bootDocuments();
-      adoptDefaultCollection();
       booted = true;
       mountAll(requested);
       gateForMissingDocument(requested, false);
@@ -2764,7 +2718,6 @@ export function initEditorApp(): void {
       }
     }
 
-    adoptDefaultCollection();
     booted = true;
     mountAll(requested);
     gateForMissingDocument(requested, true);

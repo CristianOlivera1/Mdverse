@@ -40,33 +40,18 @@ const collectionOf = (document: CloudDocument): string =>
     ? document.collectionId
     : defaultCollectionId;
 
-// Collections the user created come first; the default one is the bucket that
-// predates collections, so it is listed last and only when it holds something.
-const firstUserCollectionId = collections.find((entry) => !entry.isDefault)?.id ?? '';
-
-/**
- * The editor stops showing the default collection as soon as there is one of the
- * user's own: its documents are folded into the first collection. Mirrored here
- * so both screens agree on where a document lives.
- */
-const visibleCollectionId = (document: CloudDocument): string => {
-  const id = collectionOf(document);
-  return id === defaultCollectionId && firstUserCollectionId ? firstUserCollectionId : id;
-};
-
+// Collection 1 (the default one) leads the list, then the ones the user added.
 const sections = [...collections]
-  .sort((a, b) => Number(a.isDefault) - Number(b.isDefault))
+  .sort((a, b) => Number(b.isDefault) - Number(a.isDefault))
   .map((collection) => ({
     id: collection.id,
     name: collection.name,
-    documents: owned.filter((document) => visibleCollectionId(document) === collection.id),
+    documents: owned.filter((document) => collectionOf(document) === collection.id),
   }))
   .filter((section) => section.documents.length > 0);
 
-// Creating from here goes where the editor would put it: the legacy default
-// bucket is only offered while it is the only collection there is.
-const userCollections = collections.filter((entry) => !entry.isDefault);
-const createTargets = userCollections.length > 0 ? userCollections : collections;
+// Creation offers every collection, Collection 1 included.
+const createTargets = collections;
 
 const editorUrl = (id: string): string => `/?doc=${encodeURIComponent(id)}`;
 ---

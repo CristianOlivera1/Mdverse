@@ -104,11 +104,15 @@ export function loadLocalCollections(): CloudCollection[] {
       entry.name.trim().length > 0,
   );
 
-  if (collections.some((entry) => entry.isDefault)) return collections;
+  const current = collections.map((entry) =>
+    entry.isDefault && entry.name.trim().toLowerCase() === 'general'
+      ? { ...entry, name: 'Collection 1' }
+      : entry,
+  );
 
-  // Storage written before collections existed (or hand-edited): drafts need a
-  // default to fall back to, so it is recreated instead of trusting the list.
-  return [{ id: LOCAL_COLLECTION, name: 'General', isDefault: true }, ...collections];
+  if (current.some((entry) => entry.isDefault)) return current;
+
+  return [{ id: LOCAL_COLLECTION, name: 'Collection 1', isDefault: true }, ...current];
 }
 
 export function saveLocalCollections(collections: readonly CloudCollection[]): void {

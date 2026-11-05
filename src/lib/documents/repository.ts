@@ -30,7 +30,7 @@ const DOCUMENT_COLUMNS =
 
 const COLLECTION_COLUMNS = 'id, name, is_default';
 
-export const DEFAULT_COLLECTION_NAME = 'General';
+export const DEFAULT_COLLECTION_NAME = 'Collection 1';
 export const MAX_COLLECTION_NAME = 60;
 
 export interface CollectionEntry {
