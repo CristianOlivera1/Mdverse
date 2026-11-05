@@ -1278,10 +1278,8 @@ export function initEditorApp(): void {
     '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" ' +
     'stroke-linecap="round"><path d="M18 6 6 18M6 6l12 12"/></svg>';
 
-  // The strip is rebuilt on every switch, so `dblclick` (which needs the same
-  // node twice) never fires on a real tab. Two quick clicks on the same id are
-  // detected here instead.
   let lastCollectionClick = { id: '', at: 0 };
+  let collectionClickTimer: number | undefined;
 
   const TRASH_ICON =
     '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" ' +
@@ -2537,15 +2535,23 @@ export function initEditorApp(): void {
       // where re-rendering the strip makes the browser lose the second click.
       const doubleClick =
         event.detail >= 2 || (lastCollectionClick.id === id && now - lastCollectionClick.at < 600);
-      lastCollectionClick = doubleClick ? { id: '', at: 0 } : { id, at: now };
 
       if (doubleClick) {
+        window.clearTimeout(collectionClickTimer);
+        collectionClickTimer = undefined;
+        lastCollectionClick = { id: '', at: 0 };
         beginCollectionRename(id);
         return;
       }
 
-      closeMenus();
-      void openDocuments(id);
+      window.clearTimeout(collectionClickTimer);
+      lastCollectionClick = { id, at: now };
+      collectionClickTimer = window.setTimeout(() => {
+        collectionClickTimer = undefined;
+        lastCollectionClick = { id: '', at: 0 };
+        closeMenus();
+        void openDocuments(id);
+      }, 300);
       return;
     }
 
