@@ -41,6 +41,7 @@ export interface Database {
           owner_id: string;
           name: string;
           is_default: boolean;
+          position: number
           created_at: string;
           updated_at: string;
         };
@@ -48,6 +49,7 @@ export interface Database {
           id?: string;
           owner_id: string;
           name?: string;
+          position?: number
           is_default?: boolean;
           created_at?: string;
           updated_at?: string;
@@ -56,6 +58,7 @@ export interface Database {
           id?: string;
           owner_id?: string;
           name?: string;
+          position?: number
           is_default?: boolean;
           created_at?: string;
           updated_at?: string;
@@ -363,6 +366,10 @@ export interface Database {
           link_role: Database['public']['Enums']['collaborator_role'];
         }[];
       };
+      reorder_collections: {
+        Args: { p_ids: string[] }
+        Returns: undefined
+      }
       claim_share_link: {
         Args: { p_token: string };
         Returns: {

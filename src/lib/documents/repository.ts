@@ -275,8 +275,8 @@ export async function listCollections(db: Db, userId: string): Promise<Collectio
     .from('collections')
     .select(COLLECTION_COLUMNS)
     .eq('owner_id', userId)
-    .order('is_default', { ascending: false })
-    .order('name', { ascending: true });
+    .order('position', { ascending: true })
+    .order('created_at', { ascending: true });
 
   if (error) throw error;
   return asRows<CollectionRow>(data).map(toCollection);
@@ -336,6 +336,14 @@ export async function renameCollection(
   return rows.length > 0
     ? { ok: true, value: toCollection(rows[0]) }
     : { ok: false, reason: 'missing' };
+}
+
+export async function reorderCollections(
+  db: Db,
+  ids: readonly string[],
+): Promise<CollectionResult<true>> {
+  const { error } = await db.rpc('reorder_collections', { p_ids: [...ids] });
+  return error ? { ok: false, reason: collectionFailure(error) } : { ok: true, value: true };
 }
 
 export async function deleteCollection(

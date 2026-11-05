@@ -32,6 +32,7 @@ export interface CloudSession {
   createCollection(name: string): Promise<CloudCollection | null>;
   renameCollection(id: string, name: string): Promise<CloudCollection | null>;
   deleteCollection(id: string): Promise<boolean>;
+  reorderCollections(ids: string[]): Promise<boolean>;
   move(id: string, collectionId: string): Promise<MoveDocumentResult>;
 }
 
@@ -236,24 +237,38 @@ export function cloudSession(
       }
     },
 
-    async move(id: string, collectionId: string): Promise<MoveDocumentResult> {
+    async reorderCollections(ids: string[]): Promise<boolean> {
       try {
-        const response = await fetch(`${documentUrl(id)}/collection`, {
+        const response = await fetch('/api/collections/order', {
           method: 'PUT',
           headers: JSON_HEADERS,
           credentials: 'same-origin',
-          body: JSON.stringify({ collectionId }),
+          body: JSON.stringify({ ids }),
         });
-        if (!response.ok) return { ok: false };
-
-        const payload = (await response.json().catch(() => null)) as { revision?: unknown } | null;
-        return {
-          ok: true,
-          revision: typeof payload?.revision === 'number' ? payload.revision : 0,
-        };
+        return response.ok;
       } catch {
-        return { ok: false };
+        return false;
       }
     },
+
+    async move(id: string, collectionId: string): Promise < MoveDocumentResult > {
+        try {
+          const response = await fetch(`${documentUrl(id)}/collection`, {
+            method: 'PUT',
+            headers: JSON_HEADERS,
+            credentials: 'same-origin',
+            body: JSON.stringify({ collectionId }),
+          });
+          if(!response.ok) return { ok: false };
+
+          const payload = (await response.json().catch(() => null)) as { revision?: unknown } | null;
+          return {
+            ok: true,
+            revision: typeof payload?.revision === 'number' ? payload.revision : 0,
+          };
+        } catch {
+          return { ok: false };
+        }
+      },
   };
-}
+  }
