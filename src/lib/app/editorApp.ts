@@ -1279,8 +1279,7 @@ export function initEditorApp(): void {
     'stroke-linecap="round"><path d="M18 6 6 18M6 6l12 12"/></svg>';
 
   let lastCollectionClick = { id: '', at: 0 };
-  let collectionClickTimer: number | undefined;
-  const collectionDoubleClickDelay = 600;
+  const collectionDoubleClickDelay = 400;
 
   const TRASH_ICON =
     '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" ' +
@@ -1513,17 +1512,15 @@ export function initEditorApp(): void {
       return;
     }
 
-    // Shared documents belong to other accounts; nothing to create here.
     if (id === SHARED_COLLECTION) return;
 
-    // An empty collection gets its first document, so the editor never shows a
-    // document from outside the collection named above it.
     await addDocument(id);
   }
 
   /** Clicking a tab switches collection and unfolds its documents. */
   async function openDocuments(id: string): Promise<void> {
     await selectCollection(id);
+    if (pickerElement('[data-collection-rename-inline]')) return;
     const panel = pickerElement<HTMLElement>('[data-pop="documents"]');
     const anchor = pickerElement<HTMLElement>(`[data-collection-id="${id}"]`);
     if (!panel || !anchor) return;
@@ -2544,21 +2541,14 @@ export function initEditorApp(): void {
         (lastCollectionClick.id === id && now - lastCollectionClick.at < collectionDoubleClickDelay);
 
       if (doubleClick) {
-        window.clearTimeout(collectionClickTimer);
-        collectionClickTimer = undefined;
         lastCollectionClick = { id: '', at: 0 };
         beginCollectionRename(id);
         return;
       }
 
-      window.clearTimeout(collectionClickTimer);
       lastCollectionClick = { id, at: now };
-      collectionClickTimer = window.setTimeout(() => {
-        collectionClickTimer = undefined;
-        lastCollectionClick = { id: '', at: 0 };
-        closeMenus();
-        void openDocuments(id);
-      }, collectionDoubleClickDelay);
+      closeMenus();
+      void openDocuments(id);
       return;
     }
 
