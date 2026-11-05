@@ -753,7 +753,7 @@ export function initEditorApp(): void {
         consumePendingHash(pane);
         if (pane.docId === activeId) buildEditorToc();
       },
-      () => {},
+      () => { },
     );
   }
 
@@ -1231,7 +1231,7 @@ export function initEditorApp(): void {
   function collectionOf(doc: OpenDocument): string {
 
     if (doc.role !== undefined && doc.role !== 'owner') return SHARED_COLLECTION;
- 
+
     const id = doc.collectionId;
     return id && collections.some((entry) => entry.id === id) ? id : defaultCollectionId();
   }
@@ -1733,6 +1733,11 @@ export function initEditorApp(): void {
     document.addEventListener('click', (event) => {
       const form = pickerElement<HTMLFormElement>('[data-collection-rename-inline]');
       if (!form || form.contains(event.target as Node)) return;
+      const id = form.dataset.collectionRenameInline;
+      const fromOwnTab = event
+        .composedPath()
+        .some((node) => node instanceof HTMLElement && node.dataset.collectionId === id);
+      if (fromOwnTab) return;
       window.setTimeout(() => submitCollectionRename(form), 0);
     });
 
