@@ -1279,6 +1279,7 @@ export function initEditorApp(): void {
     'stroke-linecap="round"><path d="M18 6 6 18M6 6l12 12"/></svg>';
 
   let lastCollectionClick = { id: '', at: 0 };
+  let dragCollectionId = '';
   const collectionDoubleClickDelay = 300; // ms
 
   const TRASH_ICON =
@@ -1286,6 +1287,25 @@ export function initEditorApp(): void {
     'stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18"/>' +
     '<path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/>' +
     '<path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6"/></svg>';
+
+  function reorderCollections(fromId: string, toId: string, after: boolean): void {
+    if (fromId === toId) return;
+    const moving = collections.find((entry) => entry.id === fromId);
+    const rest = collections.filter((entry) => entry.id !== fromId);
+    const at = rest.findIndex((entry) => entry.id === toId);
+    if (!moving || at === -1) return;
+
+    rest.splice(after ? at + 1 : at, 0, moving);
+    collections = rest;
+    persist();
+    renderTabs();
+
+    if (cloud) {
+      void cloud.reorderCollections(rest.map((entry) => entry.id)).then((ok) => {
+        if (!ok) toast('Could not save the order');
+      });
+    }
+  }
 
   function renderCollectionTabs(activeCollection: string): void {
     const host = pickerElement<HTMLElement>('[data-collection-tabs]');
@@ -1295,6 +1315,7 @@ export function initEditorApp(): void {
     for (const choice of collectionChoices()) {
       const wrap = document.createElement('div');
       wrap.className = 'tab-wrap';
+      wrap.draggable = choice.editable && collections.length > 1;
 
       const tab = document.createElement('button');
       tab.type = 'button';
@@ -1538,6 +1559,7 @@ export function initEditorApp(): void {
     if (!collection || !wrap || !tab) return;
 
     closeMenus();
+    wrap.draggable = false;
     const form = document.createElement('form');
     form.className = 'tab-form';
     form.dataset.collectionRenameInline = id;
@@ -1726,6 +1748,60 @@ export function initEditorApp(): void {
       },
       { passive: false },
     );
+
+    const clearDropMarks = (): void => {
+      tabs?.querySelectorAll<HTMLElement>('[data-drop]').forEach((el) => {
+        delete el.dataset.drop;
+      });
+    };
+    const wrapId = (wrap: Element | null): string =>
+      wrap?.querySelector<HTMLElement>('[data-collection-id]')?.dataset.collectionId ?? '';
+
+    tabs?.addEventListener('dragstart', (event) => {
+      const wrap = (event.target as HTMLElement).closest<HTMLElement>('.tab-wrap');
+      const id = wrapId(wrap);
+      if (!wrap || !id || !event.dataTransfer) return;
+      dragCollectionId = id;
+      event.dataTransfer.effectAllowed = 'move';
+      event.dataTransfer.setData('text/plain', id);
+      closeMenus();
+      wrap.classList.add('is-dragging');
+    });
+
+    tabs?.addEventListener('dragover', (event) => {
+      if (!dragCollectionId) return;
+      const wrap = (event.target as HTMLElement).closest<HTMLElement>('.tab-wrap');
+      const overId = wrapId(wrap);
+      if (!wrap || !overId || overId === dragCollectionId || !wrap.draggable) return;
+
+      event.preventDefault();
+      if (event.dataTransfer) event.dataTransfer.dropEffect = 'move';
+      const rect = wrap.getBoundingClientRect();
+      clearDropMarks();
+      wrap.dataset.drop = event.clientX > rect.left + rect.width / 2 ? 'after' : 'before';
+
+      const strip = tabs.getBoundingClientRect();
+      if (event.clientX < strip.left + 32) tabs.scrollLeft -= 12;
+      else if (event.clientX > strip.right - 32) tabs.scrollLeft += 12;
+    });
+
+    tabs?.addEventListener('drop', (event) => {
+      const wrap = (event.target as HTMLElement).closest<HTMLElement>('.tab-wrap');
+      const overId = wrapId(wrap);
+      const from = dragCollectionId;
+      const after = wrap?.dataset.drop === 'after';
+      clearDropMarks();
+      if (!from || !overId) return;
+      event.preventDefault();
+      reorderCollections(from, overId, after);
+    });
+
+    tabs?.addEventListener('dragend', () => {
+      dragCollectionId = '';
+      clearDropMarks();
+      tabs.querySelector('.is-dragging')?.classList.remove('is-dragging');
+    });
+    
     window.addEventListener('resize', updateCollectionTabsScroll);
     document.addEventListener('click', (event) => {
       const form = pickerElement<HTMLFormElement>('[data-collection-rename-inline]');
