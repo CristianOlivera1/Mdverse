@@ -13,6 +13,7 @@ import type { MentionCandidate } from './mentions';
 import { avatarAura } from '../auth/avatarAura';
 import { initials } from '../auth/profile';
 import { PREF_KEYS, readPref, writePref } from '../editor/prefs';
+import { mountTextMirror } from '../editor/textMirror';
 import { confirmAction } from '../app/confirmDialog';
 
 interface PanelOptions {
@@ -1145,61 +1146,35 @@ export function createSelectionBubble(
     bubble.style.display = 'none';
   }
 
-  const mirror = document.createElement('div');
-  const MIRROR_PROPS = [
-    'fontFamily',
-    'fontSize',
-    'fontWeight',
-    'fontStyle',
-    'letterSpacing',
-    'textTransform',
-    'wordSpacing',
-    'textIndent',
-    'lineHeight',
-    'paddingTop',
-    'paddingRight',
-    'paddingBottom',
-    'paddingLeft',
-    'borderTopWidth',
-    'borderRightWidth',
-    'borderBottomWidth',
-    'borderLeftWidth',
-    'boxSizing',
-    'tabSize',
-  ] as const;
-
   function caretViewportPoint(): { x: number; y: number; height: number } | null {
     const { selectionEnd, value } = textarea;
+    let mirror: HTMLDivElement | null = null;
     try {
       const style = getComputedStyle(textarea);
-      const rect = textarea.getBoundingClientRect();
       const wrap = style.whiteSpace !== 'pre' && style.whiteSpace !== 'nowrap';
-      mirror.style.cssText = '';
-      mirror.style.position = 'fixed';
-      mirror.style.visibility = 'hidden';
-      mirror.style.pointerEvents = 'none';
-      mirror.style.whiteSpace = wrap ? 'pre-wrap' : 'pre';
-      mirror.style.overflowWrap = wrap ? 'break-word' : 'normal';
-      mirror.style.width = wrap ? `${rect.width}px` : `${Math.max(rect.width, textarea.scrollWidth)}px`;
-      for (const prop of MIRROR_PROPS) mirror.style[prop] = style[prop];
-      mirror.textContent = value.slice(0, selectionEnd);
       const marker = document.createElement('span');
       marker.textContent = String.fromCharCode(8203);
-      mirror.append(marker);
-      document.body.append(mirror);
-      mirror.scrollTop = textarea.scrollTop;
-      mirror.scrollLeft = textarea.scrollLeft;
+      const fragment = document.createDocumentFragment();
+      fragment.append(value.slice(0, selectionEnd), marker);
+      mirror = mountTextMirror(textarea, fragment);
+      if (!wrap) {
+        // A non-wrapping textarea scrolls horizontally; the caret may sit far
+        // past the visible box, so widen the mirror to the full scroll width.
+        const padX =
+          (Number.parseFloat(style.paddingLeft) || 0) +
+          (Number.parseFloat(style.paddingRight) || 0);
+        mirror.style.width = `${Math.max(0, textarea.scrollWidth - padX)}px`;
+      }
       const markerRect = marker.getBoundingClientRect();
-      const point = {
+      return {
         x: markerRect.left,
         y: markerRect.top,
         height: markerRect.height || parseFloat(style.lineHeight) || 20,
       };
-      mirror.remove();
-      return point;
     } catch {
-      mirror.remove();
       return null;
+    } finally {
+      mirror?.remove();
     }
   }
 
@@ -1290,7 +1265,6 @@ export function createSelectionBubble(
     textarea.removeEventListener('touchend', onTouchEnd);
     textarea.removeEventListener('keyup', onKey);
     textarea.removeEventListener('scroll', onScroll);
-    mirror.remove();
     bubble.remove();
   };
 }

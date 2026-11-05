@@ -6,6 +6,7 @@ export const PREF_KEYS = {
   sync: `${PREFIX}sync`,
   activeTab: `${PREFIX}active-tab`,
   openDocuments: `${PREFIX}open-documents`,
+  localCollections: `${PREFIX}local-collections`,
   toc: `${PREFIX}toc`,
   commentMarks: `${PREFIX}comment-marks`,
   documentContent: (id: string) => `${PREFIX}doc:${id}:content`,

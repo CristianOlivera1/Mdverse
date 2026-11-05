@@ -474,7 +474,6 @@ button.mi.danger:hover svg {
 }
 
 @media (max-width: 767px) {
-
   .code-pane,
   .pv-pane {
     flex: 1 1 0%;
@@ -768,4 +767,240 @@ button.mi:hover > .msel-check svg {
 .hb.on:disabled {
   color: #fff;
   background: #262626;
+}
+
+/* Collection / document pickers in the header (they replace the tab strip). */
+.msel-grow {
+  flex-shrink: 1;
+  min-width: 0;
+}
+
+.pick-trigger-label {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* Collection tabs: delete on hover, rename on double click. */
+.tab-wrap {
+  position: relative;
+  display: inline-flex;
+  flex-shrink: 0;
+}
+
+.tab-wrap.has-del .tab {
+  padding-right: 26px;
+}
+
+.tab-del {
+  position: absolute;
+  top: 50%;
+  right: 3px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 18px;
+  height: 18px;
+  border-radius: 5px;
+  color: #6b6b6b;
+  opacity: 0;
+  transform: translateY(-50%);
+  transition: opacity 0.12s;
+}
+
+.tab-del svg {
+  width: 12px;
+  height: 12px;
+}
+
+.tab-wrap:hover .tab-del,
+.tab-del:focus-visible {
+  opacity: 1;
+}
+
+.tab-del:hover {
+  color: #f87171;
+  background: #1f1f1f;
+}
+
+.tab-form {
+  display: inline-flex;
+  align-items: center;
+}
+
+.ctab {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  max-width: 170px;
+  min-height: 30px;
+  padding: 0 10px;
+  border-radius: 8px;
+  font-size: 12.5px;
+  color: #9a9a9a;
+  white-space: nowrap;
+}
+
+.ctab:hover {
+  background: #171717;
+  color: #fff;
+}
+
+.ctab.on {
+  background: #262626;
+  color: #fff;
+}
+
+.ctab .pick-name {
+  max-width: 140px;
+}
+
+.pick-item {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  border-radius: 8px;
+}
+
+.pick-item:hover {
+  background: #171717;
+}
+
+.pick-inline-edit {
+  display: flex;
+  flex: 1;
+  align-items: center;
+  gap: 4px;
+  min-width: 0;
+}
+
+.pick-inline-edit .pick-input {
+  height: 28px;
+}
+
+.pick-inline-action,
+.pick-rename {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  border-radius: 6px;
+  color: #777;
+}
+
+.pick-inline-action:hover,
+.pick-rename:hover {
+  color: #fff;
+  background: #262626;
+}
+
+.pick-inline-action:disabled {
+  opacity: 0.5;
+  cursor: wait;
+}
+
+.pick-inline-action svg,
+.pick-rename svg {
+  width: 14px;
+  height: 14px;
+}
+
+.pick-rename {
+  opacity: 0;
+}
+
+.pick-item:hover .pick-rename,
+.pick-item:focus-within .pick-rename,
+.pick-rename:focus-visible {
+  opacity: 1;
+}
+
+@media (hover: none) {
+  .pick-rename {
+    opacity: 1;
+  }
+}
+
+.pick-row {
+  display: flex;
+  flex: 1;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  min-height: 32px;
+  padding: 4px 8px;
+  border-radius: 8px;
+  font-size: 13px;
+  color: #c9c9c9;
+  text-align: left;
+}
+
+.pick-row:hover {
+  color: #fff;
+}
+
+.pick-row.on {
+  color: #fff;
+  background: #262626;
+}
+
+.pick-row:disabled {
+  color: #6b6b6b;
+  background: transparent;
+  cursor: default;
+}
+
+.pick-row:focus-visible {
+  outline: 1px solid #3b82f6;
+  outline-offset: -1px;
+}
+
+.pick-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.pick-count {
+  flex-shrink: 0;
+  margin-left: auto;
+  font-size: 11px;
+  color: #6b6b6b;
+}
+
+.pick-empty {
+  padding: 6px 8px;
+  font-size: 12px;
+  color: #6b6b6b;
+}
+
+.pick-form {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px;
+}
+
+.pick-form[hidden] {
+  display: none;
+}
+
+.pick-input {
+  flex: 1;
+  min-width: 0;
+  height: 30px;
+  padding: 0 8px;
+  border: 1px solid #262626;
+  border-radius: 8px;
+  background: #000;
+  color: #ededed;
+  font-size: 12.5px;
+  outline: none;
+}
+
+.pick-input:focus {
+  border-color: #3b82f6;
 }

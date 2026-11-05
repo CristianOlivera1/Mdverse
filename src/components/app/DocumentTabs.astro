@@ -2,15 +2,6 @@
 import Icon from '../ui/Icon.astro';
 ---
 
-<button
-  type="button"
-  class="hb shrink-0"
-  data-command="new-document"
-  title="New document"
-  aria-label="New document"
->
-  <Icon name="lucide:plus" />
-</button>
 <div class="flex min-w-0 flex-1 items-center gap-0.5" data-tabs-wrap>
   <button
     type="button"
@@ -25,8 +16,9 @@ import Icon from '../ui/Icon.astro';
   <div
     class="seg w-fit max-w-[30vw] min-w-0 flex-none overflow-x-auto no-sb sm:max-w-[25vw] lg:max-w-[30vw]"
     id="editor-tabs"
+    data-collection-tabs
     role="tablist"
-    aria-label="Documents"
+    aria-label="Collections"
   ></div>
   <button
     type="button"
@@ -38,4 +30,33 @@ import Icon from '../ui/Icon.astro';
   >
     <Icon name="lucide:chevron-right" />
   </button>
+  <button
+    type="button"
+    class="hb shrink-0"
+    data-command="new-collection"
+    title="New collection"
+    aria-label="New collection"
+  >
+    <Icon name="lucide:plus" />
+  </button>
+</div>
+
+<div class="pop" data-pop="documents" role="dialog" aria-label="Documents" hidden>
+  <p class="pop-label" data-documents-label>
+    Documents
+  </p>
+  <div data-document-list role="listbox" aria-label="Documents in this collection"></div>
+  <div class="pop-sep"></div>
+  <button type="button" class="mi" data-command="new-document">
+    <Icon name="lucide:file-plus" />
+    New document
+  </button>
+  <button type="button" class="mi" data-document-move-open data-menu="move">
+    <Icon name="lucide:list-tree" />
+    Move to a collection…
+  </button>
+  <div class="pop" data-pop="move" role="dialog" aria-label="Move document" hidden>
+    <p class="pop-label">Move this document to</p>
+    <div data-move-list role="listbox" aria-label="Collections"></div>
+  </div>
 </div>

@@ -5,6 +5,7 @@ import { countMatches, replaceAllMatches } from '../editor/findReplace';
 
 import { PREF_KEYS, readNumberPref, readPref, writePref } from '../editor/prefs';
 import { escapeRegExp, wordAt, type TextState } from '../editor/text';
+import { mountTextMirror } from '../editor/textMirror';
 
 import { createCursorOverlay } from '../collab/overlay';
 import type { CursorOverlay } from '../collab/overlay';
@@ -20,16 +21,24 @@ import { conflictPolicy } from '../documents/conflict';
 import { migrateLegacyDocuments } from '../documents/migrate';
 import {
   createDocument,
+  documentId,
   loadActiveDocumentId,
+  loadLocalCollections,
   loadOpenDocuments,
   nextUntitledTitle,
   normalizeTitle,
   saveActiveDocumentId,
+  saveLocalCollections,
   saveOpenDocuments,
   WELCOME_MARKDOWN,
 } from '../documents/store';
 import { isCloudDocument } from '../documents/types';
-import type { CloudDocument, OpenDocument, SaveDocumentResult } from '../documents/types';
+import type {
+  CloudCollection,
+  CloudDocument,
+  OpenDocument,
+  SaveDocumentResult,
+} from '../documents/types';
 import { HIGHLIGHT_THEME_CSS } from '../markdown/highlightTheme';
 import { renderDiagram } from '../markdown/mermaid';
 import { renderMarkdown } from '../markdown/render';
@@ -37,7 +46,7 @@ import { taskToggleAt } from '../markdown/taskList';
 import { buildTocHtml, collectHeadings } from '../markdown/toc';
 import { showAccessGate } from './accessGate';
 import { confirmAction, confirmChoice } from './confirmDialog';
-import { closeMenus, initMenus } from './menus';
+import { closeMenus, initMenus, openMenu } from './menus';
 
 const MIN_ZOOM = 0.7;
 const MAX_ZOOM = 1.8;
@@ -133,12 +142,10 @@ export function initEditorApp(): void {
   initMenus();
 
   const panesHost = document.getElementById('editor-panes');
-  const tabsHost = document.getElementById('editor-tabs');
   const template = document.getElementById('editor-pane-template') as HTMLTemplateElement | null;
-  if (!panesHost || !tabsHost || !template) return;
+  if (!panesHost || !template) return;
 
   const panesHostEl: HTMLElement = panesHost;
-  const tabsHostEl: HTMLElement = tabsHost;
   const paneTemplate: HTMLTemplateElement = template;
 
   document.head.insertAdjacentHTML('beforeend', `<style>${HIGHLIGHT_THEME_CSS}</style>`);
@@ -146,10 +153,12 @@ export function initEditorApp(): void {
   let documents = loadOpenDocuments();
   let activeId = '';
   let syncScroll = readPref(PREF_KEYS.sync) !== '0';
-  let renaming = false;
   let toastTimer: number | undefined;
 
   let cloud: CloudSession | null = null;
+  // Drafts get collections too, so the header behaves the same signed out; the
+  // account's rows replace this list as soon as the session loads.
+  let collections: CloudCollection[] = loadLocalCollections();
   const revisions = new Map<string, number>();
   const lastSaved = new Map<string, string>();
   const saveTimers = new Map<string, number>();
@@ -197,7 +206,10 @@ export function initEditorApp(): void {
     // Server documents come back from the account, never from here, and a public
     // document opened from a link is a view rather than something to keep. Only
     // the browser's own drafts are written back.
-    if (!cloud) saveOpenDocuments(documents.filter((doc) => doc.role === undefined));
+    if (!cloud) {
+      saveOpenDocuments(documents.filter((doc) => doc.role === undefined));
+      saveLocalCollections(collections);
+    }
     saveActiveDocumentId(activeId);
   }
 
@@ -741,7 +753,7 @@ export function initEditorApp(): void {
         consumePendingHash(pane);
         if (pane.docId === activeId) buildEditorToc();
       },
-      () => { },
+      () => {},
     );
   }
 
@@ -943,9 +955,11 @@ export function initEditorApp(): void {
     const { query, caseSensitive, wholeWord, useRegex } = findOptions(pane);
     if (!query) return null;
     try {
-      const pattern = useRegex ? query : wholeWord
-        ? `\\b${escapeRegExp(query)}\\b`
-        : escapeRegExp(query);
+      const pattern = useRegex
+        ? query
+        : wholeWord
+          ? `\\b${escapeRegExp(query)}\\b`
+          : escapeRegExp(query);
       return new RegExp(pattern, caseSensitive ? 'g' : 'gi');
     } catch {
       return null; // invalid regex pattern
@@ -959,9 +973,8 @@ export function initEditorApp(): void {
       return;
     }
     const count = countMatches(pane.textarea.value, regex);
-    pane.findCount.textContent = count === 0
-      ? 'No results'
-      : `${count} match${count === 1 ? '' : 'es'}`;
+    pane.findCount.textContent =
+      count === 0 ? 'No results' : `${count} match${count === 1 ? '' : 'es'}`;
   }
 
   function ensureFindBox(pane: Pane, index: number): HTMLElement {
@@ -997,10 +1010,10 @@ export function initEditorApp(): void {
     const value = textarea.value;
     const taRect = textarea.getBoundingClientRect();
     const opts = findOptions(pane);
-    const key = `${value.length}:${opts.query}:${opts.caseSensitive ? 1 : 0}:${opts.wholeWord ? 1 : 0}:${opts.useRegex ? 1 : 0}:${Math.round(taRect.width)}:${Math.round(taRect.height)}:${textarea.scrollTop}:${textarea.scrollLeft}`;
+    const key = `${value.length}:${opts.query}:${opts.caseSensitive ? 1 : 0}:${opts.wholeWord ? 1 : 0}:${opts.useRegex ? 1 : 0}:${Math.round(taRect.width)}:${Math.round(taRect.height)}:${style.fontSize}:${style.lineHeight}:${textarea.scrollTop}:${textarea.scrollLeft}`;
 
     if (pane.findCache?.key !== key) {
-      const boxes = measureFindRows(pane, value, regex, style);
+      const boxes = measureFindRows(pane, value, regex);
       if (!boxes) {
         for (let i = 0; i < pane.findPool.length; i++) pane.findPool[i].style.display = 'none';
         return;
@@ -1010,55 +1023,25 @@ export function initEditorApp(): void {
     placeFindBoxes(pane);
   }
 
-  /** CSS properties cloned from textarea to the mirror so layout is identical. */
-  const MIRROR_CLONE_PROPS = [
-    'fontFamily', 'fontSize', 'fontWeight', 'fontStyle', 'fontStretch',
-    'letterSpacing', 'wordSpacing', 'textIndent', 'textTransform',
-    'lineHeight', 'paddingTop', 'paddingRight', 'paddingBottom', 'paddingLeft',
-    'borderTopWidth', 'borderRightWidth', 'borderBottomWidth', 'borderLeftWidth',
-    'boxSizing', 'tabSize', 'whiteSpace', 'overflowWrap', 'wordBreak',
-  ] as const;
-
-  /**
-   * Builds a hidden mirror <div> that replicates the textarea's typography.
-   * Caller is responsible for appending to document.body and removing it.
-   */
-  function buildMirror(
-    textarea: HTMLTextAreaElement,
-    style: CSSStyleDeclaration,
-    taRect: DOMRect,
-  ): HTMLDivElement {
-    const mirror = document.createElement('div');
-    mirror.setAttribute('aria-hidden', 'true');
-    // CRITICAL: position at the SAME viewport coords as the textarea so that
-    // Range.getClientRects() returns coords in the same space. If we use
-    // top:0/left:0 the y values are wrong for any textarea that isn't at the
-    // very top of the viewport (e.g. everything below a header).
-    mirror.style.position = 'fixed';
-    mirror.style.top = `${taRect.top}px`;
-    mirror.style.left = `${taRect.left}px`;
-    mirror.style.width = `${taRect.width}px`;
-    mirror.style.height = `${taRect.height}px`;
-    mirror.style.visibility = 'hidden';
-    mirror.style.pointerEvents = 'none';
-    mirror.style.zIndex = '-9999';
-    mirror.style.overflow = 'hidden';
-    for (const prop of MIRROR_CLONE_PROPS) mirror.style[prop] = style[prop];
-    return mirror;
-  }
-
   function measureFindRows(
     pane: Pane,
     value: string,
     regex: RegExp,
-    style: CSSStyleDeclaration,
-  ): ReadonlyArray<{ readonly x: number; readonly y: number; readonly w: number; readonly h: number }> | null {
+  ): ReadonlyArray<{
+    readonly x: number;
+    readonly y: number;
+    readonly w: number;
+    readonly h: number;
+  }> | null {
     // Collect all match ranges (capped).
     regex.lastIndex = 0;
     const ranges: Array<{ from: number; to: number }> = [];
     let m: RegExpExecArray | null;
     while ((m = regex.exec(value)) !== null) {
-      if (m[0] === '') { regex.lastIndex += 1; continue; }
+      if (m[0] === '') {
+        regex.lastIndex += 1;
+        continue;
+      }
       ranges.push({ from: m.index, to: m.index + m[0].length });
       if (ranges.length >= FIND_HIGHLIGHT_CAP) break;
     }
@@ -1071,16 +1054,10 @@ export function initEditorApp(): void {
     const hostRect = host.getBoundingClientRect();
     const taRect = textarea.getBoundingClientRect();
 
-    // Build mirror at the SAME screen position as the textarea.
-    const mirror = buildMirror(textarea, style, taRect);
+    // Mirror at the SAME screen position and scroll as the textarea so that
+    // Range.getClientRects() reflects exactly what the user sees.
     const textNode = document.createTextNode(value);
-    mirror.appendChild(textNode);
-    document.body.appendChild(mirror);
-
-    // We need to scroll the mirror to match the textarea's scroll position
-    // so that getBoundingClientRect() on ranges reflects the visible area.
-    mirror.scrollTop = textarea.scrollTop;
-    mirror.scrollLeft = textarea.scrollLeft;
+    const mirror = mountTextMirror(textarea, textNode);
 
     const boxes: Array<{ x: number; y: number; w: number; h: number }> = [];
     try {
@@ -1231,418 +1208,579 @@ export function initEditorApp(): void {
     }
   }
 
-  function buildTitle(doc: OpenDocument): HTMLElement {
-    const title = document.createElement('span');
-    title.className = 'tab-title';
-    title.textContent = doc.title;
-    title.addEventListener('dblclick', () => beginRename(doc, title));
-    return title;
+  // ─── Collections and the documents inside them ───────────────────────────
+  // The header no longer paints one flat row of tabs: it names the collection
+  // in use and, inside that collection, a picker with the documents it holds.
+  // `documents` stays the single source of truth; the collection is derived
+  // from the active document, so the picker can never disagree with the editor.
+
+  const SHARED_COLLECTION = 'shared';
+
+  interface CollectionChoice {
+    readonly id: string;
+    readonly name: string;
+    readonly isDefault: boolean;
+    /** Only collections this account owns can be renamed, deleted or targeted. */
+    readonly editable: boolean;
   }
 
-  function buildTab(doc: OpenDocument): HTMLElement {
-    const tab = document.createElement('button');
-    tab.type = 'button';
-    tab.dataset.tabId = doc.id;
-    tab.setAttribute('role', 'tab');
-
-    const close = document.createElement('span');
-    close.className = 'tab-close';
-    close.dataset.closeTab = doc.id;
-    close.setAttribute('role', 'button');
-    close.innerHTML =
-      '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" ' +
-      'stroke-linecap="round"><path d="M18 6 6 18M6 6l12 12"/></svg>';
-
-    tab.append(buildTitle(doc), close);
-    return tab;
+  function pickerElement<T extends HTMLElement>(selector: string): T | null {
+    return document.querySelector<T>(selector);
   }
 
-  function renderTabs(): void {
-    const existing = new Map(
-      [...tabsHostEl.querySelectorAll<HTMLElement>('[data-tab-id]')].map((element) => [
-        element.dataset.tabId as string,
-        element,
-      ]),
-    );
+  function collectionOf(doc: OpenDocument): string {
+    // Shared documents are not part of this account's collections; grouping
+    // them keeps the owner's private names out of a collaborator's picker.
+    if (doc.role !== undefined && doc.role !== 'owner') return SHARED_COLLECTION;
+    // A document can point at a collection that is no longer in the list (a
+    // delete in another tab, a stale cache). Falling back to the default keeps
+    // the document reachable instead of hiding it from every picker.
+    const id = doc.collectionId;
+    return id && collections.some((entry) => entry.id === id) ? id : fallbackCollectionId();
+  }
 
-    existing.forEach((element, id) => {
-      if (!documents.some((doc) => doc.id === id)) element.remove();
-    });
+  function defaultCollectionId(): string {
+    return collections.find((entry) => entry.isDefault)?.id ?? collections[0]?.id ?? '';
+  }
 
-    documents.forEach((doc, index) => {
-      const tab = existing.get(doc.id) ?? buildTab(doc);
-      tab.className = doc.id === activeId ? 'tab on' : 'tab';
-      tab.setAttribute('aria-selected', String(doc.id === activeId));
-      tab.title = doc.title;
+  /** The collections the account created; the default one is only a fallback. */
+  function userCollections(): CloudCollection[] {
+    return collections.filter((entry) => !entry.isDefault);
+  }
 
-      const title = tab.querySelector<HTMLElement>('.tab-title');
-      if (title && title.textContent !== doc.title) title.textContent = doc.title;
-      tab
-        .querySelector<HTMLElement>('.tab-close')
-        ?.setAttribute('aria-label', `Close ${doc.title}`);
+  /** Where a document goes when the collection it names is gone. */
+  function fallbackCollectionId(): string {
+    return userCollections()[0]?.id ?? defaultCollectionId();
+  }
 
-      if (tabsHostEl.children[index] !== tab) {
-        tabsHostEl.insertBefore(tab, tabsHostEl.children[index] ?? null);
+  /**
+   * "General" is where documents landed before collections existed, and keeping
+   * it as a tab loses meaning as soon as there is a collection of the user's
+   * own. It stops being a tab then, and its documents move to the first one
+   * created, so nothing becomes unreachable.
+   */
+  function adoptDefaultCollection(): void {
+    const target = userCollections()[0]?.id;
+    const fallback = defaultCollectionId();
+    if (!target || !fallback || target === fallback) return;
+
+    let moved = false;
+    for (const doc of documents) {
+      if (collectionOf(doc) !== fallback) continue;
+      doc.collectionId = target;
+      moved = true;
+      // The owner's copy lives on the server too; filing it there keeps the
+      // next reload from reporting a different collection.
+      if (cloud && doc.role === 'owner') {
+        void cloud.move(doc.id, target).then((result) => {
+          if (result.ok && result.revision > 0) revisions.set(doc.id, result.revision);
+        });
       }
-    });
+    }
 
-    updateTabsOverflow();
-    revealActiveTab();
+    if (moved) persist();
   }
 
-  function beginRename(doc: OpenDocument, titleElement: HTMLElement): void {
-    if (renaming) return;
+  function collectionChoices(): CollectionChoice[] {
+    const visible = userCollections().length > 0 ? userCollections() : collections;
+    const choices: CollectionChoice[] = visible.map((entry) => ({
+      id: entry.id,
+      name: entry.name,
+      isDefault: entry.isDefault,
+      editable: true,
+    }));
+
+    if (documents.some((doc) => collectionOf(doc) === SHARED_COLLECTION)) {
+      choices.push({
+        id: SHARED_COLLECTION,
+        name: 'Shared with me',
+        isDefault: false,
+        editable: false,
+      });
+    }
+
+    return choices;
+  }
+
+  function activeCollectionId(): string {
+    const doc = documentById(activeId);
+    return doc ? collectionOf(doc) : (collectionChoices()[0]?.id ?? '');
+  }
+
+  function currentCollection(): CollectionChoice | undefined {
+    const id = activeCollectionId();
+    return collectionChoices().find((entry) => entry.id === id);
+  }
+
+  function documentsInCollection(id: string): OpenDocument[] {
+    return documents.filter((doc) => collectionOf(doc) === id);
+  }
+
+  const CLOSE_ICON =
+    '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" ' +
+    'stroke-linecap="round"><path d="M18 6 6 18M6 6l12 12"/></svg>';
+
+  // The strip is rebuilt on every switch, so `dblclick` (which needs the same
+  // node twice) never fires on a real tab. Two quick clicks on the same id are
+  // detected here instead.
+  let lastCollectionClick = { id: '', at: 0 };
+
+  const TRASH_ICON =
+    '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" ' +
+    'stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18"/>' +
+    '<path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/>' +
+    '<path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6"/></svg>';
+
+  function renderCollectionTabs(activeCollection: string): void {
+    const host = pickerElement<HTMLElement>('[data-collection-tabs]');
+    if (!host) return;
+
+    host.replaceChildren();
+    for (const choice of collectionChoices()) {
+      const wrap = document.createElement('div');
+      wrap.className = 'tab-wrap';
+
+      const tab = document.createElement('button');
+      tab.type = 'button';
+      tab.className = choice.id === activeCollection ? 'tab on' : 'tab';
+      tab.dataset.collectionId = choice.id;
+      tab.setAttribute('role', 'tab');
+      tab.setAttribute('aria-selected', String(choice.id === activeCollection));
+      tab.title = choice.editable ? `${choice.name} — double click to rename` : choice.name;
+
+      const name = document.createElement('span');
+      name.className = 'tab-title';
+      name.textContent = choice.name;
+      tab.append(name);
+      wrap.append(tab);
+
+      // The trash only makes sense for a collection this account owns, and the
+      // default one is where documents fall back to: it can never be deleted.
+      if (choice.editable && !choice.isDefault) {
+        wrap.classList.add('has-del');
+        const remove = document.createElement('button');
+        remove.type = 'button';
+        remove.className = 'tab-del';
+        remove.dataset.collectionDelete = choice.id;
+        remove.setAttribute('aria-label', `Delete ${choice.name}`);
+        remove.title = `Delete ${choice.name}`;
+        remove.innerHTML = TRASH_ICON;
+        wrap.append(remove);
+      }
+
+      host.append(wrap);
+    }
+
+    host.querySelector('.tab.on')?.scrollIntoView({ inline: 'nearest', block: 'nearest' });
+    updateCollectionTabsScroll();
+  }
+
+  /** Arrow visibility and the fade masks on the tab strip. */
+  function updateCollectionTabsScroll(): void {
+    const tabs = pickerElement<HTMLElement>('[data-collection-tabs]');
+    if (!tabs) return;
+    const prev = pickerElement<HTMLElement>('[data-tabs-prev]');
+    const next = pickerElement<HTMLElement>('[data-tabs-next]');
+    const overLeft = tabs.scrollLeft > 2;
+    const overRight = tabs.scrollLeft + tabs.clientWidth < tabs.scrollWidth - 2;
+    tabs.dataset.overLeft = String(overLeft);
+    tabs.dataset.overRight = String(overRight);
+    if (prev) prev.hidden = !overLeft;
+    if (next) next.hidden = !overRight;
+  }
+
+  function renderDocumentList(collectionId: string): void {
+    const host = pickerElement<HTMLElement>('[data-document-list]');
+    if (!host) return;
+
+    host.replaceChildren();
+    const entries = documentsInCollection(collectionId);
+
+    if (entries.length === 0) {
+      const empty = document.createElement('p');
+      empty.className = 'pick-empty';
+      empty.textContent = 'No documents in this collection yet.';
+      host.append(empty);
+      return;
+    }
+
+    for (const entry of entries) {
+      const item = document.createElement('div');
+      item.className = 'pick-item';
+      item.dataset.documentRow = entry.id;
+
+      const open = document.createElement('button');
+      open.type = 'button';
+      open.className = entry.id === activeId ? 'pick-row on' : 'pick-row';
+      open.dataset.documentId = entry.id;
+      open.setAttribute('role', 'option');
+      open.setAttribute('aria-selected', String(entry.id === activeId));
+      open.title = entry.title;
+
+      const name = document.createElement('span');
+      name.className = 'pick-name';
+      name.textContent = entry.title;
+      open.append(name);
+
+      if (!isReadOnly(entry)) {
+        const rename = document.createElement('button');
+        rename.type = 'button';
+        rename.className = 'pick-rename';
+        rename.dataset.renameDocument = entry.id;
+        rename.setAttribute('aria-label', `Rename ${entry.title}`);
+        rename.title = `Rename ${entry.title}`;
+        rename.innerHTML =
+          '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" ' +
+          'stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/>' +
+          '<path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L8 18l-4 1 1-4Z"/></svg>';
+        item.append(open, rename);
+      } else {
+        item.append(open);
+      }
+
+      const close = document.createElement('button');
+      close.type = 'button';
+      close.className = 'tab-close';
+      close.dataset.closeTab = entry.id;
+      close.setAttribute('aria-label', `Close ${entry.title}`);
+      close.innerHTML = CLOSE_ICON;
+
+      item.append(close);
+      host.append(item);
+    }
+  }
+
+  function beginDocumentRename(id: string): void {
+    const doc = documentById(id);
+    if (!doc) return;
     if (isReadOnly(doc)) {
       denyEdit();
       return;
     }
-    renaming = true;
+
+    const item = [...(pickerElement<HTMLElement>('[data-document-list]')?.children ?? [])]
+      .filter((child): child is HTMLElement => child instanceof HTMLElement)
+      .find((child) => child.dataset.documentRow === id);
+    const open = item?.querySelector<HTMLElement>('[data-document-id]');
+    const close = item?.querySelector<HTMLButtonElement>('[data-close-tab]');
+    if (!item || !open || !close) return;
+
+    const form = document.createElement('form');
+    form.className = 'pick-inline-edit';
+    form.dataset.documentRenameInline = id;
 
     const input = document.createElement('input');
-    input.className = 'tab-input';
+    input.type = 'text';
+    input.maxLength = 120;
+    input.className = 'pick-input';
     input.value = doc.title;
-    titleElement.replaceWith(input);
+    input.setAttribute('aria-label', `Document name for ${doc.title}`);
+
+    const save = document.createElement('button');
+    save.type = 'submit';
+    save.className = 'pick-inline-action';
+    save.title = 'Save name';
+    save.setAttribute('aria-label', 'Save document name');
+    save.innerHTML =
+      '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" ' +
+      'stroke-linecap="round" stroke-linejoin="round"><path d="m5 12 4 4L19 6"/></svg>';
+
+    const cancel = document.createElement('button');
+    cancel.type = 'button';
+    cancel.className = 'pick-inline-action';
+    cancel.dataset.documentRenameCancel = '';
+    cancel.title = 'Cancel';
+    cancel.setAttribute('aria-label', 'Cancel renaming document');
+    cancel.innerHTML = CLOSE_ICON;
+
+    form.append(input, save, cancel);
+    open.replaceWith(form);
+    close.hidden = true;
     input.focus();
     input.select();
+  }
 
-    let finished = false;
-    const finish = (save: boolean): void => {
-      if (finished) return;
-      finished = true;
-      renaming = false;
-      if (save) {
-        void renameDocument(doc, input.value);
-      }
-      input.replaceWith(buildTitle(doc));
+  function renderMoveList(doc: OpenDocument | undefined): void {
+    const host = pickerElement<HTMLElement>('[data-move-list]');
+    if (!host) return;
+
+    host.replaceChildren();
+    for (const target of collectionChoices().filter((choice) => choice.editable)) {
+      const row = document.createElement('button');
+      row.type = 'button';
+      row.className = 'pick-row';
+      row.dataset.moveCollectionId = target.id;
+      row.setAttribute('role', 'option');
+      row.disabled = doc !== undefined && collectionOf(doc) === target.id;
+
+      const name = document.createElement('span');
+      name.className = 'pick-name';
+      name.textContent = target.name;
+      row.append(name);
+
+      host.append(row);
+    }
+  }
+
+  function renderTabs(): void {
+    const active = activeCollectionId();
+    const collection = currentCollection();
+    const doc = documentById(activeId);
+
+    const name = collection?.name ?? 'General';
+    const documentsLabel = pickerElement<HTMLElement>('[data-documents-label]');
+    if (documentsLabel) documentsLabel.textContent = name;
+
+    renderCollectionTabs(active);
+    renderDocumentList(active);
+    renderMoveList(doc);
+
+    // Only the owner files a document; collaborators and local drafts do not.
+    const canMove =
+      doc !== undefined &&
+      (doc.role === undefined || doc.role === 'owner') &&
+      collectionChoices().filter((entry) => entry.editable).length > 1;
+    pickerElement<HTMLElement>('[data-document-move-open]')?.toggleAttribute('hidden', !canMove);
+    if (!canMove) pickerElement<HTMLElement>('[data-pop="move"]')?.setAttribute('hidden', '');
+  }
+
+  async function selectCollection(id: string): Promise<void> {
+    if (id === activeCollectionId()) {
       renderTabs();
-      updateStatus();
-    };
+      return;
+    }
 
-    input.addEventListener('keydown', (event) => {
-      if (event.key === 'Enter') {
-        event.preventDefault();
-        finish(true);
-      } else if (event.key === 'Escape') {
-        event.preventDefault();
-        finish(false);
-      }
-    });
-    input.addEventListener('click', (event) => event.stopPropagation());
-    input.addEventListener('blur', () => finish(true));
+    const entries = documentsInCollection(id);
+    if (entries.length > 0) {
+      activate(entries[0].id);
+      return;
+    }
+
+    // Shared documents belong to other accounts; nothing to create here.
+    if (id === SHARED_COLLECTION) return;
+
+    // An empty collection gets its first document, so the editor never shows a
+    // document from outside the collection named above it.
+    await addDocument(id);
+  }
+
+  /** Clicking a tab switches collection and unfolds its documents. */
+  async function openDocuments(id: string): Promise<void> {
+    await selectCollection(id);
+    const panel = pickerElement<HTMLElement>('[data-pop="documents"]');
+    const anchor = pickerElement<HTMLElement>(`[data-collection-id="${id}"]`);
+    if (!panel || !anchor) return;
+    closeMenus([panel]);
+    openMenu(panel, anchor);
+  }
+
+  /** Double click on a tab edits its name in place. */
+  function beginCollectionRename(id: string): void {
+    const collection = collections.find((entry) => entry.id === id);
+    const wrap = pickerElement<HTMLElement>(`[data-collection-id="${id}"]`)?.closest<HTMLElement>(
+      '.tab-wrap',
+    );
+    const tab = wrap?.querySelector<HTMLElement>('[data-collection-id]');
+    if (!collection || !wrap || !tab) return;
+
+    closeMenus();
+    const form = document.createElement('form');
+    form.className = 'tab-form';
+    form.dataset.collectionRenameInline = id;
+
+    const input = document.createElement('input');
+    input.type = 'text';
+    input.maxLength = 60;
+    input.className = 'tab-input';
+    input.value = collection.name;
+    input.setAttribute('aria-label', `Collection name for ${collection.name}`);
+
+    form.append(input);
+    tab.replaceWith(form);
+    input.focus();
+    input.select();
   }
 
   function renameActiveDocument(): void {
-    const tab = tabsHostEl.querySelector<HTMLElement>(`[data-tab-id="${activeId}"]`);
-    const title = tab?.querySelector<HTMLElement>('.tab-title');
     const doc = documentById(activeId);
-    if (title && doc) beginRename(doc, title);
-  }
-
-  // ─── Tab drag reorder (pointer-based: mouse + touch + pen uniformly) ─────
-  // Pointer Events cover every input type; HTML5 DnD is deliberately not used
-  // because it ignores touch. The `documents` array is the source of truth and
-  // stays untouched until drop: live moves only shuffle DOM nodes, so Escape
-  // or `pointercancel` aborts by rebuilding the strip via renderTabs().
-  // Persistence reuses persist(): in local mode saveOpenDocuments writes the
-  // FULL array (order included) to localStorage, so reload restores the new
-  // order. In cloud mode persist() deliberately skips local caching
-  // (content-leak posture), so a reorder there is session-only by design —
-  // no new storage keys are introduced for it.
-  const TAB_DRAG_SLOP_PX = 4;
-  const TOUCH_ARM_MS = 300;
-  const STRIP_EDGE_PX = 24;
-  const STRIP_EDGE_SCROLL_PX = 12;
-
-  interface PendingTabDrag {
-    readonly tab: HTMLElement;
-    readonly pointerId: number;
-    readonly startX: number;
-    readonly startY: number;
-    armed: boolean;
-    timer: number | undefined;
-  }
-
-  interface ActiveTabDrag {
-    readonly tab: HTMLElement;
-    readonly pointerId: number;
-  }
-
-  let pendingDrag: PendingTabDrag | null = null;
-  let activeDrag: ActiveTabDrag | null = null;
-  // Set on drop after a real drag: the browser still fires the click that
-  // follows pointerup, which must not activate/close a tab.
-  let suppressTabClick = false;
-  // Thin insertion bar, created once and reused across drags (inline styles
-  // only, so no new global CSS is needed; the strip is a flex row).
-  let dragBar: HTMLElement | null = null;
-
-  function tabDragBar(): HTMLElement {
-    if (!dragBar) {
-      dragBar = document.createElement('div');
-      dragBar.setAttribute('aria-hidden', 'true');
-      dragBar.style.cssText =
-        'width:2px;flex:none;align-self:stretch;margin:4px 0;border-radius:2px;background:#3b82f6;';
+    if (!doc) return;
+    if (isReadOnly(doc)) {
+      denyEdit();
+      return;
     }
-    return dragBar;
+
+    const trigger = pickerElement<HTMLElement>(`[data-collection-id="${activeCollectionId()}"]`);
+    const panel = pickerElement<HTMLElement>('[data-pop="documents"]');
+    if (!trigger || !panel) return;
+
+    closeMenus([panel]);
+    openMenu(panel, trigger);
+    beginDocumentRename(doc.id);
   }
 
-  function clearPendingDrag(): void {
-    if (pendingDrag?.timer !== undefined) window.clearTimeout(pendingDrag.timer);
-    pendingDrag = null;
-  }
-
-  function cleanupTabDragVisuals(tab: HTMLElement): void {
-    tab.style.opacity = '';
-    tab.style.boxShadow = '';
-    tab.style.touchAction = '';
-    tab.removeAttribute('aria-grabbed');
-  }
-
-  function finishTabDrag(): void {
-    tabsHostEl.removeAttribute('aria-dropeffect');
-    dragBar?.remove();
-    document.body.classList.remove('select-none');
-  }
-
-  function abortTabDrag(): void {
-    if (!activeDrag) return;
-    const { tab } = activeDrag;
-    activeDrag = null;
-    clearPendingDrag();
-    cleanupTabDragVisuals(tab);
-    finishTabDrag();
-    // The array was never mutated: rebuild the strip from it.
-    renderTabs();
-  }
-
-  function commitTabDrag(): void {
-    if (!activeDrag) return;
-    const { tab } = activeDrag;
-    activeDrag = null;
-    clearPendingDrag();
-    cleanupTabDragVisuals(tab);
-    dragBar?.remove();
-    // Read the DOM order back into the array BEFORE renderTabs/persist.
-    const byId = new Map(documents.map((doc) => [doc.id, doc]));
-    const reordered = [...tabsHostEl.querySelectorAll<HTMLElement>('[data-tab-id]')]
-      .map((element) => element.dataset.tabId ?? '')
-      .filter((id) => byId.has(id))
-      .map((id) => byId.get(id) as OpenDocument);
-    // Defensive: never lose a document if the DOM ever disagrees.
-    for (const doc of documents) {
-      if (!reordered.includes(doc)) reordered.push(doc);
+  /** "Collection", "Collection 2", … — a new tab never asks for a name first. */
+  function nextCollectionName(): string {
+    const taken = new Set(collections.map((entry) => entry.name.toLowerCase()));
+    if (!taken.has('collection')) return 'Collection';
+    for (let index = 2; index <= collections.length + 2; index++) {
+      const candidate = `Collection ${index}`;
+      if (!taken.has(candidate.toLowerCase())) return candidate;
     }
-    documents = reordered;
-    finishTabDrag();
-    renderTabs();
-    // Local mode persists the full order (survives reload); cloud mode stays
-    // session-only by design (see note above).
+    return `Collection ${collections.length + 2}`;
+  }
+
+  async function createCollection(): Promise<void> {
+    const name = nextCollectionName();
+    let created: CloudCollection;
+
+    if (cloud) {
+      const result = await cloud.createCollection(name);
+      if (!result) {
+        toast('Could not create the collection');
+        return;
+      }
+      created = result;
+    } else {
+      // Signed out, the grouping lives in this browser beside the drafts it
+      // holds; there is nowhere else to send it.
+      created = { id: documentId(), name, isDefault: false };
+    }
+
+    collections = [...collections, created];
+    // The first collection of the account takes over whatever "General" held.
+    adoptDefaultCollection();
     persist();
-    suppressTabClick = true;
+    renderTabs();
+    closeMenus();
+    // A brand-new collection starts with one document, like a new tab did.
+    await addDocument(created.id);
   }
 
-  function startTabDrag(pending: PendingTabDrag): void {
-    pendingDrag = null;
-    activeDrag = { tab: pending.tab, pointerId: pending.pointerId };
-    try {
-      pending.tab.setPointerCapture(pending.pointerId);
-    } catch {
-      // No capture (e.g. the pointer is already gone): moves still bubble up.
+  async function renameCollection(id: string, name: string): Promise<void> {
+    if (!collections.some((entry) => entry.id === id)) return;
+
+    if (cloud) {
+      const updated = await cloud.renameCollection(id, name);
+      if (!updated) {
+        toast('Could not rename the collection');
+        return;
+      }
+      collections = collections.map((entry) => (entry.id === updated.id ? updated : entry));
+    } else {
+      collections = collections.map((entry) => (entry.id === id ? { ...entry, name } : entry));
     }
-    pending.tab.style.opacity = '0.6';
-    pending.tab.style.boxShadow = '0 8px 24px rgba(0,0,0,0.45)';
-    pending.tab.setAttribute('aria-grabbed', 'true');
-    tabsHostEl.setAttribute('aria-dropeffect', 'move');
-    document.body.classList.add('select-none');
-    tabsHostEl.insertBefore(tabDragBar(), pending.tab);
+
+    persist();
+    renderTabs();
   }
 
-  function moveTabDrag(clientX: number): void {
-    if (!activeDrag) return;
-    const { tab } = activeDrag;
-    // Midpoint insertion: the first sibling whose center is past the pointer
-    // is where the dragged tab lands.
-    let before: HTMLElement | null = null;
-    for (const sibling of tabsHostEl.querySelectorAll<HTMLElement>('[data-tab-id]')) {
-      if (sibling === tab) continue;
-      const rect = sibling.getBoundingClientRect();
-      if (clientX < rect.left + rect.width / 2) {
-        before = sibling;
-        break;
-      }
+  async function deleteCollectionById(id: string): Promise<void> {
+    const collection = collections.find((entry) => entry.id === id);
+    if (!collection || collection.isDefault) return;
+
+    const confirmed = await confirmAction({
+      title: `Delete “${collection.name}”?`,
+      message: 'Its documents move to your first collection. Nothing is deleted.',
+      confirmLabel: 'Delete',
+      danger: true,
+    });
+    if (!confirmed) return;
+
+    if (cloud && !(await cloud.deleteCollection(collection.id))) {
+      toast('Could not delete the collection');
+      return;
     }
-    if (before) tabsHostEl.insertBefore(tab, before);
-    else tabsHostEl.append(tab);
-    // Insertion indicator travels on the leading edge of the dragged tab.
-    tabsHostEl.insertBefore(tabDragBar(), tab);
-    // Nudge the strip when dragging past its visible edges.
-    const hostRect = tabsHostEl.getBoundingClientRect();
-    if (clientX < hostRect.left + STRIP_EDGE_PX) tabsHostEl.scrollLeft -= STRIP_EDGE_SCROLL_PX;
-    else if (clientX > hostRect.right - STRIP_EDGE_PX)
-      tabsHostEl.scrollLeft += STRIP_EDGE_SCROLL_PX;
+
+    collections = collections.filter((entry) => entry.id !== collection.id);
+    const fallback = fallbackCollectionId();
+    for (const doc of documents) {
+      if (doc.collectionId === collection.id) doc.collectionId = fallback;
+    }
+
+    persist();
+    renderTabs();
+    closeMenus();
   }
 
-  function initTabDragReorder(): void {
-    tabsHostEl.addEventListener('pointerdown', (event) => {
-      // A fresh press belongs to a new gesture: a stale suppression flag from
-      // a drag whose click never arrived must not eat this gesture's click.
-      suppressTabClick = false;
-      if (pendingDrag || activeDrag || renaming) return;
-      if (event.pointerType === 'mouse' && event.button !== 0) return;
-      const origin = event.target as HTMLElement | null;
-      // The close affordance never starts a drag.
-      if (origin?.closest?.('[data-close-tab]')) return;
-      const tab = origin?.closest?.('[data-tab-id]');
-      if (!(tab instanceof HTMLElement) || !tab.dataset.tabId) return;
-      if (tab.parentElement !== tabsHostEl) return;
+  async function moveActiveDocument(collectionId: string): Promise<void> {
+    const doc = documentById(activeId);
+    if (!doc || collectionOf(doc) === collectionId) return;
 
-      const pending: PendingTabDrag = {
-        tab,
-        pointerId: event.pointerId,
-        startX: event.clientX,
-        startY: event.clientY,
-        // Mouse arms immediately; touch/pen need the hold below so the strip
-        // keeps scrolling and plain taps keep activating.
-        armed: event.pointerType === 'mouse',
-        timer: undefined,
-      };
-      if (!pending.armed) {
-        pending.timer = window.setTimeout(() => {
-          if (pendingDrag !== pending) return;
-          pending.armed = true;
-          // Claimed before any scroll started, so later moves drive the drag.
-          tab.style.touchAction = 'none';
-        }, TOUCH_ARM_MS);
-      }
-      pendingDrag = pending;
-    });
+    if (cloud) {
+      if (doc.role !== 'owner') return;
 
-    tabsHostEl.addEventListener('pointermove', (event) => {
-      if (activeDrag) {
-        if (event.pointerId !== activeDrag.pointerId) return;
-        moveTabDrag(event.clientX);
+      const result = await cloud.move(doc.id, collectionId);
+      if (!result.ok) {
+        toast('Could not move the document');
         return;
       }
-      if (!pendingDrag || event.pointerId !== pendingDrag.pointerId) return;
-      const distance = Math.hypot(
-        event.clientX - pendingDrag.startX,
-        event.clientY - pendingDrag.startY,
-      );
-      if (distance <= TAB_DRAG_SLOP_PX) return;
-      if (!pendingDrag.armed) {
-        // Moved before the hold elapsed: it is a scroll, not a drag.
-        const pending = pendingDrag;
-        if (pending.timer !== undefined) window.clearTimeout(pending.timer);
-        if (pending.tab.style.touchAction) pending.tab.style.touchAction = '';
-        pendingDrag = null;
-        return;
-      }
-      const pending = pendingDrag;
-      startTabDrag(pending);
-      moveTabDrag(event.clientX);
-    });
 
-    const endPointer = (event: PointerEvent): void => {
-      if (activeDrag && event.pointerId === activeDrag.pointerId) {
-        if (event.type === 'pointercancel') abortTabDrag();
-        else commitTabDrag();
-        return;
-      }
-      if (pendingDrag && event.pointerId === pendingDrag.pointerId) clearPendingDrag();
-    };
-    tabsHostEl.addEventListener('pointerup', endPointer);
-    tabsHostEl.addEventListener('pointercancel', endPointer);
+      // Filing bumps the revision, so the next save must not look stale.
+      if (result.revision > 0) revisions.set(doc.id, result.revision);
+    }
 
-    document.addEventListener('keydown', (event) => {
-      if (event.key === 'Escape' && activeDrag) {
-        event.preventDefault();
-        abortTabDrag();
-      }
-    });
+    doc.collectionId = collectionId;
+    persist();
+    renderTabs();
+    closeMenus();
+  }
 
-    // Capture phase runs before the document-level click handler below, so the
-    // click that follows a real drop never activates or closes a tab.
-    document.addEventListener(
-      'click',
-      (event) => {
-        if (!suppressTabClick) return;
-        suppressTabClick = false;
-        event.preventDefault();
-        event.stopPropagation();
-      },
-      true,
+  function initPickers(): void {
+    const tabs = pickerElement<HTMLElement>('[data-collection-tabs]');
+    pickerElement<HTMLElement>('[data-tabs-prev]')?.addEventListener('click', () =>
+      tabs?.scrollBy({ left: -160, behavior: 'smooth' }),
     );
-  }
-
-  const TABS_SCROLL_PX = 240;
-  const TABS_OVERFLOW_SLACK_PX = 1;
-  let tabsResizeTimer: number | undefined;
-
-  function tabsChevron(direction: 'prev' | 'next'): HTMLButtonElement | null {
-    return document.querySelector<HTMLButtonElement>(`[data-tabs-${direction}]`);
-  }
-
-  function tabsSmoothBehavior(): ScrollBehavior {
-    return window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth';
-  }
-
-  function updateTabsOverflow(): void {
-    const maxLeft = tabsHostEl.scrollWidth - tabsHostEl.clientWidth;
-    const canScroll = maxLeft > TABS_OVERFLOW_SLACK_PX;
-    const canLeft = canScroll && tabsHostEl.scrollLeft > TABS_OVERFLOW_SLACK_PX;
-    const canRight = canScroll && tabsHostEl.scrollLeft < maxLeft - TABS_OVERFLOW_SLACK_PX;
-    const prev = tabsChevron('prev');
-    const next = tabsChevron('next');
-    if (prev) prev.hidden = !canLeft;
-    if (next) next.hidden = !canRight;
-    tabsHostEl.toggleAttribute('data-over-left', canLeft);
-    tabsHostEl.toggleAttribute('data-over-right', canRight);
-  }
-
-  function revealActiveTab(): void {
-    if (activeDrag) return;
-    const active = tabsHostEl.querySelector<HTMLElement>('.tab.on');
-    if (!active) return;
-    const hostRect = tabsHostEl.getBoundingClientRect();
-    const tabRect = active.getBoundingClientRect();
-    if (tabRect.left < hostRect.left || tabRect.right > hostRect.right) {
-      active.scrollIntoView({ block: 'nearest', inline: 'nearest' });
-    }
-  }
-
-  function initTabsOverflow(): void {
-    tabsHostEl.addEventListener(
-      'scroll',
-      () => {
-        updateTabsOverflow();
-      },
-      { passive: true },
+    pickerElement<HTMLElement>('[data-tabs-next]')?.addEventListener('click', () =>
+      tabs?.scrollBy({ left: 160, behavior: 'smooth' }),
     );
-    // A vertical wheel over a horizontally-overflowing strip scrolls it
-    // sideways. Only hijacked when the vertical intent dominates and the
-    // strip actually overflows, so page/trackpad gestures stay intact.
-    tabsHostEl.addEventListener(
+    tabs?.addEventListener('scroll', updateCollectionTabsScroll);
+    tabs?.addEventListener(
       'wheel',
-      (event: WheelEvent) => {
-        if (activeDrag) return;
-        if (Math.abs(event.deltaY) <= Math.abs(event.deltaX)) return;
-        if (tabsHostEl.scrollWidth <= tabsHostEl.clientWidth) return;
-        tabsHostEl.scrollLeft += event.deltaY;
+      (event) => {
+        if (
+          tabs.scrollWidth <= tabs.clientWidth ||
+          event.deltaY === 0 ||
+          Math.abs(event.deltaX) >= Math.abs(event.deltaY)
+        ) {
+          return;
+        }
+
         event.preventDefault();
+        tabs.scrollLeft += event.deltaY;
       },
       { passive: false },
     );
-    tabsChevron('prev')?.addEventListener('click', () => {
-      tabsHostEl.scrollBy({ left: -TABS_SCROLL_PX, behavior: tabsSmoothBehavior() });
+    window.addEventListener('resize', updateCollectionTabsScroll);
+
+    document.addEventListener('submit', (event) => {
+      const form = event.target as HTMLFormElement;
+
+      const collectionRename = form.closest<HTMLFormElement>('[data-collection-rename-inline]');
+      if (collectionRename) {
+        event.preventDefault();
+        const id = collectionRename.dataset.collectionRenameInline ?? '';
+        const name = collectionRename.querySelector('input')?.value.trim();
+        if (!id || !name) {
+          renderTabs();
+          return;
+        }
+        void renameCollection(id, name);
+        return;
+      }
+
+      const documentRename = form.closest<HTMLFormElement>('[data-document-rename-inline]');
+      if (!documentRename) return;
+      event.preventDefault();
+      const title = documentRename.querySelector<HTMLInputElement>('input')?.value.trim();
+      const doc = documentById(documentRename.dataset.documentRenameInline ?? '');
+      if (!doc || !title || isReadOnly(doc)) return;
+      documentRename.querySelectorAll<HTMLButtonElement>('button').forEach((button) => {
+        button.disabled = true;
+      });
+      void renameDocument(doc, title).then(() => {
+        renderTabs();
+      });
     });
-    tabsChevron('next')?.addEventListener('click', () => {
-      tabsHostEl.scrollBy({ left: TABS_SCROLL_PX, behavior: tabsSmoothBehavior() });
-    });
-    window.addEventListener('resize', () => {
-      window.clearTimeout(tabsResizeTimer);
-      tabsResizeTimer = window.setTimeout(updateTabsOverflow, 120);
-    });
-    updateTabsOverflow();
   }
 
   function activate(id: string): void {
@@ -1715,22 +1853,34 @@ export function initEditorApp(): void {
     );
   }
 
-  async function addDocument(): Promise<void> {
+  async function addDocument(collectionId?: string): Promise<void> {
     if (!booted) return;
     if (documents.length >= MAX_OPEN_DOCUMENTS) {
-      toast('Tab limit reached');
+      toast('Document limit reached');
       return;
     }
 
+    // A new document lands in the collection in use. When that collection is not
+    // one of ours ("Shared with me"), it goes to the default.
+    const requested = collectionId ?? activeCollectionId();
+    const target = collections.some((entry) => entry.id === requested)
+      ? requested
+      : fallbackCollectionId();
+
     if (cloud) {
       try {
-        const created = await cloud.create(nextUntitledTitle(documents));
+        const created = await cloud.create(
+          nextUntitledTitle(documents),
+          undefined,
+          target || undefined,
+        );
         revisions.set(created.id, created.revision);
         lastSaved.set(created.id, created.content);
         const doc: OpenDocument = {
           id: created.id,
           title: created.title,
           content: created.content,
+          collectionId: created.collectionId ?? undefined,
         };
         documents.push(doc);
         mountPane(doc);
@@ -1742,6 +1892,7 @@ export function initEditorApp(): void {
     }
 
     const doc = createDocument(documents);
+    doc.collectionId = target;
     documents.push(doc);
     mountPane(doc);
     activate(doc.id);
@@ -1782,8 +1933,15 @@ export function initEditorApp(): void {
     saveTimers.delete(id);
     pendingSaves.delete(id);
     conflicted.delete(id);
+    const closingCollection = collectionOf(doc);
     documents = documents.filter((item) => item.id !== id);
-    if (activeId === id) activeId = documents[0].id;
+    if (activeId === id) {
+      // Stay in the same collection while it still has a document; otherwise
+      // fall back to whatever is left rather than showing an empty editor.
+      const next =
+        documents.find((item) => collectionOf(item) === closingCollection) ?? documents[0];
+      activeId = next.id;
+    }
 
     if (cloud) {
       const session = cloud;
@@ -1827,9 +1985,7 @@ export function initEditorApp(): void {
 
   async function clearAll(): Promise<void> {
     // Documents this account can only read keep their text; nobody clears them here.
-    const editable = [...panes.values()].filter(
-      (pane) => !isReadOnly(documentById(pane.docId)),
-    );
+    const editable = [...panes.values()].filter((pane) => !isReadOnly(documentById(pane.docId)));
     if (!editable.some((pane) => pane.textarea.value)) {
       if (editable.length < panes.size) denyEdit();
       return;
@@ -1954,7 +2110,8 @@ export function initEditorApp(): void {
         if (pane && doc) downloadMarkdown(pane.textarea.value, doc.title);
         return;
       case 'export-html':
-        if (pane && doc) runExport('html', pane, doc, 'Building HTML…', 'Could not export the HTML - try again');
+        if (pane && doc)
+          runExport('html', pane, doc, 'Building HTML…', 'Could not export the HTML - try again');
         return;
       case 'export-pdf':
         if (!pane || !doc) return;
@@ -1962,7 +2119,13 @@ export function initEditorApp(): void {
         return;
       case 'export-docx':
         if (!pane || !doc) return;
-        runExport('docx', pane, doc, 'Building Word document…', 'Could not build the Word document - try again');
+        runExport(
+          'docx',
+          pane,
+          doc,
+          'Building Word document…',
+          'Could not build the Word document - try again',
+        );
         return;
       case 'toggle-comments':
         // Handled entirely by commentsIntegration.ts via DOM event delegation
@@ -1999,6 +2162,9 @@ export function initEditorApp(): void {
         return;
       case 'new-document':
         void addDocument();
+        return;
+      case 'new-collection':
+        void createCollection();
         return;
       case 'toggle-case':
         if (pane) {
@@ -2292,9 +2458,9 @@ export function initEditorApp(): void {
             if (textarea.selectionStart === textarea.selectionEnd) {
               const lineRange = commands.selectLineRange(state);
               const lineText = textarea.value.slice(lineRange.start, lineRange.end);
-              void navigator.clipboard.writeText(lineText + '\n').catch(() =>
-                toast('Copy failed - check clipboard permissions'),
-              );
+              void navigator.clipboard
+                .writeText(lineText + '\n')
+                .catch(() => toast('Copy failed - check clipboard permissions'));
               handled = true;
             }
             // With a selection, let the browser handle normal Ctrl+C.
@@ -2303,10 +2469,12 @@ export function initEditorApp(): void {
           case 'd': {
             // Ctrl+D → select next occurrence of word/selection (VSCode)
             const curSel = textarea.value.slice(textarea.selectionStart, textarea.selectionEnd);
-            const searchWord = curSel || (() => {
-              const w = wordAt(textarea.value, textarea.selectionStart);
-              return w ? textarea.value.slice(w[0], w[1]) : '';
-            })();
+            const searchWord =
+              curSel ||
+              (() => {
+                const w = wordAt(textarea.value, textarea.selectionStart);
+                return w ? textarea.value.slice(w[0], w[1]) : '';
+              })();
             if (searchWord) {
               const searchFrom = curSel ? textarea.selectionEnd : textarea.selectionStart;
               let found = textarea.value.indexOf(searchWord, searchFrom);
@@ -2359,15 +2527,59 @@ export function initEditorApp(): void {
   document.addEventListener('click', (event) => {
     const target = event.target as HTMLElement;
 
+    const renameDocument = target.closest<HTMLElement>('[data-rename-document]');
+    if (renameDocument?.dataset.renameDocument) {
+      beginDocumentRename(renameDocument.dataset.renameDocument);
+      return;
+    }
+
+    if (target.closest('[data-document-rename-cancel]')) {
+      renderDocumentList(activeCollectionId());
+      return;
+    }
+
     const closeTab = target.closest<HTMLElement>('[data-close-tab]');
     if (closeTab?.dataset.closeTab) {
       void requestClose(closeTab.dataset.closeTab);
       return;
     }
 
-    const tab = target.closest<HTMLElement>('[data-tab-id]');
-    if (tab?.dataset.tabId) {
-      if (tab.dataset.tabId !== activeId) activate(tab.dataset.tabId);
+    if (target.closest('[data-collection-delete]')) {
+      const id = target.closest<HTMLElement>('[data-collection-delete]')?.dataset.collectionDelete;
+      if (id) void deleteCollectionById(id);
+      return;
+    }
+
+    const collectionTab = target.closest<HTMLElement>('[data-collection-id]');
+    if (collectionTab?.dataset.collectionId) {
+      const id = collectionTab.dataset.collectionId;
+      const now = Date.now();
+      // `detail` covers the native double click; the timestamp covers the case
+      // where re-rendering the strip makes the browser lose the second click.
+      const doubleClick =
+        event.detail >= 2 || (lastCollectionClick.id === id && now - lastCollectionClick.at < 600);
+      lastCollectionClick = doubleClick ? { id: '', at: 0 } : { id, at: now };
+
+      if (doubleClick) {
+        beginCollectionRename(id);
+        return;
+      }
+
+      closeMenus();
+      void openDocuments(id);
+      return;
+    }
+
+    const documentRow = target.closest<HTMLElement>('[data-document-id]');
+    if (documentRow?.dataset.documentId) {
+      if (documentRow.dataset.documentId !== activeId) activate(documentRow.dataset.documentId);
+      closeMenus();
+      return;
+    }
+
+    const moveRow = target.closest<HTMLElement>('[data-move-collection-id]');
+    if (moveRow?.dataset.moveCollectionId) {
+      void moveActiveDocument(moveRow.dataset.moveCollectionId);
       return;
     }
 
@@ -2381,6 +2593,15 @@ export function initEditorApp(): void {
   });
 
   document.addEventListener('keydown', (event) => {
+    if (
+      event.key === 'Escape' &&
+      ((event.target as HTMLElement).closest('[data-document-rename-inline]') ||
+        (event.target as HTMLElement).closest('[data-collection-rename-inline]'))
+    ) {
+      event.preventDefault();
+      renderTabs();
+      return;
+    }
     if (event.key !== 'Escape') return;
     closeMenus();
     tocFloat?.classList.add('hidden');
@@ -2472,6 +2693,7 @@ export function initEditorApp(): void {
       // seeding, so a visitor who only followed a link does not also get a draft.
       await openReadableDocument(requested);
       bootDocuments();
+      adoptDefaultCollection();
       booted = true;
       mountAll(requested);
       gateForMissingDocument(requested, false);
@@ -2479,6 +2701,7 @@ export function initEditorApp(): void {
     }
 
     cloud = session;
+    collections = session.collections;
     for (const entry of session.documents) {
       revisions.set(entry.id, entry.revision);
       lastSaved.set(entry.id, entry.content);
@@ -2488,6 +2711,7 @@ export function initEditorApp(): void {
       title: entry.title,
       content: entry.content,
       role: entry.role,
+      collectionId: entry.collectionId ?? undefined,
     }));
     await openCollabSession(session);
     await openReadableDocument(requested);
@@ -2497,7 +2721,14 @@ export function initEditorApp(): void {
         const created = await session.create(nextUntitledTitle([]), WELCOME_MARKDOWN);
         revisions.set(created.id, created.revision);
         lastSaved.set(created.id, created.content);
-        documents = [{ id: created.id, title: created.title, content: created.content }];
+        documents = [
+          {
+            id: created.id,
+            title: created.title,
+            content: created.content,
+            collectionId: created.collectionId ?? undefined,
+          },
+        ];
       } catch {
         cloud = null;
         documents = [createDocument([], WELCOME_MARKDOWN)];
@@ -2505,6 +2736,7 @@ export function initEditorApp(): void {
       }
     }
 
+    adoptDefaultCollection();
     booted = true;
     mountAll(requested);
     gateForMissingDocument(requested, true);
@@ -2533,8 +2765,7 @@ export function initEditorApp(): void {
   setZoom(readNumberPref(PREF_KEYS.zoom, 1));
   toggleSyncUi();
   setPanel(document.body.dataset.panel === 'preview' ? 'preview' : 'code');
-  initTabDragReorder();
-  initTabsOverflow();
+  initPickers();
 
   tocNavs.forEach((nav) =>
     nav.addEventListener('click', (event) => {

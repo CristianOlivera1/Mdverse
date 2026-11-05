@@ -1,6 +1,7 @@
 import { timeAgo } from './api';
 import type { CommentAnchor, CommentThread } from './api';
 import { renderAuraAvatar } from './panel';
+import { mountTextMirror } from '../editor/textMirror';
 
 const MARKER_SIZE = 26;
 export const RAIL_WIDTH = 44;
@@ -21,32 +22,6 @@ const caf: (handle: number) => void =
   typeof cancelAnimationFrame === 'function'
     ? (handle) => window.cancelAnimationFrame(handle)
     : (handle) => window.clearTimeout(handle);
-
-const MIRROR_PROPS = [
-  'fontFamily',
-  'fontSize',
-  'fontWeight',
-  'fontStyle',
-  'fontStretch',
-  'letterSpacing',
-  'wordSpacing',
-  'textIndent',
-  'textTransform',
-  'lineHeight',
-  'paddingTop',
-  'paddingRight',
-  'paddingBottom',
-  'paddingLeft',
-  'borderTopWidth',
-  'borderRightWidth',
-  'borderBottomWidth',
-  'borderLeftWidth',
-  'boxSizing',
-  'tabSize',
-  'whiteSpace',
-  'overflowWrap',
-  'wordBreak',
-] as const;
 
 export interface MarkerBox {
   readonly thread: CommentThread;
@@ -133,33 +108,19 @@ export function createAnchorOverlay(
       .slice(0, MARKER_CAP);
   }
 
-  function buildMirror(): HTMLDivElement {
-    const style = getComputedStyle(textarea);
-    const rect = textarea.getBoundingClientRect();
-    const mirror = document.createElement('div');
-    mirror.setAttribute('aria-hidden', 'true');
-    mirror.style.position = 'fixed';
-    mirror.style.top = `${rect.top}px`;
-    mirror.style.left = `${rect.left}px`;
-    mirror.style.width = `${rect.width}px`;
-    mirror.style.height = `${rect.height}px`;
-    mirror.style.visibility = 'hidden';
-    mirror.style.pointerEvents = 'none';
-    mirror.style.overflow = 'hidden';
-    mirror.style.zIndex = '-9999';
-    for (const prop of MIRROR_PROPS) mirror.style[prop] = style[prop];
-    mirror.append(document.createTextNode(textarea.value));
-    return mirror;
-  }
-
   function measure(list: readonly CommentThread[]): MarkerBox[] {
     const rect = textarea.getBoundingClientRect();
+    const style = getComputedStyle(textarea);
     const key = [
       textarea.value.length,
       textarea.scrollTop,
       textarea.scrollLeft,
       Math.round(rect.width),
       Math.round(rect.height),
+      // Zoom and the comment gutter change metrics without resizing the box.
+      style.fontSize,
+      style.lineHeight,
+      style.paddingRight,
       list
         .map((thread) => `${thread.root.id}:${thread.root.anchor?.from}:${thread.root.anchor?.to}`)
         .join('|'),
@@ -167,11 +128,7 @@ export function createAnchorOverlay(
     if (key === cacheKey) return cacheBoxes;
 
     const paneRect = pane.getBoundingClientRect();
-    const mirror = buildMirror();
-    document.body.append(mirror);
-    mirror.scrollTop = textarea.scrollTop;
-    mirror.scrollLeft = textarea.scrollLeft;
-
+    const mirror = mountTextMirror(textarea, document.createTextNode(textarea.value));
     const node = mirror.firstChild;
     const boxes: MarkerBox[] = [];
     try {
