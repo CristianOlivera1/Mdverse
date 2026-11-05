@@ -1279,7 +1279,7 @@ export function initEditorApp(): void {
     'stroke-linecap="round"><path d="M18 6 6 18M6 6l12 12"/></svg>';
 
   let lastCollectionClick = { id: '', at: 0 };
-  const collectionDoubleClickDelay = 400;
+  const collectionDoubleClickDelay = 300; // ms
 
   const TRASH_ICON =
     '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" ' +
