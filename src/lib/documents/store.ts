@@ -1,5 +1,5 @@
 import { PREF_KEYS, readJsonPref, readPref, writePref } from '../editor/prefs';
-import type { OpenDocument } from './types';
+import type { CloudCollection, OpenDocument } from './types';
 
 export const UNTITLED = 'Untitled';
 const MAX_TITLE_LENGTH = 120;
@@ -85,4 +85,32 @@ export function loadActiveDocumentId(): string | null {
 
 export function saveActiveDocumentId(id: string): void {
   writePref(PREF_KEYS.activeTab, id);
+}
+
+/** Id of the collection every signed-out draft falls back to. */
+export const LOCAL_COLLECTION = 'local';
+
+/**
+ * Collections for a signed-out session. They group the drafts this browser
+ * keeps, so the header reads the same with or without an account; only the
+ * storage differs (localStorage here, `public.collections` when signed in).
+ */
+export function loadLocalCollections(): CloudCollection[] {
+  const stored = readJsonPref<CloudCollection[]>(PREF_KEYS.localCollections, []);
+  const collections = (Array.isArray(stored) ? stored : []).filter(
+    (entry): entry is CloudCollection =>
+      typeof entry?.id === 'string' &&
+      typeof entry?.name === 'string' &&
+      entry.name.trim().length > 0,
+  );
+
+  if (collections.some((entry) => entry.isDefault)) return collections;
+
+  // Storage written before collections existed (or hand-edited): drafts need a
+  // default to fall back to, so it is recreated instead of trusting the list.
+  return [{ id: LOCAL_COLLECTION, name: 'General', isDefault: true }, ...collections];
+}
+
+export function saveLocalCollections(collections: readonly CloudCollection[]): void {
+  writePref(PREF_KEYS.localCollections, JSON.stringify(collections));
 }

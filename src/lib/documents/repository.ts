@@ -26,7 +26,24 @@ export const MAX_LISTED_DOCUMENTS = 200;
 export const NEW_DOCUMENT_TITLE = 'Untitled';
 
 const DOCUMENT_COLUMNS =
-  'id, owner_id, title, slug, content, revision, visibility, link_role, updated_at';
+  'id, owner_id, title, slug, content, revision, visibility, link_role, collection_id, updated_at';
+
+const COLLECTION_COLUMNS = 'id, name, is_default';
+
+export const DEFAULT_COLLECTION_NAME = 'General';
+export const MAX_COLLECTION_NAME = 60;
+
+export interface CollectionEntry {
+  readonly id: string;
+  readonly name: string;
+  readonly isDefault: boolean;
+}
+
+interface CollectionRow {
+  id: string;
+  name: string;
+  is_default: boolean;
+}
 
 interface DocumentRow {
   id: string;
@@ -37,6 +54,7 @@ interface DocumentRow {
   revision: number;
   visibility: DocumentVisibility;
   link_role: CollaboratorRole;
+  collection_id: string | null;
   updated_at: string;
 }
 
@@ -65,6 +83,7 @@ export function toCloudDocument(row: DocumentRow, access: DocumentAccess): Cloud
     content: row.content,
     revision: row.revision,
     role: access,
+    collectionId: row.collection_id,
     visibility: row.visibility,
     linkRole: row.link_role === 'editor' ? 'editor' : 'reader',
     updatedAt: row.updated_at,
@@ -196,6 +215,205 @@ export async function getVersion(
   return asRow<VersionRow>(data);
 }
 
+/**
+ * Collections
+ *
+ * Every account gets a default collection the first time it is needed. The
+ * editor files new documents there unless another collection is chosen, and a
+ * deleted collection hands its documents back to it.
+ */
+
+function toCollection(row: CollectionRow): CollectionEntry {
+  return { id: row.id, name: row.name, isDefault: row.is_default };
+}
+
+function normalizeCollectionName(name: string): string {
+  return name.trim().slice(0, MAX_COLLECTION_NAME);
+}
+
+const DUPLICATE_ROW = '23505';
+const CHECK_VIOLATION = '23514';
+
+export async function ensureDefaultCollection(db: Db, userId: string): Promise<string> {
+  const existing = await db
+    .from('collections')
+    .select('id')
+    .eq('owner_id', userId)
+    .eq('is_default', true)
+    .maybeSingle();
+
+  if (existing.error) throw existing.error;
+  const found = asRow<{ id: string }>(existing.data);
+  if (found) return found.id;
+
+  const created = await db
+    .from('collections')
+    .insert({ owner_id: userId, name: DEFAULT_COLLECTION_NAME, is_default: true })
+    .select('id')
+    .single();
+
+  const row = asRow<{ id: string }>(created.data);
+  if (!created.error && row) return row.id;
+
+  // A concurrent request can win the partial unique index first; read it back.
+  const again = await db
+    .from('collections')
+    .select('id')
+    .eq('owner_id', userId)
+    .eq('is_default', true)
+    .maybeSingle();
+
+  const retry = asRow<{ id: string }>(again.data);
+  if (retry) return retry.id;
+  throw created.error ?? again.error ?? new Error('Could not provision the default collection.');
+}
+
+export async function listCollections(db: Db, userId: string): Promise<CollectionEntry[]> {
+  await ensureDefaultCollection(db, userId);
+
+  const { data, error } = await db
+    .from('collections')
+    .select(COLLECTION_COLUMNS)
+    .eq('owner_id', userId)
+    .order('is_default', { ascending: false })
+    .order('name', { ascending: true });
+
+  if (error) throw error;
+  return asRows<CollectionRow>(data).map(toCollection);
+}
+
+export type CollectionFailure =
+  'forbidden' | 'missing' | 'duplicate' | 'invalid' | 'default' | 'error';
+
+export type CollectionResult<T> =
+  | { readonly ok: true; readonly value: T }
+  | { readonly ok: false; readonly reason: CollectionFailure };
+
+function collectionFailure(error: { code?: string } | null): CollectionFailure {
+  if (!error) return 'error';
+  if (error.code === INSUFFICIENT_PRIVILEGE) return 'forbidden';
+  if (error.code === DUPLICATE_ROW) return 'duplicate';
+  if (error.code === CHECK_VIOLATION) return 'invalid';
+  return 'error';
+}
+
+export async function createCollection(
+  db: Db,
+  userId: string,
+  name: string,
+): Promise<CollectionResult<CollectionEntry>> {
+  const clean = normalizeCollectionName(name);
+  if (!clean) return { ok: false, reason: 'invalid' };
+
+  const { data, error } = await db
+    .from('collections')
+    .insert({ owner_id: userId, name: clean })
+    .select(COLLECTION_COLUMNS)
+    .single();
+
+  if (error) return { ok: false, reason: collectionFailure(error) };
+  const row = asRow<CollectionRow>(data);
+  return row ? { ok: true, value: toCollection(row) } : { ok: false, reason: 'error' };
+}
+
+export async function renameCollection(
+  db: Db,
+  id: string,
+  name: string,
+): Promise<CollectionResult<CollectionEntry>> {
+  const clean = normalizeCollectionName(name);
+  if (!clean) return { ok: false, reason: 'invalid' };
+
+  const { data, error } = await db
+    .from('collections')
+    .update({ name: clean })
+    .eq('id', id)
+    .select(COLLECTION_COLUMNS);
+
+  if (error) return { ok: false, reason: collectionFailure(error) };
+
+  const rows = asRows<CollectionRow>(data);
+  return rows.length > 0
+    ? { ok: true, value: toCollection(rows[0]) }
+    : { ok: false, reason: 'missing' };
+}
+
+export async function deleteCollection(
+  db: Db,
+  userId: string,
+  id: string,
+): Promise<CollectionResult<true>> {
+  const { data, error } = await db
+    .from('collections')
+    .select(COLLECTION_COLUMNS)
+    .eq('id', id)
+    .maybeSingle();
+
+  if (error) return { ok: false, reason: collectionFailure(error) };
+
+  const row = asRow<CollectionRow>(data);
+  if (!row) return { ok: false, reason: 'missing' };
+  if (row.is_default) return { ok: false, reason: 'default' };
+
+  const fallback = await ensureDefaultCollection(db, userId);
+
+  // Documents are never deleted with their collection: they move back to the
+  // default one first, so the delete only ever removes the grouping.
+  const moved = await db
+    .from('documents')
+    .update({ collection_id: fallback })
+    .eq('collection_id', id)
+    .eq('owner_id', userId);
+
+  if (moved.error) return { ok: false, reason: collectionFailure(moved.error) };
+
+  const removed = await db.from('collections').delete().eq('id', id).select('id');
+  if (removed.error) return { ok: false, reason: collectionFailure(removed.error) };
+
+  return asRows<{ id: string }>(removed.data).length > 0
+    ? { ok: true, value: true }
+    : { ok: false, reason: 'error' };
+}
+
+/**
+ * Files a document under another collection. Only the owner may move it: an
+ * invited editor can change the text, not where it lives.
+ */
+export async function moveDocument(
+  db: Db,
+  userId: string,
+  documentId: string,
+  collectionId: string,
+): Promise<SaveDocumentResult> {
+  const [documentResult, collectionResult] = await Promise.all([
+    db.from('documents').select('owner_id').eq('id', documentId).maybeSingle(),
+    db.from('collections').select('id').eq('id', collectionId).eq('owner_id', userId).maybeSingle(),
+  ]);
+
+  if (documentResult.error) return { ok: false, reason: 'error' };
+
+  const document = asRow<{ owner_id: string }>(documentResult.data);
+  if (!document) return { ok: false, reason: 'missing' };
+  if (document.owner_id !== userId) return { ok: false, reason: 'forbidden' };
+  if (collectionResult.error || !asRow(collectionResult.data)) {
+    return { ok: false, reason: 'forbidden' };
+  }
+
+  const { data, error } = await db
+    .from('documents')
+    .update({ collection_id: collectionId })
+    .eq('id', documentId)
+    .select('revision, updated_at')
+    .maybeSingle();
+
+  if (error) return { ok: false, reason: failure(error) };
+
+  const row = asRow<{ revision: number; updated_at: string }>(data);
+  return row
+    ? { ok: true, revision: row.revision, updatedAt: row.updated_at }
+    : { ok: false, reason: 'missing' };
+}
+
 export function slugForTitle(title: string): string {
   return slugifyHeading(title).slice(0, 64) || 'untitled';
 }
@@ -203,7 +421,7 @@ export function slugForTitle(title: string): string {
 export async function createDocument(
   db: Db,
   userId: string,
-  input: { title?: string; content?: string } = {},
+  input: { title?: string; content?: string; collectionId?: string } = {},
 ): Promise<CloudDocument> {
   const title = normalizeTitle(input.title ?? NEW_DOCUMENT_TITLE);
   const { data, error } = await db
@@ -213,6 +431,9 @@ export async function createDocument(
       title,
       slug: slugForTitle(title),
       content: input.content ?? '',
+      // The database files a null into the owner's default collection and
+      // substitutes a foreign collection id, so this only names a preference.
+      collection_id: input.collectionId ?? null,
     })
     .select(DOCUMENT_COLUMNS)
     .single();

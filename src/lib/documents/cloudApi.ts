@@ -1,5 +1,10 @@
-import { isCloudDocument, parseCloudDocuments } from './types';
-import type { CloudDocument, SaveDocumentResult } from './types';
+import {
+  isCloudCollection,
+  isCloudDocument,
+  parseCloudCollections,
+  parseCloudDocuments,
+} from './types';
+import type { CloudCollection, CloudDocument, SaveDocumentResult } from './types';
 
 export interface CloudViewer {
   readonly id: string;
@@ -9,9 +14,11 @@ export interface CloudViewer {
 export interface CloudSession {
   /** Documents owned by, or shared with, the account, newest first. */
   readonly documents: CloudDocument[];
+  /** The account's collections, default first. */
+  readonly collections: CloudCollection[];
   /** Who is signed in, as the server sees them; `null` if it did not say. */
   readonly viewer: CloudViewer | null;
-  create(title: string, content?: string): Promise<CloudDocument>;
+  create(title: string, content?: string, collectionId?: string): Promise<CloudDocument>;
   save(input: {
     id: string;
     content: string;
@@ -22,7 +29,14 @@ export interface CloudSession {
   }): Promise<SaveDocumentResult>;
   fetch(id: string): Promise<CloudDocument | null>;
   remove(id: string): Promise<boolean>;
+  createCollection(name: string): Promise<CloudCollection | null>;
+  renameCollection(id: string, name: string): Promise<CloudCollection | null>;
+  deleteCollection(id: string): Promise<boolean>;
+  move(id: string, collectionId: string): Promise<MoveDocumentResult>;
 }
+
+export type MoveDocumentResult =
+  { readonly ok: true; readonly revision: number } | { readonly ok: false };
 
 const JSON_HEADERS = { 'Content-Type': 'application/json', Accept: 'application/json' } as const;
 
@@ -52,7 +66,11 @@ export async function openCloudDocuments(): Promise<CloudSession | null> {
     return null;
   }
 
-  return cloudSession(parseCloudDocuments(payload), parseViewer(payload));
+  return cloudSession(
+    parseCloudDocuments(payload),
+    parseViewer(payload),
+    parseCloudCollections(payload),
+  );
 }
 
 function parseViewer(payload: unknown): CloudViewer | null {
@@ -69,17 +87,23 @@ function parseViewer(payload: unknown): CloudViewer | null {
 export function cloudSession(
   documents: CloudDocument[],
   viewer: CloudViewer | null = null,
+  collections: CloudCollection[] = [],
 ): CloudSession {
   return {
     documents,
+    collections,
     viewer,
 
-    async create(title: string, content = ''): Promise<CloudDocument> {
+    async create(title: string, content = '', collectionId?: string): Promise<CloudDocument> {
       const response = await fetch('/api/documents', {
         method: 'POST',
         headers: JSON_HEADERS,
         credentials: 'same-origin',
-        body: JSON.stringify({ title, content }),
+        body: JSON.stringify({
+          title,
+          content,
+          ...(collectionId === undefined ? {} : { collectionId }),
+        }),
       });
       if (!response.ok) throw new Error(`create failed (${response.status})`);
 
@@ -160,6 +184,75 @@ export function cloudSession(
         return response.ok;
       } catch {
         return false;
+      }
+    },
+
+    async createCollection(name: string): Promise<CloudCollection | null> {
+      try {
+        const response = await fetch('/api/collections', {
+          method: 'POST',
+          headers: JSON_HEADERS,
+          credentials: 'same-origin',
+          body: JSON.stringify({ name }),
+        });
+        if (!response.ok) return null;
+
+        const payload: unknown = await response.json();
+        const created = (payload as { collection?: unknown }).collection;
+        return isCloudCollection(created) ? created : null;
+      } catch {
+        return null;
+      }
+    },
+
+    async renameCollection(id: string, name: string): Promise<CloudCollection | null> {
+      try {
+        const response = await fetch(`/api/collections/${encodeURIComponent(id)}`, {
+          method: 'PATCH',
+          headers: JSON_HEADERS,
+          credentials: 'same-origin',
+          body: JSON.stringify({ name }),
+        });
+        if (!response.ok) return null;
+
+        const payload: unknown = await response.json();
+        const updated = (payload as { collection?: unknown }).collection;
+        return isCloudCollection(updated) ? updated : null;
+      } catch {
+        return null;
+      }
+    },
+
+    async deleteCollection(id: string): Promise<boolean> {
+      try {
+        const response = await fetch(`/api/collections/${encodeURIComponent(id)}`, {
+          method: 'DELETE',
+          headers: { Accept: 'application/json' },
+          credentials: 'same-origin',
+        });
+        return response.ok;
+      } catch {
+        return false;
+      }
+    },
+
+    async move(id: string, collectionId: string): Promise<MoveDocumentResult> {
+      try {
+        const response = await fetch(`${documentUrl(id)}/collection`, {
+          method: 'PUT',
+          headers: JSON_HEADERS,
+          credentials: 'same-origin',
+          body: JSON.stringify({ collectionId }),
+        });
+        if (!response.ok) return { ok: false };
+
+        const payload = (await response.json().catch(() => null)) as { revision?: unknown } | null;
+        return {
+          ok: true,
+          revision: typeof payload?.revision === 'number' ? payload.revision : 0,
+        };
+      } catch {
+        return { ok: false };
       }
     },
   };

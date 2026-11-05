@@ -4,6 +4,7 @@ import process from 'node:process';
 
 const REQUIRED_TABLES = [
   'profiles',
+  'collections',
   'documents',
   'document_collaborators',
   'document_invitations',

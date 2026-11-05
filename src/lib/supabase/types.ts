@@ -16,6 +16,12 @@ export type Profile = Tables['profiles']['Row'];
 export type ProfileInsert = Tables['profiles']['Insert'];
 export type ProfileUpdate = Tables['profiles']['Update'];
 
+/* Collections -------------------------------------------------------------- */
+
+export type CollectionRow = Tables['collections']['Row'];
+export type CollectionInsert = Tables['collections']['Insert'];
+export type CollectionUpdate = Tables['collections']['Update'];
+
 /* Documents ---------------------------------------------------------------- */
 
 export type DocumentRow = Tables['documents']['Row'];

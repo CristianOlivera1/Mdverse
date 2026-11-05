@@ -35,6 +35,41 @@ export interface Database {
           },
         ];
       };
+      collections: {
+        Row: {
+          id: string;
+          owner_id: string;
+          name: string;
+          is_default: boolean;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: {
+          id?: string;
+          owner_id: string;
+          name?: string;
+          is_default?: boolean;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Update: {
+          id?: string;
+          owner_id?: string;
+          name?: string;
+          is_default?: boolean;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: 'collections_owner_id_fkey';
+            columns: ['owner_id'];
+            isOneToOne: false;
+            referencedRelation: 'users';
+            referencedColumns: ['id'];
+          },
+        ];
+      };
       documents: {
         Row: {
           id: string;
@@ -44,6 +79,7 @@ export interface Database {
           content: string;
           visibility: Database['public']['Enums']['document_visibility'];
           link_role: Database['public']['Enums']['collaborator_role'];
+          collection_id: string | null;
           last_edited_by: string | null;
           revision: number;
           created_at: string;
@@ -57,6 +93,7 @@ export interface Database {
           content?: string;
           visibility?: Database['public']['Enums']['document_visibility'];
           link_role?: Database['public']['Enums']['collaborator_role'];
+          collection_id?: string | null;
           last_edited_by?: string | null;
           revision?: number;
           created_at?: string;
@@ -70,6 +107,7 @@ export interface Database {
           content?: string;
           visibility?: Database['public']['Enums']['document_visibility'];
           link_role?: Database['public']['Enums']['collaborator_role'];
+          collection_id?: string | null;
           last_edited_by?: string | null;
           revision?: number;
           created_at?: string;
@@ -81,6 +119,13 @@ export interface Database {
             columns: ['owner_id'];
             isOneToOne: false;
             referencedRelation: 'users';
+            referencedColumns: ['id'];
+          },
+          {
+            foreignKeyName: 'documents_collection_id_fkey';
+            columns: ['collection_id'];
+            isOneToOne: false;
+            referencedRelation: 'collections';
             referencedColumns: ['id'];
           },
         ];
