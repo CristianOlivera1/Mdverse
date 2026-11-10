@@ -16,6 +16,17 @@ export interface ExportRequest {
   readonly fallbackName: string;
 }
 
+const DARK_EXPORT_CSS =
+  ':root{color-scheme:dark}' +
+  'body{min-height:100vh;background:#000;color:#e5e5e5}' +
+  'h1,h2{border-color:#333}' +
+  'a{color:#7ab8ff}' +
+  ':not(pre)>code{background:#1f1f1f;color:#f0f0f0}' +
+  'table th,table td{border-color:#3a3a3a}' +
+  'th{background:#181818}' +
+  'blockquote{color:#b3b3b3;border-left-color:#444}' +
+  'hr{border-top-color:#333}';
+
 export async function buildExportHtml(markdown: string, title: string): Promise<string> {
   const host = document.createElement('div');
   await renderMarkdown(host, markdown, { renderDiagram, interactive: false, math: false });
@@ -24,7 +35,7 @@ export async function buildExportHtml(markdown: string, title: string): Promise<
     '<!doctype html><html lang="en"><head><meta charset="utf-8">' +
     '<meta name="viewport" content="width=device-width,initial-scale=1">' +
     `<title>${escapeHtml(documentTitle)}</title>` +
-    `<style>${EXPORT_CSS}${HIGHLIGHT_THEME_CSS}</style>` +
+    `<style>${EXPORT_CSS}${HIGHLIGHT_THEME_CSS}${DARK_EXPORT_CSS}</style>` +
     `</head><body><article>${host.innerHTML}</article></body></html>`
   );
 }
