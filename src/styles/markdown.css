@@ -51,6 +51,71 @@
   scroll-margin-top: 1rem;
 }
 
+body[data-preview-theme='light'] #preview-content.prose {
+  color: #24292f;
+}
+
+body[data-preview-theme='light'] #preview-content.prose :where(code):not(pre code) {
+  color: #24292f;
+  background: #f6f8fa;
+}
+
+body[data-preview-theme='light'] #preview-content.prose pre {
+  color: #24292f;
+  background: #f6f8fa !important;
+  border-color: #d0d7de;
+}
+
+body[data-preview-theme='light'] #preview-content.prose pre code,
+body[data-preview-theme='light'] #preview-content.prose .hljs {
+  color: #24292f;
+}
+
+body[data-preview-theme='light'] #preview-content.prose a {
+  color: #0969da;
+}
+
+body[data-preview-theme='light'] #preview-content.prose blockquote {
+  color: #57606a;
+  border-left-color: #d0d7de;
+}
+
+body[data-preview-theme='light'] #preview-content.prose hr {
+  border-color: #d8dee4;
+}
+
+body[data-preview-theme='light'] #preview-content.prose ::marker {
+  color: #57606a;
+}
+
+body[data-preview-theme='light'] #preview-content.prose thead th {
+  color: #24292f;
+}
+
+body[data-preview-theme='light'] #preview-content .mermaid-box {
+  border-color: #d0d7de;
+  background: #f6f8fa;
+}
+
+body[data-preview-theme='light'] #preview-content .diagram-bar {
+  border-color: #d0d7de;
+  background: #fff;
+}
+
+body[data-preview-theme='light'] #preview-content .diagram-bar button {
+  color: #57606a;
+}
+
+body[data-preview-theme='light'] #preview-content .diagram-bar button:hover,
+body[data-preview-theme='light'] #preview-content .diagram-bar button:focus-visible {
+  background: #f6f8fa;
+  color: #24292f;
+}
+
+body[data-preview-theme='light'] #preview-content .diagram-level {
+  color: #57606a;
+}
+
 .mermaid-box {
   position: relative;
   margin: 1.25em 0;

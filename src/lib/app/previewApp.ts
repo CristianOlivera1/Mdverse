@@ -13,6 +13,7 @@ export function initPreviewApp(): void {
   const scrollElement = document.getElementById('preview-scroll');
   const statusElement = document.getElementById('preview-status');
   const shareButton = document.querySelector<HTMLButtonElement>('#preview-share');
+  const themeButton = document.querySelector<HTMLButtonElement>('#preview-theme-toggle');
   if (!rootElement || !contentElement || !scrollElement) return;
 
   const root: HTMLElement = rootElement;
@@ -32,6 +33,29 @@ export function initPreviewApp(): void {
   let renderTimer: number | undefined;
   let hashConsumed = false;
   let shareId: string | null = null;
+  type PreviewTheme = 'dark' | 'light';
+
+  function setTheme(theme: PreviewTheme, persist = false): void {
+    root.dataset.theme = theme;
+    document.body.dataset.previewTheme = theme;
+    document.documentElement.style.colorScheme = theme;
+    content.classList.toggle('prose-invert', theme === 'dark');
+
+    if (themeButton) {
+      const nextTheme = theme === 'dark' ? 'light' : 'dark';
+      const label = `Switch to ${nextTheme} mode`;
+      themeButton.dataset.nextTheme = nextTheme;
+      themeButton.title = label;
+      themeButton.setAttribute('aria-label', label);
+    }
+
+    if (persist) writePref(PREF_KEYS.previewTheme, theme);
+  }
+
+  setTheme(readPref(PREF_KEYS.previewTheme) === 'light' ? 'light' : 'dark');
+  themeButton?.addEventListener('click', () => {
+    setTheme(root.dataset.theme === 'dark' ? 'light' : 'dark', true);
+  });
 
   function copyPreviewLink(): void {
     const id = shareId;

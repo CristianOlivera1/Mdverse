@@ -8,6 +8,7 @@ export const PREF_KEYS = {
   openDocuments: `${PREFIX}open-documents`,
   localCollections: `${PREFIX}local-collections`,
   toc: `${PREFIX}toc`,
+  previewTheme: `${PREFIX}preview-theme`,
   commentMarks: `${PREFIX}comment-marks`,
   documentContent: (id: string) => `${PREFIX}doc:${id}:content`,
   documentTitle: (id: string) => `${PREFIX}doc:${id}:title`,

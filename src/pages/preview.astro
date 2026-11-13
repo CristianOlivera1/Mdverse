@@ -5,7 +5,7 @@ import Layout from '../layouts/Layout.astro';
 ---
 
 <Layout title="Preview · Mdverse" robots="noindex" bodyClass="h-full bg-black text-neutral-200">
-  <div id="preview-root" class="flex h-full" data-toc="open">
+  <div id="preview-root" class="flex h-full" data-toc="open" data-theme="dark">
     <TocPanel />
 
     <div id="preview-scroll" class="flex-1 min-w-0 h-full overflow-y-auto relative">
@@ -23,7 +23,10 @@ import Layout from '../layouts/Layout.astro';
       </button>
 
       <div class="fixed top-3 right-4 z-999 flex items-center gap-2 select-none">
-        <div class="flex items-center gap-2 text-[11px] text-neutral-500 bg-black/80 border border-neutral-800 rounded-full px-3 py-1.5 h-7">
+        <div
+          id="preview-status-pill"
+          class="flex items-center gap-2 text-[11px] text-neutral-500 bg-black/80 border border-neutral-800 rounded-full px-3 py-1.5 h-7"
+        >
           <span class="w-1.5 h-1.5 rounded-full bg-gray-400"></span>
           <span id="preview-status">Loading…</span>
         </div>
@@ -42,6 +45,21 @@ import Layout from '../layouts/Layout.astro';
           </span>
           <span class="group-data-[copied=false]:hidden inline-flex">
             <Icon name="lucide:check" size={13} />
+          </span>
+        </button>
+        <button
+          type="button"
+          id="preview-theme-toggle"
+          data-next-theme="light"
+          class="inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-full border border-neutral-800 bg-[#141414] text-neutral-400 transition-all hover:bg-neutral-800 hover:text-neutral-100 focus-visible:outline focus-visible:outline-1 focus-visible:outline-blue-500"
+          title="Switch to light mode"
+          aria-label="Switch to light mode"
+        >
+          <span data-theme-icon="light" class="inline-flex">
+            <Icon name="lucide:sun" size={13} />
+          </span>
+          <span data-theme-icon="dark" class="inline-flex">
+            <Icon name="lucide:moon" size={13} />
           </span>
         </button>
       </div>
